@@ -1,0 +1,23 @@
+error[E0277]: `Dek` doesn't implement `Debug`
+ --> tests/compile_fail/no_debug.rs:6:20
+  |
+6 |     assert_debug::<Dek>();
+  |                    ^^^ the trait `Debug` is not implemented for `Dek`
+  |
+note: required by a bound in `assert_debug`
+ --> tests/compile_fail/no_debug.rs:5:24
+  |
+5 |     fn assert_debug<T: std::fmt::Debug>() {}
+  |                        ^^^^^^^^^^^^^^^ required by this bound in `assert_debug`
+
+error[E0277]: `MasterKey` doesn't implement `Debug`
+ --> tests/compile_fail/no_debug.rs:7:20
+  |
+7 |     assert_debug::<MasterKey>();
+  |                    ^^^^^^^^^ the trait `Debug` is not implemented for `MasterKey`
+  |
+note: required by a bound in `assert_debug`
+ --> tests/compile_fail/no_debug.rs:5:24
+  |
+5 |     fn assert_debug<T: std::fmt::Debug>() {}
+  |                        ^^^^^^^^^^^^^^^ required by this bound in `assert_debug`
