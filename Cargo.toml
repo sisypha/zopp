@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "crates/hello_core",
+    "apps/hello_cli",
+]
+
+resolver = "2"
