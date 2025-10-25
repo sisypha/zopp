@@ -1,7 +1,15 @@
 [workspace]
 members = [
     "crates/hello_core",
+    "crates/zopp-crypto",
     "apps/hello_cli",
 ]
 
 resolver = "2"
+
+[workspace.dependencies]
+argon2 = "0.5.3"
+chacha20poly1305 = "0.10.1"
+rand = "0.9.2"
+thiserror = "2.0.17"
+zeroize = { version = "1.8.2", features = ["derive"] }
