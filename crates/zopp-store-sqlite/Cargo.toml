@@ -1,0 +1,17 @@
+[package]
+name = "zopp-store-sqlite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait = "0.1"
+chrono = { workspace = true }
+dirs = { workspace = true }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-native-tls", "migrate", "macros"] }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+zopp-storage = { path = "../../crates/zopp-storage" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros"] }

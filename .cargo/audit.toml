@@ -1,0 +1,4 @@
+[advisories]
+# We don't use MySQL, so the RSA vulnerability in sqlx-mysql doesn't affect us.
+# This is a transitive dependency through sqlx's macros feature.
+ignore = ["RUSTSEC-2023-0071"]

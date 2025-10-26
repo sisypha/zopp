@@ -1,8 +1,10 @@
 [workspace]
 members = [
+    "apps/hello_cli",
     "crates/hello_core",
     "crates/zopp-crypto",
-    "apps/hello_cli",
+    "crates/zopp-storage",
+    "crates/zopp-store-sqlite",
 ]
 
 resolver = "2"
@@ -10,6 +12,11 @@ resolver = "2"
 [workspace.dependencies]
 argon2 = "0.5.3"
 chacha20poly1305 = "0.10.1"
+chrono = { version = "0.4.2", default-features = false, features = ["clock"] }
+dirs = "6.0.0"
 rand = "0.9.2"
+sqlx = "0.8.6"
 thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
+uuid = { version = "1.18.1", features = ["v4", "v7", "fast-rng"] }
 zeroize = { version = "1.8.2", features = ["derive"] }
