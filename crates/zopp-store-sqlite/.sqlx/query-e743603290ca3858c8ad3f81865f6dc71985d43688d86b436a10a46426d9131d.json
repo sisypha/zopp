@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO secrets(id, workspace_id, env_id, key_name, nonce, ciphertext, created_at)\n             VALUES(?, ?, ?, ?, ?, ?, ?)\n             ON CONFLICT(workspace_id, env_id, key_name)\n             DO UPDATE SET nonce = excluded.nonce,\n                           ciphertext = excluded.ciphertext,\n                           created_at = excluded.created_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "e743603290ca3858c8ad3f81865f6dc71985d43688d86b436a10a46426d9131d"
+}

@@ -1,2 +1,12 @@
 /target
 **/*.rs.bk
+
+# Environment files (contain local config)
+.env
+.env.local
+
+# Local development databases
+*.db
+*.db-*
+
+# .sqlx/ directories are committed per-backend for offline compile checks

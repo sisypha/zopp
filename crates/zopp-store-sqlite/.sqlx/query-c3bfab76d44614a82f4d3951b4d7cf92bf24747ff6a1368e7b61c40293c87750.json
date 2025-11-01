@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO workspaces(id,kdf_salt,kdf_m_cost_kib,kdf_t_cost,kdf_p_cost,created_at)\n             VALUES(?,?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "c3bfab76d44614a82f4d3951b4d7cf92bf24747ff6a1368e7b61c40293c87750"
+}

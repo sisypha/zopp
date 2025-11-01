@@ -1,0 +1,9 @@
+# Cargo aliases for common development tasks
+
+[alias]
+xtask = "run --package xtask --"
+
+# Use offline mode for sqlx by default
+# This allows building without a database connection using the committed .sqlx/ metadata
+[env]
+SQLX_OFFLINE = "true"

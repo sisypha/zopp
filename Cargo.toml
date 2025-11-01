@@ -5,6 +5,7 @@ members = [
     "crates/zopp-crypto",
     "crates/zopp-storage",
     "crates/zopp-store-sqlite",
+    "xtask",
 ]
 
 resolver = "2"

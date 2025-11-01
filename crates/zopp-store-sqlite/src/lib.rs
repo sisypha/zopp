@@ -71,16 +71,22 @@ impl Store for SqliteStore {
 
     async fn create_workspace(&self, p: &WorkspaceParams) -> Result<WorkspaceId, StoreError> {
         let ws_id = Uuid::now_v7();
-        sqlx::query(
+        let ws_id_str = ws_id.to_string();
+        let m_cost = p.m_cost_kib as i64;
+        let t_cost = p.t_cost as i64;
+        let p_cost = p.p_cost as i64;
+        let created_at = Utc::now().timestamp();
+
+        sqlx::query!(
             "INSERT INTO workspaces(id,kdf_salt,kdf_m_cost_kib,kdf_t_cost,kdf_p_cost,created_at)
              VALUES(?,?,?,?,?,?)",
+            ws_id_str,
+            p.kdf_salt,
+            m_cost,
+            t_cost,
+            p_cost,
+            created_at
         )
-        .bind(ws_id.to_string())
-        .bind(&p.kdf_salt)
-        .bind(p.m_cost_kib as i64)
-        .bind(p.t_cost as i64)
-        .bind(p.p_cost as i64)
-        .bind(Utc::now().timestamp())
         .execute(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
@@ -88,34 +94,35 @@ impl Store for SqliteStore {
     }
 
     async fn list_workspaces(&self) -> Result<Vec<WorkspaceId>, StoreError> {
-        let rows = sqlx::query_as::<_, (String,)>("SELECT id FROM workspaces")
+        let rows = sqlx::query!("SELECT id FROM workspaces")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| StoreError::Backend(e.to_string()))?;
         let mut out = Vec::with_capacity(rows.len());
-        for (id_str,) in rows {
-            let id = Uuid::try_parse(&id_str).map_err(|e| StoreError::Backend(e.to_string()))?;
+        for row in rows {
+            let id = Uuid::try_parse(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?;
             out.push(WorkspaceId(id));
         }
         Ok(out)
     }
 
     async fn get_workspace(&self, ws: &WorkspaceId) -> Result<WorkspaceParams, StoreError> {
-        let row = sqlx::query_as::<_, (Vec<u8>, i64, i64, i64)>(
-            "SELECT kdf_salt,kdf_m_cost_kib,kdf_t_cost,kdf_p_cost FROM workspaces WHERE id=?",
+        let ws_id = ws.0.to_string();
+        let row = sqlx::query!(
+            "SELECT kdf_salt, kdf_m_cost_kib, kdf_t_cost, kdf_p_cost FROM workspaces WHERE id = ?",
+            ws_id
         )
-        .bind(ws.0.to_string())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         match row {
             None => Err(StoreError::NotFound),
-            Some((salt, m, t, p)) => Ok(WorkspaceParams {
-                kdf_salt: salt,
-                m_cost_kib: m as u32,
-                t_cost: t as u32,
-                p_cost: p as u32,
+            Some(row) => Ok(WorkspaceParams {
+                kdf_salt: row.kdf_salt,
+                m_cost_kib: row.kdf_m_cost_kib as u32,
+                t_cost: row.kdf_t_cost as u32,
+                p_cost: row.kdf_p_cost as u32,
             }),
         }
     }
@@ -124,20 +131,25 @@ impl Store for SqliteStore {
 
     async fn create_project(&self, ws: &WorkspaceId, name: &ProjectName) -> Result<(), StoreError> {
         let id = Uuid::now_v7().to_string();
-        sqlx::query("INSERT INTO projects(id,workspace_id,name) VALUES(?,?,?)")
-            .bind(&id)
-            .bind(ws.0.to_string())
-            .bind(&name.0)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| {
-                let s = e.to_string();
-                if s.contains("UNIQUE") {
-                    StoreError::AlreadyExists
-                } else {
-                    StoreError::Backend(s)
-                }
-            })?;
+        let ws_id = ws.0.to_string();
+        let proj_name = &name.0;
+
+        sqlx::query!(
+            "INSERT INTO projects(id, workspace_id, name) VALUES(?, ?, ?)",
+            id,
+            ws_id,
+            proj_name
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            let s = e.to_string();
+            if s.contains("UNIQUE") {
+                StoreError::AlreadyExists
+            } else {
+                StoreError::Backend(s)
+            }
+        })?;
         Ok(())
     }
 
@@ -152,30 +164,36 @@ impl Store for SqliteStore {
         dek_nonce: &[u8],
     ) -> Result<(), StoreError> {
         // find project id inside this workspace
-        let proj_id: Option<(String,)> =
-            sqlx::query_as("SELECT id FROM projects WHERE workspace_id=? AND name=?")
-                .bind(ws.0.to_string())
-                .bind(&project.0)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|e| StoreError::Backend(e.to_string()))?;
+        let ws_id = ws.0.to_string();
+        let proj_name = &project.0;
 
-        let proj_id = match proj_id {
-            Some((id,)) => id,
+        let proj_row = sqlx::query!(
+            "SELECT id FROM projects WHERE workspace_id = ? AND name = ?",
+            ws_id,
+            proj_name
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let proj_id = match proj_row {
+            Some(row) => row.id,
             None => return Err(StoreError::NotFound),
         };
 
         let env_id = Uuid::now_v7().to_string();
-        sqlx::query(
-            "INSERT INTO environments(id,workspace_id,project_id,name,dek_wrapped,dek_nonce)
-             VALUES(?,?,?,?,?,?)",
+        let env_name = &env.0;
+
+        sqlx::query!(
+            "INSERT INTO environments(id, workspace_id, project_id, name, dek_wrapped, dek_nonce)
+             VALUES(?, ?, ?, ?, ?, ?)",
+            env_id,
+            ws_id,
+            proj_id,
+            env_name,
+            dek_wrapped,
+            dek_nonce
         )
-        .bind(&env_id)
-        .bind(ws.0.to_string())
-        .bind(proj_id)
-        .bind(&env.0)
-        .bind(dek_wrapped)
-        .bind(dek_nonce)
         .execute(&self.pool)
         .await
         .map_err(|e| {
@@ -196,21 +214,28 @@ impl Store for SqliteStore {
         project: &ProjectName,
         env: &EnvName,
     ) -> Result<(Vec<u8>, Vec<u8>), StoreError> {
-        let row = sqlx::query_as::<_, (Vec<u8>, Vec<u8>)>(
+        let ws_id = ws.0.to_string();
+        let proj_name = &project.0;
+        let env_name = &env.0;
+
+        let row = sqlx::query!(
             "SELECT e.dek_wrapped, e.dek_nonce
              FROM environments e
-             JOIN projects p ON p.id=e.project_id
-             WHERE e.workspace_id=? AND p.workspace_id=? AND p.name=? AND e.name=?",
+             JOIN projects p ON p.id = e.project_id
+             WHERE e.workspace_id = ? AND p.workspace_id = ? AND p.name = ? AND e.name = ?",
+            ws_id,
+            ws_id,
+            proj_name,
+            env_name
         )
-        .bind(ws.0.to_string())
-        .bind(ws.0.to_string())
-        .bind(&project.0)
-        .bind(&env.0)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        row.ok_or(StoreError::NotFound)
+        match row {
+            Some(row) => Ok((row.dek_wrapped, row.dek_nonce)),
+            None => Err(StoreError::NotFound),
+        }
     }
 
     // ────────────────────────────── Secrets ───────────────────────────────
@@ -225,42 +250,47 @@ impl Store for SqliteStore {
         ciphertext: &[u8],
     ) -> Result<(), StoreError> {
         // find env id within workspace & project
-        let env_id: Option<(String,)> = sqlx::query_as(
+        let ws_id = ws.0.to_string();
+        let proj_name = &project.0;
+        let env_name = &env.0;
+
+        let env_row = sqlx::query!(
             "SELECT e.id
                FROM environments e
-               JOIN projects p ON p.id=e.project_id
-              WHERE e.workspace_id=? AND p.workspace_id=? AND p.name=? AND e.name=?",
+               JOIN projects p ON p.id = e.project_id
+              WHERE e.workspace_id = ? AND p.workspace_id = ? AND p.name = ? AND e.name = ?",
+            ws_id,
+            ws_id,
+            proj_name,
+            env_name
         )
-        .bind(ws.0.to_string())
-        .bind(ws.0.to_string())
-        .bind(&project.0)
-        .bind(&env.0)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        let env_id = match env_id {
-            Some((id,)) => id,
+        let env_id = match env_row {
+            Some(row) => row.id,
             None => return Err(StoreError::NotFound),
         };
 
         let secret_id = Uuid::now_v7().to_string();
+        let created_at = Utc::now().timestamp();
 
-        sqlx::query(
-            "INSERT INTO secrets(id,workspace_id,env_id,key_name,nonce,ciphertext,created_at)
-             VALUES(?,?,?,?,?,?,?)
-             ON CONFLICT(workspace_id,env_id,key_name)
-             DO UPDATE SET nonce=excluded.nonce,
-                           ciphertext=excluded.ciphertext,
-                           created_at=excluded.created_at",
+        sqlx::query!(
+            "INSERT INTO secrets(id, workspace_id, env_id, key_name, nonce, ciphertext, created_at)
+             VALUES(?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(workspace_id, env_id, key_name)
+             DO UPDATE SET nonce = excluded.nonce,
+                           ciphertext = excluded.ciphertext,
+                           created_at = excluded.created_at",
+            secret_id,
+            ws_id,
+            env_id,
+            key,
+            nonce,
+            ciphertext,
+            created_at
         )
-        .bind(&secret_id)
-        .bind(ws.0.to_string())
-        .bind(env_id)
-        .bind(key)
-        .bind(nonce)
-        .bind(ciphertext)
-        .bind(Utc::now().timestamp())
         .execute(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
@@ -275,29 +305,36 @@ impl Store for SqliteStore {
         env: &EnvName,
         key: &str,
     ) -> Result<SecretRow, StoreError> {
-        let row = sqlx::query_as::<_, (Vec<u8>, Vec<u8>)>(
+        let ws_id = ws.0.to_string();
+        let proj_name = &project.0;
+        let env_name = &env.0;
+
+        let row = sqlx::query!(
             "SELECT s.nonce, s.ciphertext
                FROM secrets s
-               JOIN environments e ON e.id=s.env_id
-               JOIN projects p ON p.id=e.project_id
-              WHERE s.workspace_id=?
-                AND e.workspace_id=?
-                AND p.workspace_id=?
-                AND p.name=? AND e.name=? AND s.key_name=?",
+               JOIN environments e ON e.id = s.env_id
+               JOIN projects p ON p.id = e.project_id
+              WHERE s.workspace_id = ?
+                AND e.workspace_id = ?
+                AND p.workspace_id = ?
+                AND p.name = ? AND e.name = ? AND s.key_name = ?",
+            ws_id,
+            ws_id,
+            ws_id,
+            proj_name,
+            env_name,
+            key
         )
-        .bind(ws.0.to_string())
-        .bind(ws.0.to_string())
-        .bind(ws.0.to_string())
-        .bind(&project.0)
-        .bind(&env.0)
-        .bind(key)
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         match row {
             None => Err(StoreError::NotFound),
-            Some((nonce, ciphertext)) => Ok(SecretRow { nonce, ciphertext }),
+            Some(row) => Ok(SecretRow {
+                nonce: row.nonce,
+                ciphertext: row.ciphertext,
+            }),
         }
     }
 
@@ -307,27 +344,31 @@ impl Store for SqliteStore {
         project: &ProjectName,
         env: &EnvName,
     ) -> Result<Vec<String>, StoreError> {
-        let rows = sqlx::query_as::<_, (String,)>(
+        let ws_id = ws.0.to_string();
+        let proj_name = &project.0;
+        let env_name = &env.0;
+
+        let rows = sqlx::query!(
             "SELECT s.key_name
                FROM secrets s
-               JOIN environments e ON e.id=s.env_id
-               JOIN projects p ON p.id=e.project_id
-              WHERE s.workspace_id=?
-                AND e.workspace_id=?
-                AND p.workspace_id=?
-                AND p.name=? AND e.name=?
+               JOIN environments e ON e.id = s.env_id
+               JOIN projects p ON p.id = e.project_id
+              WHERE s.workspace_id = ?
+                AND e.workspace_id = ?
+                AND p.workspace_id = ?
+                AND p.name = ? AND e.name = ?
               ORDER BY s.key_name",
+            ws_id,
+            ws_id,
+            ws_id,
+            proj_name,
+            env_name
         )
-        .bind(ws.0.to_string())
-        .bind(ws.0.to_string())
-        .bind(ws.0.to_string())
-        .bind(&project.0)
-        .bind(&env.0)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|(k,)| k).collect())
+        Ok(rows.into_iter().map(|row| row.key_name).collect())
     }
 }
 

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT kdf_salt, kdf_m_cost_kib, kdf_t_cost, kdf_p_cost FROM workspaces WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "kdf_salt",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kdf_m_cost_kib",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kdf_t_cost",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kdf_p_cost",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "445d71b5667742edf83d59713e5adba0c83eae726ef03251b36b1e922e61d27d"
+}

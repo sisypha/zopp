@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT e.id\n               FROM environments e\n               JOIN projects p ON p.id = e.project_id\n              WHERE e.workspace_id = ? AND p.workspace_id = ? AND p.name = ? AND e.name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3135a8be62c9ae2fb1e0cc52685c40497ea4b6696fe47c517d22139cdf28c16b"
+}

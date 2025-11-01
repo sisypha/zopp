@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO projects(id, workspace_id, name) VALUES(?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "c817aa4784e3937cfbb3c46bdc6f00b6ba91f0e347243c2bfe6658045a7211f3"
+}
