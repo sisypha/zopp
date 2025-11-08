@@ -20,6 +20,12 @@ service ZoppService {
   rpc GetPrincipal(GetPrincipalRequest) returns (Principal);
   rpc RenamePrincipal(RenamePrincipalRequest) returns (Empty);
   rpc ListPrincipals(Empty) returns (PrincipalList);
+
+  // Projects
+  rpc CreateProject(CreateProjectRequest) returns (Project);
+  rpc ListProjects(ListProjectsRequest) returns (ProjectList);
+  rpc GetProject(GetProjectRequest) returns (Project);
+  rpc DeleteProject(DeleteProjectRequest) returns (Empty);
 }
 
 message Empty {}
@@ -115,4 +121,34 @@ message RenamePrincipalRequest {
 
 message PrincipalList {
   repeated Principal principals = 1;
+}
+
+// Project messages
+message CreateProjectRequest {
+  string workspace_id = 1;
+  string name = 2;
+}
+
+message ListProjectsRequest {
+  string workspace_id = 1;
+}
+
+message GetProjectRequest {
+  string project_id = 1;
+}
+
+message DeleteProjectRequest {
+  string project_id = 1;
+}
+
+message Project {
+  string id = 1;
+  string workspace_id = 2;
+  string name = 3;
+  int64 created_at = 4;
+  int64 updated_at = 5;
+}
+
+message ProjectList {
+  repeated Project projects = 1;
 }

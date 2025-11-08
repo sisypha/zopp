@@ -694,16 +694,19 @@ impl Store for SqliteStore {
 
     // ───────────────────────────── Projects ───────────────────────────────
 
-    async fn create_project(&self, params: &CreateProjectParams) -> Result<(), StoreError> {
-        let id = Uuid::now_v7().to_string();
+    async fn create_project(
+        &self,
+        params: &CreateProjectParams,
+    ) -> Result<zopp_storage::ProjectId, StoreError> {
+        let id = Uuid::now_v7();
+        let id_str = id.to_string();
         let ws_id = params.workspace_id.0.to_string();
-        let proj_name = &params.name.0;
 
         sqlx::query!(
             "INSERT INTO projects(id, workspace_id, name) VALUES(?, ?, ?)",
-            id,
+            id_str,
             ws_id,
-            proj_name
+            params.name
         )
         .execute(&self.pool)
         .await
@@ -715,6 +718,91 @@ impl Store for SqliteStore {
                 StoreError::Backend(s)
             }
         })?;
+        Ok(zopp_storage::ProjectId(id))
+    }
+
+    async fn list_projects(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<zopp_storage::Project>, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT id, workspace_id, name,
+               created_at as "created_at: DateTime<Utc>",
+               updated_at as "updated_at: DateTime<Utc>"
+               FROM projects WHERE workspace_id = ? ORDER BY created_at DESC"#,
+            ws_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let projects = rows
+            .into_iter()
+            .map(|row| {
+                Ok(zopp_storage::Project {
+                    id: zopp_storage::ProjectId(
+                        Uuid::parse_str(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?,
+                    ),
+                    workspace_id: zopp_storage::WorkspaceId(
+                        Uuid::parse_str(&row.workspace_id)
+                            .map_err(|e| StoreError::Backend(e.to_string()))?,
+                    ),
+                    name: row.name,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                })
+            })
+            .collect::<Result<Vec<_>, StoreError>>()?;
+
+        Ok(projects)
+    }
+
+    async fn get_project(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+    ) -> Result<zopp_storage::Project, StoreError> {
+        let id_str = project_id.0.to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT id, workspace_id, name,
+               created_at as "created_at: DateTime<Utc>",
+               updated_at as "updated_at: DateTime<Utc>"
+               FROM projects WHERE id = ?"#,
+            id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(zopp_storage::Project {
+            id: zopp_storage::ProjectId(
+                Uuid::parse_str(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            workspace_id: zopp_storage::WorkspaceId(
+                Uuid::parse_str(&row.workspace_id)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            name: row.name,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+
+    async fn delete_project(&self, project_id: &zopp_storage::ProjectId) -> Result<(), StoreError> {
+        let id_str = project_id.0.to_string();
+
+        let result = sqlx::query!("DELETE FROM projects WHERE id = ?", id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
         Ok(())
     }
 
@@ -986,14 +1074,14 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws.clone(),
-            name: name.clone(),
+            name: name.0.clone(),
         })
         .await
         .unwrap();
         let err = s
             .create_project(&CreateProjectParams {
                 workspace_id: ws,
-                name,
+                name: name.0,
             })
             .await
             .unwrap_err();
@@ -1026,7 +1114,7 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws1.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1042,7 +1130,7 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws2.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1086,7 +1174,7 @@ mod tests {
         let e = EnvName("prod".into());
         s.create_project(&CreateProjectParams {
             workspace_id: ws.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1164,7 +1252,7 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1210,7 +1298,7 @@ mod tests {
         let e = EnvName("prod".into());
         s.create_project(&CreateProjectParams {
             workspace_id: ws.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1265,7 +1353,7 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws1.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1281,7 +1369,7 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws2.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();
@@ -1366,7 +1454,7 @@ mod tests {
 
         s.create_project(&CreateProjectParams {
             workspace_id: ws.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap();

@@ -49,6 +49,11 @@ enum Command {
         #[command(subcommand)]
         principal_cmd: PrincipalCommand,
     },
+    /// Project commands
+    Project {
+        #[command(subcommand)]
+        project_cmd: ProjectCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -89,6 +94,32 @@ enum PrincipalCommand {
     Delete {
         /// Principal name
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProjectCommand {
+    /// List projects in a workspace
+    List {
+        /// Workspace ID
+        workspace_id: String,
+    },
+    /// Create a new project
+    Create {
+        /// Workspace ID
+        workspace_id: String,
+        /// Project name
+        name: String,
+    },
+    /// Get project details
+    Get {
+        /// Project ID
+        project_id: String,
+    },
+    /// Delete a project
+    Delete {
+        /// Project ID
+        project_id: String,
     },
 }
 
@@ -460,6 +491,162 @@ async fn cmd_principal_delete(name: &str) -> Result<(), Box<dyn std::error::Erro
     Ok(())
 }
 
+// ────────────────────────────────────── Project Commands ──────────────────────────────────────
+
+async fn cmd_project_list(
+    server: &str,
+    workspace_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::ListProjectsRequest {
+        workspace_id: workspace_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.list_projects(request).await?.into_inner();
+
+    if response.projects.is_empty() {
+        println!("No projects found");
+    } else {
+        println!("Projects:");
+        for project in response.projects {
+            println!(
+                "  {} - {} (ID: {})",
+                project.name, project.workspace_id, project.id
+            );
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_project_create(
+    server: &str,
+    workspace_id: &str,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::CreateProjectRequest {
+        workspace_id: workspace_id.to_string(),
+        name: name.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.create_project(request).await?.into_inner();
+
+    println!(
+        "✓ Project '{}' created (ID: {})",
+        response.name, response.id
+    );
+
+    Ok(())
+}
+
+async fn cmd_project_get(server: &str, project_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::GetProjectRequest {
+        project_id: project_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.get_project(request).await?.into_inner();
+
+    println!("Project: {}", response.name);
+    println!("  ID: {}", response.id);
+    println!("  Workspace ID: {}", response.workspace_id);
+    println!(
+        "  Created: {}",
+        chrono::DateTime::from_timestamp(response.created_at, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string())
+    );
+    println!(
+        "  Updated: {}",
+        chrono::DateTime::from_timestamp(response.updated_at, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string())
+    );
+
+    Ok(())
+}
+
+async fn cmd_project_delete(
+    server: &str,
+    project_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::DeleteProjectRequest {
+        project_id: project_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    client.delete_project(request).await?;
+
+    println!("✓ Project '{}' deleted", project_id);
+
+    Ok(())
+}
+
 // ────────────────────────────────────── Main ──────────────────────────────────────
 
 #[tokio::main]
@@ -500,6 +687,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             PrincipalCommand::Delete { name } => {
                 cmd_principal_delete(&name).await?;
+            }
+        },
+        Command::Project { project_cmd } => match project_cmd {
+            ProjectCommand::List { workspace_id } => {
+                cmd_project_list(&cli.server, &workspace_id).await?;
+            }
+            ProjectCommand::Create { workspace_id, name } => {
+                cmd_project_create(&cli.server, &workspace_id, &name).await?;
+            }
+            ProjectCommand::Get { project_id } => {
+                cmd_project_get(&cli.server, &project_id).await?;
+            }
+            ProjectCommand::Delete { project_id } => {
+                cmd_project_delete(&cli.server, &project_id).await?;
             }
         },
     }

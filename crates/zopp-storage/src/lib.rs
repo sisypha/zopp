@@ -34,6 +34,9 @@ pub struct InviteId(pub Uuid);
 pub struct WorkspaceId(pub Uuid);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ProjectId(pub Uuid);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ProjectName(pub String);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -94,7 +97,7 @@ pub struct CreateInviteParams {
 #[derive(Clone, Debug)]
 pub struct CreateProjectParams {
     pub workspace_id: WorkspaceId,
-    pub name: ProjectName,
+    pub name: String,
 }
 
 /// Parameters for creating an environment
@@ -149,6 +152,16 @@ pub struct Workspace {
     pub m_cost_kib: u32,
     pub t_cost: u32,
     pub p_cost: u32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Project record
+#[derive(Clone, Debug)]
+pub struct Project {
+    pub id: ProjectId,
+    pub workspace_id: WorkspaceId,
+    pub name: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -252,8 +265,17 @@ pub trait Store {
 
     // ───────────────────────────────────── Projects ───────────────────────────────────────
 
-    /// Create a project within a workspace.
-    async fn create_project(&self, params: &CreateProjectParams) -> Result<(), StoreError>;
+    /// Create a project within a workspace (returns generated ID).
+    async fn create_project(&self, params: &CreateProjectParams) -> Result<ProjectId, StoreError>;
+
+    /// List all projects in a workspace.
+    async fn list_projects(&self, workspace_id: &WorkspaceId) -> Result<Vec<Project>, StoreError>;
+
+    /// Get a project by ID.
+    async fn get_project(&self, project_id: &ProjectId) -> Result<Project, StoreError>;
+
+    /// Delete a project (and all its environments and secrets).
+    async fn delete_project(&self, project_id: &ProjectId) -> Result<(), StoreError>;
 
     // ─────────────────────────────────────── Environments ─────────────────────────────────────
 
@@ -424,7 +446,25 @@ mod tests {
             Ok(())
         }
 
-        async fn create_project(&self, _params: &CreateProjectParams) -> Result<(), StoreError> {
+        async fn create_project(
+            &self,
+            _params: &CreateProjectParams,
+        ) -> Result<ProjectId, StoreError> {
+            Ok(ProjectId(Uuid::new_v4()))
+        }
+
+        async fn list_projects(
+            &self,
+            _workspace_id: &WorkspaceId,
+        ) -> Result<Vec<Project>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn get_project(&self, _project_id: &ProjectId) -> Result<Project, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn delete_project(&self, _project_id: &ProjectId) -> Result<(), StoreError> {
             Ok(())
         }
 
@@ -500,12 +540,16 @@ mod tests {
             .unwrap();
 
         // We can call workspace-scoped methods without compile errors.
-        let _ = s
+        let project_id = s
             .create_project(&CreateProjectParams {
                 workspace_id: ws.clone(),
-                name: ProjectName("p1".to_string()),
+                name: "p1".to_string(),
             })
-            .await;
+            .await
+            .unwrap();
+
         let _ = s.list_workspaces(&user_id).await.unwrap();
+        let _ = s.list_projects(&ws).await.unwrap();
+        let _ = s.get_project(&project_id).await;
     }
 }

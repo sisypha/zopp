@@ -486,6 +486,200 @@ impl ZoppService for ZoppServer {
 
         Ok(Response::new(PrincipalList { principals }))
     }
+
+    async fn create_project(
+        &self,
+        request: Request<zopp_proto::CreateProjectRequest>,
+    ) -> Result<Response<zopp_proto::Project>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot create projects"))?;
+
+        let req = request.into_inner();
+        let workspace_id = Uuid::parse_str(&req.workspace_id)
+            .map(WorkspaceId)
+            .map_err(|_| Status::invalid_argument("Invalid workspace ID"))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        let project_id = self
+            .store
+            .create_project(&zopp_storage::CreateProjectParams {
+                workspace_id: workspace_id.clone(),
+                name: req.name,
+            })
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::AlreadyExists => {
+                    Status::already_exists("Project with this name already exists in workspace")
+                }
+                _ => Status::internal(format!("Failed to create project: {}", e)),
+            })?;
+
+        let project = self
+            .store
+            .get_project(&project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        Ok(Response::new(zopp_proto::Project {
+            id: project.id.0.to_string(),
+            workspace_id: project.workspace_id.0.to_string(),
+            name: project.name,
+            created_at: project.created_at.timestamp(),
+            updated_at: project.updated_at.timestamp(),
+        }))
+    }
+
+    async fn list_projects(
+        &self,
+        request: Request<zopp_proto::ListProjectsRequest>,
+    ) -> Result<Response<zopp_proto::ProjectList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list projects"))?;
+
+        let req = request.into_inner();
+        let workspace_id = Uuid::parse_str(&req.workspace_id)
+            .map(WorkspaceId)
+            .map_err(|_| Status::invalid_argument("Invalid workspace ID"))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        let projects = self
+            .store
+            .list_projects(&workspace_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list projects: {}", e)))?
+            .into_iter()
+            .map(|p| zopp_proto::Project {
+                id: p.id.0.to_string(),
+                workspace_id: p.workspace_id.0.to_string(),
+                name: p.name,
+                created_at: p.created_at.timestamp(),
+                updated_at: p.updated_at.timestamp(),
+            })
+            .collect();
+
+        Ok(Response::new(zopp_proto::ProjectList { projects }))
+    }
+
+    async fn get_project(
+        &self,
+        request: Request<zopp_proto::GetProjectRequest>,
+    ) -> Result<Response<zopp_proto::Project>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get projects"))?;
+
+        let req = request.into_inner();
+        let project_id = Uuid::parse_str(&req.project_id)
+            .map(zopp_storage::ProjectId)
+            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
+
+        let project = self
+            .store
+            .get_project(&project_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        Ok(Response::new(zopp_proto::Project {
+            id: project.id.0.to_string(),
+            workspace_id: project.workspace_id.0.to_string(),
+            name: project.name,
+            created_at: project.created_at.timestamp(),
+            updated_at: project.updated_at.timestamp(),
+        }))
+    }
+
+    async fn delete_project(
+        &self,
+        request: Request<zopp_proto::DeleteProjectRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot delete projects"))?;
+
+        let req = request.into_inner();
+        let project_id = Uuid::parse_str(&req.project_id)
+            .map(zopp_storage::ProjectId)
+            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&project_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        self.store
+            .delete_project(&project_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to delete project: {}", e)),
+            })?;
+
+        Ok(Response::new(Empty {}))
+    }
 }
 
 fn extract_signature<T>(request: &Request<T>) -> Result<(PrincipalId, i64, Vec<u8>), Status> {

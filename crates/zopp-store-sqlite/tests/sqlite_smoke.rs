@@ -1,6 +1,6 @@
 use zopp_storage::{
     CreateEnvParams, CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName,
-    ProjectName, Store, StoreError, UserId,
+    ProjectId, ProjectName, Store, StoreError, UserId,
 };
 use zopp_store_sqlite::SqliteStore;
 
@@ -38,7 +38,7 @@ async fn end_to_end_happy_path_and_updates() {
     let e = EnvName("prod".into());
     s.create_project(&CreateProjectParams {
         workspace_id: ws.clone(),
-        name: p.clone(),
+        name: p.0.clone(),
     })
     .await
     .unwrap();
@@ -122,7 +122,7 @@ async fn workspace_isolation_end_to_end() {
     // same names in both workspaces
     s.create_project(&CreateProjectParams {
         workspace_id: ws1.clone(),
-        name: p.clone(),
+        name: p.0.clone(),
     })
     .await
     .unwrap();
@@ -138,7 +138,7 @@ async fn workspace_isolation_end_to_end() {
 
     s.create_project(&CreateProjectParams {
         workspace_id: ws2.clone(),
-        name: p.clone(),
+        name: p.0.clone(),
     })
     .await
     .unwrap();
@@ -184,14 +184,14 @@ async fn common_error_mapping_paths() {
     // Duplicate project → AlreadyExists
     s.create_project(&CreateProjectParams {
         workspace_id: ws.clone(),
-        name: p.clone(),
+        name: p.0.clone(),
     })
     .await
     .unwrap();
     let err = s
         .create_project(&CreateProjectParams {
             workspace_id: ws.clone(),
-            name: p.clone(),
+            name: p.0.clone(),
         })
         .await
         .unwrap_err();
@@ -202,4 +202,154 @@ async fn common_error_mapping_paths() {
     // env doesn't exist yet, so this should not be found
     let err = s.get_secret(&ws, &p, &e, "NOPE").await.unwrap_err();
     matches!(err, StoreError::NotFound);
+}
+
+#[tokio::test]
+async fn project_crud_operations() {
+    let s = SqliteStore::open_in_memory().await.unwrap();
+
+    // Create user and workspace
+    let (user_id, _) = s
+        .create_user(&CreateUserParams {
+            email: "test@example.com".to_string(),
+            principal: None,
+            workspace_ids: vec![],
+        })
+        .await
+        .unwrap();
+
+    let ws = s
+        .create_workspace(&workspace_params(user_id))
+        .await
+        .unwrap();
+
+    // Test create_project returns ProjectId
+    let project_id = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "api".to_string(),
+        })
+        .await
+        .unwrap();
+
+    // Test get_project
+    let project = s.get_project(&project_id).await.unwrap();
+    assert_eq!(project.id, project_id);
+    assert_eq!(project.workspace_id, ws);
+    assert_eq!(project.name, "api");
+
+    // Test list_projects with one project
+    let projects = s.list_projects(&ws).await.unwrap();
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].name, "api");
+
+    // Create more projects
+    let project_id2 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "frontend".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let _project_id3 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "mobile".to_string(),
+        })
+        .await
+        .unwrap();
+
+    // Test list_projects with multiple projects
+    let projects = s.list_projects(&ws).await.unwrap();
+    assert_eq!(projects.len(), 3);
+    // Projects are ordered by created_at DESC, but they may have same timestamp
+    // Just verify all three are present
+    let project_names: Vec<String> = projects.iter().map(|p| p.name.clone()).collect();
+    assert!(project_names.contains(&"api".to_string()));
+    assert!(project_names.contains(&"frontend".to_string()));
+    assert!(project_names.contains(&"mobile".to_string()));
+
+    // Test delete_project
+    s.delete_project(&project_id2).await.unwrap();
+
+    let projects = s.list_projects(&ws).await.unwrap();
+    assert_eq!(projects.len(), 2);
+    let project_names: Vec<String> = projects.iter().map(|p| p.name.clone()).collect();
+    assert!(project_names.contains(&"api".to_string()));
+    assert!(project_names.contains(&"mobile".to_string()));
+    assert!(!project_names.contains(&"frontend".to_string()));
+
+    // Test deleting non-existent project returns NotFound
+    let fake_id = ProjectId(uuid::Uuid::new_v4());
+    let err = s.delete_project(&fake_id).await.unwrap_err();
+    matches!(err, StoreError::NotFound);
+
+    // Test getting non-existent project returns NotFound
+    let err = s.get_project(&fake_id).await.unwrap_err();
+    matches!(err, StoreError::NotFound);
+
+    // Test duplicate project name in same workspace returns AlreadyExists
+    let err = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "api".to_string(),
+        })
+        .await
+        .unwrap_err();
+    matches!(err, StoreError::AlreadyExists);
+}
+
+#[tokio::test]
+async fn project_isolation_across_workspaces() {
+    let s = SqliteStore::open_in_memory().await.unwrap();
+
+    // Create user and two workspaces
+    let (user_id, _) = s
+        .create_user(&CreateUserParams {
+            email: "test@example.com".to_string(),
+            principal: None,
+            workspace_ids: vec![],
+        })
+        .await
+        .unwrap();
+
+    let ws1 = s
+        .create_workspace(&workspace_params(user_id.clone()))
+        .await
+        .unwrap();
+
+    let ws2 = s
+        .create_workspace(&workspace_params(user_id))
+        .await
+        .unwrap();
+
+    // Create project with same name in both workspaces
+    let project_id1 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws1.clone(),
+            name: "api".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let project_id2 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws2.clone(),
+            name: "api".to_string(),
+        })
+        .await
+        .unwrap();
+
+    // Projects should have different IDs
+    assert_ne!(project_id1, project_id2);
+
+    // Each workspace should only see its own project
+    let ws1_projects = s.list_projects(&ws1).await.unwrap();
+    assert_eq!(ws1_projects.len(), 1);
+    assert_eq!(ws1_projects[0].id, project_id1);
+
+    let ws2_projects = s.list_projects(&ws2).await.unwrap();
+    assert_eq!(ws2_projects.len(), 1);
+    assert_eq!(ws2_projects[0].id, project_id2);
 }
