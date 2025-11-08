@@ -26,6 +26,12 @@ service ZoppService {
   rpc ListProjects(ListProjectsRequest) returns (ProjectList);
   rpc GetProject(GetProjectRequest) returns (Project);
   rpc DeleteProject(DeleteProjectRequest) returns (Empty);
+
+  // Environments
+  rpc CreateEnvironment(CreateEnvironmentRequest) returns (Environment);
+  rpc ListEnvironments(ListEnvironmentsRequest) returns (EnvironmentList);
+  rpc GetEnvironment(GetEnvironmentRequest) returns (Environment);
+  rpc DeleteEnvironment(DeleteEnvironmentRequest) returns (Empty);
 }
 
 message Empty {}
@@ -151,4 +157,38 @@ message Project {
 
 message ProjectList {
   repeated Project projects = 1;
+}
+
+// Environment messages
+message CreateEnvironmentRequest {
+  string project_id = 1;
+  string name = 2;
+  bytes dek_wrapped = 3;
+  bytes dek_nonce = 4;
+}
+
+message ListEnvironmentsRequest {
+  string project_id = 1;
+}
+
+message GetEnvironmentRequest {
+  string environment_id = 1;
+}
+
+message DeleteEnvironmentRequest {
+  string environment_id = 1;
+}
+
+message Environment {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  bytes dek_wrapped = 4;
+  bytes dek_nonce = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+message EnvironmentList {
+  repeated Environment environments = 1;
 }

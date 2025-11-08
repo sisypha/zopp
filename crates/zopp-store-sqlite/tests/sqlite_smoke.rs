@@ -1,6 +1,6 @@
 use zopp_storage::{
     CreateEnvParams, CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName,
-    ProjectId, ProjectName, Store, StoreError, UserId,
+    EnvironmentId, ProjectId, ProjectName, Store, StoreError, UserId,
 };
 use zopp_store_sqlite::SqliteStore;
 
@@ -36,19 +36,19 @@ async fn end_to_end_happy_path_and_updates() {
         .unwrap();
     let p = ProjectName("p1".into());
     let e = EnvName("prod".into());
-    s.create_project(&CreateProjectParams {
-        workspace_id: ws.clone(),
-        name: p.0.clone(),
-    })
-    .await
-    .unwrap();
+    let project_id = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: p.0.clone(),
+        })
+        .await
+        .unwrap();
 
     let dek_wrapped = vec![1, 2, 3, 4];
     let dek_nonce = vec![9u8; 24];
     s.create_env(&CreateEnvParams {
-        workspace_id: ws.clone(),
-        project_name: p.clone(),
-        env_name: e.clone(),
+        project_id: project_id.clone(),
+        name: e.0.clone(),
         dek_wrapped: dek_wrapped.clone(),
         dek_nonce: dek_nonce.clone(),
     })
@@ -120,32 +120,32 @@ async fn workspace_isolation_end_to_end() {
     let e = EnvName("prod".into());
 
     // same names in both workspaces
-    s.create_project(&CreateProjectParams {
-        workspace_id: ws1.clone(),
-        name: p.0.clone(),
-    })
-    .await
-    .unwrap();
+    let project_id1 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws1.clone(),
+            name: p.0.clone(),
+        })
+        .await
+        .unwrap();
     s.create_env(&CreateEnvParams {
-        workspace_id: ws1.clone(),
-        project_name: p.clone(),
-        env_name: e.clone(),
+        project_id: project_id1,
+        name: e.0.clone(),
         dek_wrapped: vec![1],
         dek_nonce: vec![9; 24],
     })
     .await
     .unwrap();
 
-    s.create_project(&CreateProjectParams {
-        workspace_id: ws2.clone(),
-        name: p.0.clone(),
-    })
-    .await
-    .unwrap();
+    let project_id2 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws2.clone(),
+            name: p.0.clone(),
+        })
+        .await
+        .unwrap();
     s.create_env(&CreateEnvParams {
-        workspace_id: ws2.clone(),
-        project_name: p.clone(),
-        env_name: e.clone(),
+        project_id: project_id2,
+        name: e.0.clone(),
         dek_wrapped: vec![2],
         dek_nonce: vec![9; 24],
     })
@@ -352,4 +352,188 @@ async fn project_isolation_across_workspaces() {
     let ws2_projects = s.list_projects(&ws2).await.unwrap();
     assert_eq!(ws2_projects.len(), 1);
     assert_eq!(ws2_projects[0].id, project_id2);
+}
+
+#[tokio::test]
+async fn environment_crud_operations() {
+    let s = SqliteStore::open_in_memory().await.unwrap();
+
+    // Create user, workspace, and project
+    let (user_id, _) = s
+        .create_user(&CreateUserParams {
+            email: "test@example.com".to_string(),
+            principal: None,
+            workspace_ids: vec![],
+        })
+        .await
+        .unwrap();
+
+    let ws = s
+        .create_workspace(&workspace_params(user_id))
+        .await
+        .unwrap();
+
+    let project_id = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "api".to_string(),
+        })
+        .await
+        .unwrap();
+
+    // Test create_env returns EnvironmentId
+    let env_id = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id.clone(),
+            name: "production".to_string(),
+            dek_wrapped: vec![1, 2, 3],
+            dek_nonce: vec![9; 24],
+        })
+        .await
+        .unwrap();
+
+    // Test get_environment
+    let env = s.get_environment(&env_id).await.unwrap();
+    assert_eq!(env.id, env_id);
+    assert_eq!(env.project_id, project_id);
+    assert_eq!(env.name, "production");
+    assert_eq!(env.dek_wrapped, vec![1, 2, 3]);
+    assert_eq!(env.dek_nonce, vec![9; 24]);
+
+    // Test list_environments with one environment
+    let envs = s.list_environments(&project_id).await.unwrap();
+    assert_eq!(envs.len(), 1);
+    assert_eq!(envs[0].name, "production");
+
+    // Create more environments
+    let env_id2 = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id.clone(),
+            name: "staging".to_string(),
+            dek_wrapped: vec![4, 5, 6],
+            dek_nonce: vec![8; 24],
+        })
+        .await
+        .unwrap();
+
+    let _env_id3 = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id.clone(),
+            name: "development".to_string(),
+            dek_wrapped: vec![7, 8, 9],
+            dek_nonce: vec![7; 24],
+        })
+        .await
+        .unwrap();
+
+    // Test list_environments with multiple environments
+    let envs = s.list_environments(&project_id).await.unwrap();
+    assert_eq!(envs.len(), 3);
+    let env_names: Vec<String> = envs.iter().map(|e| e.name.clone()).collect();
+    assert!(env_names.contains(&"production".to_string()));
+    assert!(env_names.contains(&"staging".to_string()));
+    assert!(env_names.contains(&"development".to_string()));
+
+    // Test delete_environment
+    s.delete_environment(&env_id2).await.unwrap();
+
+    let envs = s.list_environments(&project_id).await.unwrap();
+    assert_eq!(envs.len(), 2);
+    let env_names: Vec<String> = envs.iter().map(|e| e.name.clone()).collect();
+    assert!(env_names.contains(&"production".to_string()));
+    assert!(env_names.contains(&"development".to_string()));
+    assert!(!env_names.contains(&"staging".to_string()));
+
+    // Test deleting non-existent environment returns NotFound
+    let fake_id = EnvironmentId(uuid::Uuid::new_v4());
+    let err = s.delete_environment(&fake_id).await.unwrap_err();
+    matches!(err, StoreError::NotFound);
+
+    // Test getting non-existent environment returns NotFound
+    let err = s.get_environment(&fake_id).await.unwrap_err();
+    matches!(err, StoreError::NotFound);
+
+    // Test duplicate environment name in same project returns AlreadyExists
+    let err = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id.clone(),
+            name: "production".to_string(),
+            dek_wrapped: vec![1, 2, 3],
+            dek_nonce: vec![9; 24],
+        })
+        .await
+        .unwrap_err();
+    matches!(err, StoreError::AlreadyExists);
+}
+
+#[tokio::test]
+async fn environment_isolation_across_projects() {
+    let s = SqliteStore::open_in_memory().await.unwrap();
+
+    // Create user and workspace
+    let (user_id, _) = s
+        .create_user(&CreateUserParams {
+            email: "test@example.com".to_string(),
+            principal: None,
+            workspace_ids: vec![],
+        })
+        .await
+        .unwrap();
+
+    let ws = s
+        .create_workspace(&workspace_params(user_id))
+        .await
+        .unwrap();
+
+    // Create two projects
+    let project_id1 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "api".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let project_id2 = s
+        .create_project(&CreateProjectParams {
+            workspace_id: ws.clone(),
+            name: "web".to_string(),
+        })
+        .await
+        .unwrap();
+
+    // Create environment with same name in both projects
+    let env_id1 = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id1.clone(),
+            name: "production".to_string(),
+            dek_wrapped: vec![1],
+            dek_nonce: vec![9; 24],
+        })
+        .await
+        .unwrap();
+
+    let env_id2 = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id2.clone(),
+            name: "production".to_string(),
+            dek_wrapped: vec![2],
+            dek_nonce: vec![8; 24],
+        })
+        .await
+        .unwrap();
+
+    // Environments should have different IDs
+    assert_ne!(env_id1, env_id2);
+
+    // Each project should only see its own environment
+    let proj1_envs = s.list_environments(&project_id1).await.unwrap();
+    assert_eq!(proj1_envs.len(), 1);
+    assert_eq!(proj1_envs[0].id, env_id1);
+    assert_eq!(proj1_envs[0].dek_wrapped, vec![1]);
+
+    let proj2_envs = s.list_environments(&project_id2).await.unwrap();
+    assert_eq!(proj2_envs.len(), 1);
+    assert_eq!(proj2_envs[0].id, env_id2);
+    assert_eq!(proj2_envs[0].dek_wrapped, vec![2]);
 }

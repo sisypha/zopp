@@ -3,8 +3,9 @@ use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use uuid::Uuid;
 use zopp_storage::{
     CreateEnvParams, CreateInviteParams, CreatePrincipalParams, CreateProjectParams,
-    CreateUserParams, CreateWorkspaceParams, EnvName, Invite, InviteId, Principal, PrincipalId,
-    ProjectName, SecretRow, Store, StoreError, Transaction, User, UserId, Workspace, WorkspaceId,
+    CreateUserParams, CreateWorkspaceParams, EnvName, Environment, EnvironmentId, Invite, InviteId,
+    Principal, PrincipalId, ProjectName, SecretRow, Store, StoreError, Transaction, User, UserId,
+    Workspace, WorkspaceId,
 };
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -808,35 +809,30 @@ impl Store for SqliteStore {
 
     // ──────────────────────────── Environments ────────────────────────────
 
-    async fn create_env(&self, params: &CreateEnvParams) -> Result<(), StoreError> {
-        // find project id inside this workspace
-        let ws_id = params.workspace_id.0.to_string();
-        let proj_name = &params.project_name.0;
+    async fn create_env(&self, params: &CreateEnvParams) -> Result<EnvironmentId, StoreError> {
+        let env_id = Uuid::now_v7();
+        let env_id_str = env_id.to_string();
+        let proj_id_str = params.project_id.0.to_string();
 
+        // Get project to determine workspace_id
         let proj_row = sqlx::query!(
-            "SELECT id FROM projects WHERE workspace_id = ? AND name = ?",
-            ws_id,
-            proj_name
+            "SELECT workspace_id FROM projects WHERE id = ?",
+            proj_id_str
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| StoreError::Backend(e.to_string()))?;
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
 
-        let proj_id = match proj_row {
-            Some(row) => row.id,
-            None => return Err(StoreError::NotFound),
-        };
-
-        let env_id = Uuid::now_v7().to_string();
-        let env_name = &params.env_name.0;
+        let ws_id = proj_row.workspace_id;
 
         sqlx::query!(
             "INSERT INTO environments(id, workspace_id, project_id, name, dek_wrapped, dek_nonce)
              VALUES(?, ?, ?, ?, ?, ?)",
-            env_id,
+            env_id_str,
             ws_id,
-            proj_id,
-            env_name,
+            proj_id_str,
+            params.name,
             params.dek_wrapped,
             params.dek_nonce
         )
@@ -850,6 +846,91 @@ impl Store for SqliteStore {
                 StoreError::Backend(s)
             }
         })?;
+
+        Ok(EnvironmentId(env_id))
+    }
+
+    async fn list_environments(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+    ) -> Result<Vec<Environment>, StoreError> {
+        let proj_id_str = project_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce,
+               created_at as "created_at: DateTime<Utc>",
+               updated_at as "updated_at: DateTime<Utc>"
+               FROM environments WHERE project_id = ? ORDER BY created_at DESC"#,
+            proj_id_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let environments = rows
+            .into_iter()
+            .map(|row| {
+                Ok(Environment {
+                    id: EnvironmentId(
+                        Uuid::parse_str(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?,
+                    ),
+                    project_id: zopp_storage::ProjectId(
+                        Uuid::parse_str(&row.project_id)
+                            .map_err(|e| StoreError::Backend(e.to_string()))?,
+                    ),
+                    name: row.name,
+                    dek_wrapped: row.dek_wrapped,
+                    dek_nonce: row.dek_nonce,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                })
+            })
+            .collect::<Result<Vec<_>, StoreError>>()?;
+
+        Ok(environments)
+    }
+
+    async fn get_environment(&self, env_id: &EnvironmentId) -> Result<Environment, StoreError> {
+        let env_id_str = env_id.0.to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce,
+               created_at as "created_at: DateTime<Utc>",
+               updated_at as "updated_at: DateTime<Utc>"
+               FROM environments WHERE id = ?"#,
+            env_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(Environment {
+            id: EnvironmentId(
+                Uuid::parse_str(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            project_id: zopp_storage::ProjectId(
+                Uuid::parse_str(&row.project_id).map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            name: row.name,
+            dek_wrapped: row.dek_wrapped,
+            dek_nonce: row.dek_nonce,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+
+    async fn delete_environment(&self, env_id: &EnvironmentId) -> Result<(), StoreError> {
+        let env_id_str = env_id.0.to_string();
+
+        let result = sqlx::query!("DELETE FROM environments WHERE id = ?", env_id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
 
         Ok(())
     }
@@ -1112,32 +1193,32 @@ mod tests {
         let p = ProjectName("app".into());
         let e = EnvName("prod".into());
 
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws1.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id1 = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws1.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws1.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id: project_id1,
+            name: e.0.clone(),
             dek_wrapped: vec![1],
             dek_nonce: vec![9; 24],
         })
         .await
         .unwrap();
 
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws2.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id2 = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws2.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws2.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id: project_id2,
+            name: e.0.clone(),
             dek_wrapped: vec![2],
             dek_nonce: vec![9; 24],
         })
@@ -1172,16 +1253,16 @@ mod tests {
 
         let p = ProjectName("app".into());
         let e = EnvName("prod".into());
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id,
+            name: e.0.clone(),
             dek_wrapped: vec![1],
             dek_nonce: vec![9; 24],
         })
@@ -1213,17 +1294,17 @@ mod tests {
             })
             .await
             .unwrap();
-        let ws = s
+        let _ws = s
             .create_workspace(&workspace_params(user_id))
             .await
             .unwrap();
 
-        // No project "app" yet → creating env should fail with NotFound
+        // Non-existent project ID → creating env should fail with NotFound
+        let fake_project_id = zopp_storage::ProjectId(uuid::Uuid::new_v4());
         let err = s
             .create_env(&CreateEnvParams {
-                workspace_id: ws,
-                project_name: ProjectName("app".into()),
-                env_name: EnvName("prod".into()),
+                project_id: fake_project_id,
+                name: "prod".to_string(),
                 dek_wrapped: vec![1],
                 dek_nonce: vec![9; 24],
             })
@@ -1250,16 +1331,16 @@ mod tests {
         let p = ProjectName("app".into());
         let e = EnvName("prod".into());
 
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id: project_id.clone(),
+            name: e.0.clone(),
             dek_wrapped: vec![1],
             dek_nonce: vec![9; 24],
         })
@@ -1267,9 +1348,8 @@ mod tests {
         .unwrap();
         let err = s
             .create_env(&CreateEnvParams {
-                workspace_id: ws,
-                project_name: p,
-                env_name: e,
+                project_id,
+                name: e.0,
                 dek_wrapped: vec![1],
                 dek_nonce: vec![9; 24],
             })
@@ -1296,16 +1376,16 @@ mod tests {
 
         let p = ProjectName("app".into());
         let e = EnvName("prod".into());
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id,
+            name: e.0.clone(),
             dek_wrapped: vec![1],
             dek_nonce: vec![9; 24],
         })
@@ -1351,32 +1431,32 @@ mod tests {
         let p = ProjectName("app".into());
         let e = EnvName("prod".into());
 
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws1.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id1 = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws1.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws1.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id: project_id1,
+            name: e.0.clone(),
             dek_wrapped: b"wrap1".to_vec(),
             dek_nonce: vec![9; 24],
         })
         .await
         .unwrap();
 
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws2.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id2 = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws2.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws2.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id: project_id2,
+            name: e.0.clone(),
             dek_wrapped: b"wrap2".to_vec(),
             dek_nonce: vec![8; 24],
         })
@@ -1452,16 +1532,16 @@ mod tests {
         let e = EnvName("生产".into());
         let k = "🔑-секрет";
 
-        s.create_project(&CreateProjectParams {
-            workspace_id: ws.clone(),
-            name: p.0.clone(),
-        })
-        .await
-        .unwrap();
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: p.0.clone(),
+            })
+            .await
+            .unwrap();
         s.create_env(&CreateEnvParams {
-            workspace_id: ws.clone(),
-            project_name: p.clone(),
-            env_name: e.clone(),
+            project_id,
+            name: e.0.clone(),
             dek_wrapped: vec![1, 2, 3],
             dek_nonce: vec![9; 24],
         })

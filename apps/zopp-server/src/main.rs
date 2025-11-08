@@ -680,6 +680,242 @@ impl ZoppService for ZoppServer {
 
         Ok(Response::new(Empty {}))
     }
+
+    async fn create_environment(
+        &self,
+        request: Request<zopp_proto::CreateEnvironmentRequest>,
+    ) -> Result<Response<zopp_proto::Environment>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot create environments")
+        })?;
+
+        let req = request.into_inner();
+        let project_id = Uuid::parse_str(&req.project_id)
+            .map(zopp_storage::ProjectId)
+            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&project_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        let env_id = self
+            .store
+            .create_env(&zopp_storage::CreateEnvParams {
+                project_id: project_id.clone(),
+                name: req.name,
+                dek_wrapped: req.dek_wrapped,
+                dek_nonce: req.dek_nonce,
+            })
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::AlreadyExists => {
+                    Status::already_exists("Environment with this name already exists in project")
+                }
+                _ => Status::internal(format!("Failed to create environment: {}", e)),
+            })?;
+
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get environment: {}", e)))?;
+
+        Ok(Response::new(zopp_proto::Environment {
+            id: env.id.0.to_string(),
+            project_id: env.project_id.0.to_string(),
+            name: env.name,
+            dek_wrapped: env.dek_wrapped,
+            dek_nonce: env.dek_nonce,
+            created_at: env.created_at.timestamp(),
+            updated_at: env.updated_at.timestamp(),
+        }))
+    }
+
+    async fn list_environments(
+        &self,
+        request: Request<zopp_proto::ListEnvironmentsRequest>,
+    ) -> Result<Response<zopp_proto::EnvironmentList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list environments"))?;
+
+        let req = request.into_inner();
+        let project_id = Uuid::parse_str(&req.project_id)
+            .map(zopp_storage::ProjectId)
+            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&project_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        let environments = self
+            .store
+            .list_environments(&project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list environments: {}", e)))?
+            .into_iter()
+            .map(|e| zopp_proto::Environment {
+                id: e.id.0.to_string(),
+                project_id: e.project_id.0.to_string(),
+                name: e.name,
+                dek_wrapped: e.dek_wrapped,
+                dek_nonce: e.dek_nonce,
+                created_at: e.created_at.timestamp(),
+                updated_at: e.updated_at.timestamp(),
+            })
+            .collect();
+
+        Ok(Response::new(zopp_proto::EnvironmentList { environments }))
+    }
+
+    async fn get_environment(
+        &self,
+        request: Request<zopp_proto::GetEnvironmentRequest>,
+    ) -> Result<Response<zopp_proto::Environment>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get environments"))?;
+
+        let req = request.into_inner();
+        let env_id = Uuid::parse_str(&req.environment_id)
+            .map(zopp_storage::EnvironmentId)
+            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
+
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&env.project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        Ok(Response::new(zopp_proto::Environment {
+            id: env.id.0.to_string(),
+            project_id: env.project_id.0.to_string(),
+            name: env.name,
+            dek_wrapped: env.dek_wrapped,
+            dek_nonce: env.dek_nonce,
+            created_at: env.created_at.timestamp(),
+            updated_at: env.updated_at.timestamp(),
+        }))
+    }
+
+    async fn delete_environment(
+        &self,
+        request: Request<zopp_proto::DeleteEnvironmentRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot delete environments")
+        })?;
+
+        let req = request.into_inner();
+        let env_id = Uuid::parse_str(&req.environment_id)
+            .map(zopp_storage::EnvironmentId)
+            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
+
+        // Get environment to verify access
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&env.project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        self.store
+            .delete_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to delete environment: {}", e)),
+            })?;
+
+        Ok(Response::new(Empty {}))
+    }
 }
 
 fn extract_signature<T>(request: &Request<T>) -> Result<(PrincipalId, i64, Vec<u8>), Status> {

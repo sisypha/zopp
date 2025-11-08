@@ -54,6 +54,11 @@ enum Command {
         #[command(subcommand)]
         project_cmd: ProjectCommand,
     },
+    /// Environment commands
+    Environment {
+        #[command(subcommand)]
+        environment_cmd: EnvironmentCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -120,6 +125,38 @@ enum ProjectCommand {
     Delete {
         /// Project ID
         project_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum EnvironmentCommand {
+    /// List environments in a project
+    List {
+        /// Project ID
+        project_id: String,
+    },
+    /// Create a new environment
+    Create {
+        /// Project ID
+        project_id: String,
+        /// Environment name
+        name: String,
+        /// Wrapped DEK (hex-encoded)
+        #[arg(long)]
+        dek_wrapped: String,
+        /// DEK nonce (hex-encoded, 24 bytes)
+        #[arg(long)]
+        dek_nonce: String,
+    },
+    /// Get environment details
+    Get {
+        /// Environment ID
+        environment_id: String,
+    },
+    /// Delete an environment
+    Delete {
+        /// Environment ID
+        environment_id: String,
     },
 }
 
@@ -647,6 +684,183 @@ async fn cmd_project_delete(
     Ok(())
 }
 
+async fn cmd_environment_list(
+    server: &str,
+    project_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::ListEnvironmentsRequest {
+        project_id: project_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.list_environments(request).await?.into_inner();
+
+    if response.environments.is_empty() {
+        println!("No environments found");
+    } else {
+        println!("Environments:");
+        for env in response.environments {
+            println!(
+                "  {} (ID: {}, Project: {})",
+                env.name, env.id, env.project_id
+            );
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_environment_create(
+    server: &str,
+    project_id: &str,
+    name: &str,
+    dek_wrapped_hex: &str,
+    dek_nonce_hex: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    // Decode hex strings to bytes
+    let dek_wrapped =
+        hex::decode(dek_wrapped_hex).map_err(|e| format!("Invalid dek_wrapped hex: {}", e))?;
+    let dek_nonce =
+        hex::decode(dek_nonce_hex).map_err(|e| format!("Invalid dek_nonce hex: {}", e))?;
+
+    if dek_nonce.len() != 24 {
+        return Err(format!(
+            "dek_nonce must be exactly 24 bytes, got {}",
+            dek_nonce.len()
+        )
+        .into());
+    }
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::CreateEnvironmentRequest {
+        project_id: project_id.to_string(),
+        name: name.to_string(),
+        dek_wrapped,
+        dek_nonce,
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.create_environment(request).await?.into_inner();
+
+    println!(
+        "✓ Environment '{}' created (ID: {})",
+        response.name, response.id
+    );
+
+    Ok(())
+}
+
+async fn cmd_environment_get(
+    server: &str,
+    environment_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
+        environment_id: environment_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.get_environment(request).await?.into_inner();
+
+    println!("Environment: {}", response.name);
+    println!("  ID: {}", response.id);
+    println!("  Project ID: {}", response.project_id);
+    println!("  DEK Wrapped: {}", hex::encode(&response.dek_wrapped));
+    println!("  DEK Nonce: {}", hex::encode(&response.dek_nonce));
+    println!(
+        "  Created: {}",
+        chrono::DateTime::from_timestamp(response.created_at, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string())
+    );
+    println!(
+        "  Updated: {}",
+        chrono::DateTime::from_timestamp(response.updated_at, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string())
+    );
+
+    Ok(())
+}
+
+async fn cmd_environment_delete(
+    server: &str,
+    environment_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::DeleteEnvironmentRequest {
+        environment_id: environment_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    client.delete_environment(request).await?;
+
+    println!("✓ Environment '{}' deleted", environment_id);
+
+    Ok(())
+}
+
 // ────────────────────────────────────── Main ──────────────────────────────────────
 
 #[tokio::main]
@@ -701,6 +915,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             ProjectCommand::Delete { project_id } => {
                 cmd_project_delete(&cli.server, &project_id).await?;
+            }
+        },
+        Command::Environment { environment_cmd } => match environment_cmd {
+            EnvironmentCommand::List { project_id } => {
+                cmd_environment_list(&cli.server, &project_id).await?;
+            }
+            EnvironmentCommand::Create {
+                project_id,
+                name,
+                dek_wrapped,
+                dek_nonce,
+            } => {
+                cmd_environment_create(&cli.server, &project_id, &name, &dek_wrapped, &dek_nonce)
+                    .await?;
+            }
+            EnvironmentCommand::Get { environment_id } => {
+                cmd_environment_get(&cli.server, &environment_id).await?;
+            }
+            EnvironmentCommand::Delete { environment_id } => {
+                cmd_environment_delete(&cli.server, &environment_id).await?;
             }
         },
     }

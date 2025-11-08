@@ -40,6 +40,9 @@ pub struct ProjectId(pub Uuid);
 pub struct ProjectName(pub String);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct EnvironmentId(pub Uuid);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EnvName(pub String);
 
 /// Encrypted secret row (nonce + ciphertext); no plaintext in storage.
@@ -103,9 +106,8 @@ pub struct CreateProjectParams {
 /// Parameters for creating an environment
 #[derive(Clone, Debug)]
 pub struct CreateEnvParams {
-    pub workspace_id: WorkspaceId,
-    pub project_name: ProjectName,
-    pub env_name: EnvName,
+    pub project_id: ProjectId,
+    pub name: String,
     pub dek_wrapped: Vec<u8>, // wrapped DEK
     pub dek_nonce: Vec<u8>,   // 24-byte nonce used in wrapping
 }
@@ -162,6 +164,18 @@ pub struct Project {
     pub id: ProjectId,
     pub workspace_id: WorkspaceId,
     pub name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Environment record
+#[derive(Clone, Debug)]
+pub struct Environment {
+    pub id: EnvironmentId,
+    pub project_id: ProjectId,
+    pub name: String,
+    pub dek_wrapped: Vec<u8>,
+    pub dek_nonce: Vec<u8>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -279,8 +293,20 @@ pub trait Store {
 
     // ─────────────────────────────────────── Environments ─────────────────────────────────────
 
-    /// Create an environment within a project, storing the wrapped DEK + its nonce.
-    async fn create_env(&self, params: &CreateEnvParams) -> Result<(), StoreError>;
+    /// Create an environment within a project (returns generated ID).
+    async fn create_env(&self, params: &CreateEnvParams) -> Result<EnvironmentId, StoreError>;
+
+    /// List all environments in a project.
+    async fn list_environments(
+        &self,
+        project_id: &ProjectId,
+    ) -> Result<Vec<Environment>, StoreError>;
+
+    /// Get an environment by ID.
+    async fn get_environment(&self, env_id: &EnvironmentId) -> Result<Environment, StoreError>;
+
+    /// Delete an environment (and all its secrets).
+    async fn delete_environment(&self, env_id: &EnvironmentId) -> Result<(), StoreError>;
 
     /// Fetch the (wrapped_dek, dek_nonce) pair for an environment so core can unwrap it.
     async fn get_env_wrap(
@@ -468,7 +494,25 @@ mod tests {
             Ok(())
         }
 
-        async fn create_env(&self, _params: &CreateEnvParams) -> Result<(), StoreError> {
+        async fn create_env(&self, _params: &CreateEnvParams) -> Result<EnvironmentId, StoreError> {
+            Ok(EnvironmentId(Uuid::new_v4()))
+        }
+
+        async fn list_environments(
+            &self,
+            _project_id: &ProjectId,
+        ) -> Result<Vec<Environment>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn get_environment(
+            &self,
+            _env_id: &EnvironmentId,
+        ) -> Result<Environment, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn delete_environment(&self, _env_id: &EnvironmentId) -> Result<(), StoreError> {
             Ok(())
         }
 

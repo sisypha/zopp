@@ -1,20 +1,20 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id FROM projects WHERE workspace_id = ? AND name = ?",
+  "query": "SELECT workspace_id FROM projects WHERE id = ?",
   "describe": {
     "columns": [
       {
-        "name": "id",
+        "name": "workspace_id",
         "ordinal": 0,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false
     ]
   },
-  "hash": "a045afa72754e0bda2a74fa23efd4d4130a69d0b18f76dfd5cee72a24e6f5a07"
+  "hash": "ae936510e4c35f8db104565df5dfa60a421a0c25554a467e5c25b9385af30722"
 }
