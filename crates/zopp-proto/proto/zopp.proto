@@ -10,6 +10,7 @@ service ZoppService {
   // Workspaces
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (Workspace);
   rpc ListWorkspaces(Empty) returns (WorkspaceList);
+  rpc GetWorkspaceKeys(GetWorkspaceKeysRequest) returns (WorkspaceKeys);
 
   // Invites
   rpc CreateInvite(CreateInviteRequest) returns (InviteToken);
@@ -99,6 +100,16 @@ message Workspace {
 
 message WorkspaceList {
   repeated Workspace workspaces = 1;
+}
+
+message GetWorkspaceKeysRequest {
+  string workspace_name = 1;
+}
+
+message WorkspaceKeys {
+  bytes ephemeral_pub = 1;  // Ephemeral X25519 public key for unwrapping
+  bytes kek_wrapped = 2;    // Workspace KEK wrapped for requesting principal
+  bytes kek_nonce = 3;      // 24-byte nonce for unwrapping
 }
 
 // Invite messages

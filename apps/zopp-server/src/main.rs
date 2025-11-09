@@ -279,8 +279,21 @@ impl ZoppService for ZoppServer {
             .await
             .map_err(|e| Status::internal(format!("Failed to add user to workspace: {}", e)))?;
 
-        // TODO: Wrap KEK for this principal using add_workspace_principal
-        // For now, skip adding to workspace_principals (will be added later with KEK wrapping)
+        // Store wrapped KEK for the workspace creator
+        if !req.ephemeral_pub.is_empty() && !req.kek_wrapped.is_empty() {
+            self.store
+                .add_workspace_principal(&AddWorkspacePrincipalParams {
+                    workspace_id: workspace_id.clone(),
+                    principal_id: principal_id.clone(),
+                    ephemeral_pub: req.ephemeral_pub,
+                    kek_wrapped: req.kek_wrapped,
+                    kek_nonce: req.kek_nonce,
+                })
+                .await
+                .map_err(|e| {
+                    Status::internal(format!("Failed to add wrapped KEK for principal: {}", e))
+                })?;
+        }
 
         Ok(Response::new(zopp_proto::Workspace {
             id: workspace_id.0.to_string(),
@@ -313,6 +326,41 @@ impl ZoppService for ZoppServer {
             .collect();
 
         Ok(Response::new(WorkspaceList { workspaces }))
+    }
+
+    async fn get_workspace_keys(
+        &self,
+        request: Request<zopp_proto::GetWorkspaceKeysRequest>,
+    ) -> Result<Response<zopp_proto::WorkspaceKeys>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let req = request.into_inner();
+
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot access workspaces"))?;
+
+        // Get workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| Status::not_found(format!("Workspace not found: {}", e)))?;
+
+        // Get wrapped KEK for this principal
+        let wp = self
+            .store
+            .get_workspace_principal(&workspace.id, &principal_id)
+            .await
+            .map_err(|e| Status::not_found(format!("KEK not found for principal: {}", e)))?;
+
+        Ok(Response::new(zopp_proto::WorkspaceKeys {
+            ephemeral_pub: wp.ephemeral_pub,
+            kek_wrapped: wp.kek_wrapped,
+            kek_nonce: wp.kek_nonce,
+        }))
     }
 
     async fn create_invite(

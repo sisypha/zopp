@@ -212,12 +212,8 @@ enum SecretCommand {
         environment: String,
         /// Secret key
         key: String,
-        /// Nonce (hex-encoded, 24 bytes)
-        #[arg(long)]
-        nonce: String,
-        /// Ciphertext (hex-encoded)
-        #[arg(long)]
-        ciphertext: String,
+        /// Secret value (plaintext - will be encrypted automatically)
+        value: String,
     },
     /// Get a secret
     Get {
@@ -341,6 +337,115 @@ fn sign_request(private_key_hex: &str) -> Result<(i64, Vec<u8>), Box<dyn std::er
     Ok((timestamp, signature.to_bytes().to_vec()))
 }
 
+// ────────────────────────────────────── Crypto Helpers ──────────────────────────────────────
+
+/// Unwrap workspace KEK for the current principal
+async fn unwrap_workspace_kek(
+    client: &mut ZoppServiceClient<Channel>,
+    principal: &PrincipalConfig,
+    workspace_name: &str,
+) -> Result<[u8; 32], Box<dyn std::error::Error>> {
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::GetWorkspaceKeysRequest {
+        workspace_name: workspace_name.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.get_workspace_keys(request).await?.into_inner();
+
+    // Get principal's X25519 private key
+    let x25519_private_key = principal
+        .x25519_private_key
+        .as_ref()
+        .ok_or("Principal missing X25519 private key")?;
+    let x25519_private_bytes = hex::decode(x25519_private_key)?;
+    let mut x25519_array = [0u8; 32];
+    x25519_array.copy_from_slice(&x25519_private_bytes);
+    let x25519_keypair = zopp_crypto::Keypair::from_secret_bytes(&x25519_array);
+
+    // Derive shared secret using ephemeral public key
+    let ephemeral_pub = zopp_crypto::public_key_from_bytes(&response.ephemeral_pub)?;
+    let shared_secret = x25519_keypair.shared_secret(&ephemeral_pub);
+
+    // Unwrap the KEK
+    let aad = format!("workspace:{}", workspace_name).into_bytes();
+    let mut nonce_array = [0u8; 24];
+    nonce_array.copy_from_slice(&response.kek_nonce);
+    let nonce = zopp_crypto::Nonce(nonce_array);
+
+    let unwrapped = zopp_crypto::unwrap_key(&response.kek_wrapped, &nonce, &shared_secret, &aad)?;
+
+    if unwrapped.len() != 32 {
+        return Err("KEK must be 32 bytes".into());
+    }
+
+    let mut kek = [0u8; 32];
+    kek.copy_from_slice(&unwrapped);
+    Ok(kek)
+}
+
+/// Unwrap environment DEK using workspace KEK
+async fn unwrap_environment_dek(
+    client: &mut ZoppServiceClient<Channel>,
+    principal: &PrincipalConfig,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
+    kek: &[u8; 32],
+) -> Result<[u8; 32], Box<dyn std::error::Error>> {
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.get_environment(request).await?.into_inner();
+
+    // Unwrap the DEK using the KEK
+    let mut nonce_array = [0u8; 24];
+    nonce_array.copy_from_slice(&response.dek_nonce);
+    let nonce = zopp_crypto::Nonce(nonce_array);
+
+    let dek_key = zopp_crypto::Dek::from_bytes(kek)?;
+    let aad = format!(
+        "environment:{}:{}:{}",
+        workspace_name, project_name, environment_name
+    )
+    .into_bytes();
+
+    let unwrapped = zopp_crypto::decrypt(&response.dek_wrapped, &nonce, &dek_key, &aad)?;
+
+    if unwrapped.len() != 32 {
+        return Err("DEK must be 32 bytes".into());
+    }
+
+    let mut dek = [0u8; 32];
+    dek.copy_from_slice(&unwrapped);
+    Ok(dek)
+}
+
 // ────────────────────────────────────── Commands ──────────────────────────────────────
 
 async fn cmd_join(
@@ -447,15 +552,42 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
+    // Generate random KEK (Key Encryption Key) for this workspace
+    let mut kek = [0u8; 32];
+    use rand_core::RngCore;
+    rand_core::OsRng.fill_bytes(&mut kek);
+
+    // Get principal's X25519 keypair for wrapping the KEK
+    let x25519_private_key = principal
+        .x25519_private_key
+        .as_ref()
+        .ok_or("Principal missing X25519 private key")?;
+    let x25519_private_bytes = hex::decode(x25519_private_key)?;
+    let mut x25519_array = [0u8; 32];
+    x25519_array.copy_from_slice(&x25519_private_bytes);
+    let x25519_keypair = zopp_crypto::Keypair::from_secret_bytes(&x25519_array);
+
+    // Generate ephemeral keypair for wrapping
+    let ephemeral_keypair = zopp_crypto::Keypair::generate();
+    let ephemeral_pub = ephemeral_keypair.public_key_bytes().to_vec();
+
+    // Derive shared secret with our own public key using ephemeral private key
+    let my_public = zopp_crypto::public_key_from_bytes(&x25519_keypair.public_key_bytes())?;
+    let shared_secret = ephemeral_keypair.shared_secret(&my_public);
+
+    // Wrap the KEK
+    let aad = format!("workspace:{}", name).into_bytes();
+    let (nonce, wrapped) = zopp_crypto::wrap_key(&kek, &shared_secret, &aad)?;
+
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut client = connect(server).await?;
 
     let mut request = tonic::Request::new(CreateWorkspaceRequest {
         name: name.to_string(),
-        ephemeral_pub: vec![], // TODO: implement KEK generation and wrapping
-        kek_wrapped: vec![],
-        kek_nonce: vec![],
+        ephemeral_pub,
+        kek_wrapped: wrapped.0,
+        kek_nonce: nonce.0.to_vec(),
     });
     request
         .metadata_mut()
@@ -866,6 +998,9 @@ async fn cmd_environment_create(
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
+    // TODO: Implement automatic DEK generation by unwrapping workspace KEK
+    // For now, still use manual parameters
+
     // Decode hex strings to bytes
     let dek_wrapped =
         hex::decode(dek_wrapped_hex).map_err(|e| format!("Invalid dek_wrapped hex: {}", e))?;
@@ -1006,22 +1141,35 @@ async fn cmd_secret_set(
     project_name: &str,
     environment_name: &str,
     key: &str,
-    nonce_hex: &str,
-    ciphertext_hex: &str,
+    value: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
-    // Decode hex strings to bytes
-    let nonce = hex::decode(nonce_hex).map_err(|e| format!("Invalid nonce hex: {}", e))?;
-    let ciphertext =
-        hex::decode(ciphertext_hex).map_err(|e| format!("Invalid ciphertext hex: {}", e))?;
-
-    if nonce.len() != 24 {
-        return Err(format!("nonce must be exactly 24 bytes, got {}", nonce.len()).into());
-    }
-
     let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    // 1. Unwrap workspace KEK
+    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
+
+    // 2. Unwrap environment DEK
+    let dek = unwrap_environment_dek(
+        &mut client,
+        principal,
+        workspace_name,
+        project_name,
+        environment_name,
+        &kek,
+    )
+    .await?;
+
+    // 3. Encrypt the secret value using DEK
+    let dek_key = zopp_crypto::Dek::from_bytes(&dek)?;
+    let aad = format!(
+        "secret:{}:{}:{}:{}",
+        workspace_name, project_name, environment_name, key
+    )
+    .into_bytes();
+    let (nonce, ciphertext) = zopp_crypto::encrypt(value.as_bytes(), &dek_key, &aad)?;
 
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
@@ -1030,8 +1178,8 @@ async fn cmd_secret_set(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
         key: key.to_string(),
-        nonce,
-        ciphertext,
+        nonce: nonce.0.to_vec(),
+        ciphertext: ciphertext.0,
     });
     request
         .metadata_mut()
@@ -1084,9 +1232,36 @@ async fn cmd_secret_get(
 
     let response = client.get_secret(request).await?.into_inner();
 
-    println!("Secret: {}", response.key);
-    println!("  Nonce: {}", hex::encode(&response.nonce));
-    println!("  Ciphertext: {}", hex::encode(&response.ciphertext));
+    // 1. Unwrap workspace KEK
+    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
+
+    // 2. Unwrap environment DEK
+    let dek = unwrap_environment_dek(
+        &mut client,
+        principal,
+        workspace_name,
+        project_name,
+        environment_name,
+        &kek,
+    )
+    .await?;
+
+    // 3. Decrypt the secret value
+    let dek_key = zopp_crypto::Dek::from_bytes(&dek)?;
+    let aad = format!(
+        "secret:{}:{}:{}:{}",
+        workspace_name, project_name, environment_name, key
+    )
+    .into_bytes();
+
+    let mut nonce_array = [0u8; 24];
+    nonce_array.copy_from_slice(&response.nonce);
+    let nonce = zopp_crypto::Nonce(nonce_array);
+
+    let plaintext = zopp_crypto::decrypt(&response.ciphertext, &nonce, &dek_key, &aad)?;
+    let value = String::from_utf8(plaintext.to_vec())?;
+
+    println!("{}", value);
 
     Ok(())
 }
@@ -1270,8 +1445,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 project,
                 environment,
                 key,
-                nonce,
-                ciphertext,
+                value,
             } => {
                 cmd_secret_set(
                     &cli.server,
@@ -1279,8 +1453,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &project,
                     &environment,
                     &key,
-                    &nonce,
-                    &ciphertext,
+                    &value,
                 )
                 .await?;
             }

@@ -41,6 +41,10 @@ impl Dek {
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
+
+    pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, &'static str> {
+        Ok(Dek(Zeroizing::new(*bytes)))
+    }
 }
 
 /// Generate new DEK for an environment
