@@ -263,6 +263,13 @@ pub trait Store {
     /// Get workspace by ID.
     async fn get_workspace(&self, ws: &WorkspaceId) -> Result<Workspace, StoreError>;
 
+    /// Get workspace by name for a user (user must have access).
+    async fn get_workspace_by_name(
+        &self,
+        user_id: &UserId,
+        name: &str,
+    ) -> Result<Workspace, StoreError>;
+
     /// Add a principal to a workspace.
     async fn add_principal_to_workspace(
         &self,
@@ -288,6 +295,13 @@ pub trait Store {
     /// Get a project by ID.
     async fn get_project(&self, project_id: &ProjectId) -> Result<Project, StoreError>;
 
+    /// Get a project by name within a workspace.
+    async fn get_project_by_name(
+        &self,
+        workspace_id: &WorkspaceId,
+        name: &str,
+    ) -> Result<Project, StoreError>;
+
     /// Delete a project (and all its environments and secrets).
     async fn delete_project(&self, project_id: &ProjectId) -> Result<(), StoreError>;
 
@@ -304,6 +318,13 @@ pub trait Store {
 
     /// Get an environment by ID.
     async fn get_environment(&self, env_id: &EnvironmentId) -> Result<Environment, StoreError>;
+
+    /// Get an environment by name within a project.
+    async fn get_environment_by_name(
+        &self,
+        project_id: &ProjectId,
+        name: &str,
+    ) -> Result<Environment, StoreError>;
 
     /// Delete an environment (and all its secrets).
     async fn delete_environment(&self, env_id: &EnvironmentId) -> Result<(), StoreError>;
@@ -446,6 +467,14 @@ mod tests {
             Err(StoreError::NotFound)
         }
 
+        async fn get_workspace_by_name(
+            &self,
+            _user_id: &UserId,
+            _name: &str,
+        ) -> Result<Workspace, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
         async fn add_principal_to_workspace(
             &self,
             _workspace_id: &WorkspaceId,
@@ -480,6 +509,14 @@ mod tests {
             Err(StoreError::NotFound)
         }
 
+        async fn get_project_by_name(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _name: &str,
+        ) -> Result<Project, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
         async fn delete_project(&self, _project_id: &ProjectId) -> Result<(), StoreError> {
             Ok(())
         }
@@ -498,6 +535,14 @@ mod tests {
         async fn get_environment(
             &self,
             _env_id: &EnvironmentId,
+        ) -> Result<Environment, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn get_environment_by_name(
+            &self,
+            _project_id: &ProjectId,
+            _name: &str,
         ) -> Result<Environment, StoreError> {
             Err(StoreError::NotFound)
         }

@@ -500,24 +500,23 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot create projects"))?;
 
         let req = request.into_inner();
-        let workspace_id = Uuid::parse_str(&req.workspace_id)
-            .map(WorkspaceId)
-            .map_err(|_| Status::invalid_argument("Invalid workspace ID"))?;
 
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
             })?;
-
-        if !workspaces.iter().any(|w| w.id == workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
 
         let project_id = self
             .store
             .create_project(&zopp_storage::CreateProjectParams {
-                workspace_id: workspace_id.clone(),
+                workspace_id: workspace.id.clone(),
                 name: req.name,
             })
             .await
@@ -556,23 +555,22 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot list projects"))?;
 
         let req = request.into_inner();
-        let workspace_id = Uuid::parse_str(&req.workspace_id)
-            .map(WorkspaceId)
-            .map_err(|_| Status::invalid_argument("Invalid workspace ID"))?;
 
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
             })?;
-
-        if !workspaces.iter().any(|w| w.id == workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
 
         let projects = self
             .store
-            .list_projects(&workspace_id)
+            .list_projects(&workspace.id)
             .await
             .map_err(|e| Status::internal(format!("Failed to list projects: {}", e)))?
             .into_iter()
@@ -601,28 +599,28 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot get projects"))?;
 
         let req = request.into_inner();
-        let project_id = Uuid::parse_str(&req.project_id)
-            .map(zopp_storage::ProjectId)
-            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
 
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
         let project = self
             .store
-            .get_project(&project_id)
+            .get_project_by_name(&workspace.id, &req.project_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
                 _ => Status::internal(format!("Failed to get project: {}", e)),
             })?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
 
         Ok(Response::new(zopp_proto::Project {
             id: project.id.0.to_string(),
@@ -646,32 +644,31 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot delete projects"))?;
 
         let req = request.into_inner();
-        let project_id = Uuid::parse_str(&req.project_id)
-            .map(zopp_storage::ProjectId)
-            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
 
-        // Get project to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
         let project = self
             .store
-            .get_project(&project_id)
+            .get_project_by_name(&workspace.id, &req.project_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
                 _ => Status::internal(format!("Failed to get project: {}", e)),
             })?;
 
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         self.store
-            .delete_project(&project_id)
+            .delete_project(&project.id)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
@@ -694,34 +691,33 @@ impl ZoppService for ZoppServer {
         })?;
 
         let req = request.into_inner();
-        let project_id = Uuid::parse_str(&req.project_id)
-            .map(zopp_storage::ProjectId)
-            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
 
-        // Get project to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
         let project = self
             .store
-            .get_project(&project_id)
+            .get_project_by_name(&workspace.id, &req.project_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
                 _ => Status::internal(format!("Failed to get project: {}", e)),
             })?;
 
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         let env_id = self
             .store
             .create_env(&zopp_storage::CreateEnvParams {
-                project_id: project_id.clone(),
+                project_id: project.id.clone(),
                 name: req.name,
                 dek_wrapped: req.dek_wrapped,
                 dek_nonce: req.dek_nonce,
@@ -764,33 +760,32 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot list environments"))?;
 
         let req = request.into_inner();
-        let project_id = Uuid::parse_str(&req.project_id)
-            .map(zopp_storage::ProjectId)
-            .map_err(|_| Status::invalid_argument("Invalid project ID"))?;
 
-        // Get project to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
         let project = self
             .store
-            .get_project(&project_id)
+            .get_project_by_name(&workspace.id, &req.project_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
                 _ => Status::internal(format!("Failed to get project: {}", e)),
             })?;
 
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         let environments = self
             .store
-            .list_environments(&project_id)
+            .list_environments(&project.id)
             .await
             .map_err(|e| Status::internal(format!("Failed to list environments: {}", e)))?
             .into_iter()
@@ -821,35 +816,38 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot get environments"))?;
 
         let req = request.into_inner();
-        let env_id = Uuid::parse_str(&req.environment_id)
-            .map(zopp_storage::EnvironmentId)
-            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
 
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name in project
         let env = self
             .store
-            .get_environment(&env_id)
+            .get_environment_by_name(&project.id, &req.environment_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
-
-        // Get project to verify access
-        let project = self
-            .store
-            .get_project(&env.project_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
 
         Ok(Response::new(zopp_proto::Environment {
             id: env.id.0.to_string(),
@@ -875,39 +873,41 @@ impl ZoppService for ZoppServer {
         })?;
 
         let req = request.into_inner();
-        let env_id = Uuid::parse_str(&req.environment_id)
-            .map(zopp_storage::EnvironmentId)
-            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
 
-        // Get environment to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name in project
         let env = self
             .store
-            .get_environment(&env_id)
+            .get_environment_by_name(&project.id, &req.environment_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        // Get project to verify access
-        let project = self
-            .store
-            .get_project(&env.project_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         self.store
-            .delete_environment(&env_id)
+            .delete_environment(&env.id)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
@@ -930,39 +930,41 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot upsert secrets"))?;
 
         let req = request.into_inner();
-        let env_id = Uuid::parse_str(&req.environment_id)
-            .map(zopp_storage::EnvironmentId)
-            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
 
-        // Get environment to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name in project
         let env = self
             .store
-            .get_environment(&env_id)
+            .get_environment_by_name(&project.id, &req.environment_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        // Get project to verify access
-        let project = self
-            .store
-            .get_project(&env.project_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         self.store
-            .upsert_secret(&env_id, &req.key, &req.nonce, &req.ciphertext)
+            .upsert_secret(&env.id, &req.key, &req.nonce, &req.ciphertext)
             .await
             .map_err(|e| Status::internal(format!("Failed to upsert secret: {}", e)))?;
 
@@ -982,40 +984,42 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot get secrets"))?;
 
         let req = request.into_inner();
-        let env_id = Uuid::parse_str(&req.environment_id)
-            .map(zopp_storage::EnvironmentId)
-            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
 
-        // Get environment to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name in project
         let env = self
             .store
-            .get_environment(&env_id)
+            .get_environment_by_name(&project.id, &req.environment_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        // Get project to verify access
-        let project = self
-            .store
-            .get_project(&env.project_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         let secret = self
             .store
-            .get_secret(&env_id, &req.key)
+            .get_secret(&env.id, &req.key)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Secret not found"),
@@ -1042,40 +1046,42 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot list secrets"))?;
 
         let req = request.into_inner();
-        let env_id = Uuid::parse_str(&req.environment_id)
-            .map(zopp_storage::EnvironmentId)
-            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
 
-        // Get environment to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name in project
         let env = self
             .store
-            .get_environment(&env_id)
+            .get_environment_by_name(&project.id, &req.environment_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        // Get project to verify access
-        let project = self
-            .store
-            .get_project(&env.project_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         let keys = self
             .store
-            .list_secret_keys(&env_id)
+            .list_secret_keys(&env.id)
             .await
             .map_err(|e| Status::internal(format!("Failed to list secrets: {}", e)))?;
 
@@ -1084,7 +1090,7 @@ impl ZoppService for ZoppServer {
         for key in keys {
             let secret = self
                 .store
-                .get_secret(&env_id, &key)
+                .get_secret(&env.id, &key)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to get secret: {}", e)))?;
             secrets.push(zopp_proto::Secret {
@@ -1110,39 +1116,41 @@ impl ZoppService for ZoppServer {
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot delete secrets"))?;
 
         let req = request.into_inner();
-        let env_id = Uuid::parse_str(&req.environment_id)
-            .map(zopp_storage::EnvironmentId)
-            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
 
-        // Get environment to verify access
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name in workspace
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name in project
         let env = self
             .store
-            .get_environment(&env_id)
+            .get_environment_by_name(&project.id, &req.environment_name)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        // Get project to verify access
-        let project = self
-            .store
-            .get_project(&env.project_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
-
-        // Verify user has access to workspace
-        let workspaces =
-            self.store.list_workspaces(&user_id).await.map_err(|e| {
-                Status::internal(format!("Failed to verify workspace access: {}", e))
-            })?;
-
-        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
-            return Err(Status::permission_denied("No access to workspace"));
-        }
-
         self.store
-            .delete_secret(&env_id, &req.key)
+            .delete_secret(&env.id, &req.key)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Secret not found"),

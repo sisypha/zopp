@@ -645,6 +645,50 @@ impl Store for SqliteStore {
         }
     }
 
+    async fn get_workspace_by_name(
+        &self,
+        user_id: &UserId,
+        name: &str,
+    ) -> Result<Workspace, StoreError> {
+        let user_id_str = user_id.0.to_string();
+        let row = sqlx::query!(
+            r#"SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,
+               w.created_at as "created_at: DateTime<Utc>",
+               w.updated_at as "updated_at: DateTime<Utc>"
+               FROM workspaces w
+               LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
+               WHERE w.name = ? AND (w.owner_user_id = ? OR wm.user_id = ?)
+               LIMIT 1"#,
+            name,
+            user_id_str,
+            user_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => {
+                let id =
+                    Uuid::try_parse(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?;
+                let owner_user_id = Uuid::try_parse(&row.owner_user_id)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?;
+                Ok(Workspace {
+                    id: WorkspaceId(id),
+                    name: row.name,
+                    owner_user_id: UserId(owner_user_id),
+                    kdf_salt: row.kdf_salt,
+                    m_cost_kib: row.kdf_m_cost_kib as u32,
+                    t_cost: row.kdf_t_cost as u32,
+                    p_cost: row.kdf_p_cost as u32,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                })
+            }
+        }
+    }
+
     async fn add_principal_to_workspace(
         &self,
         workspace_id: &WorkspaceId,
@@ -792,6 +836,40 @@ impl Store for SqliteStore {
         })
     }
 
+    async fn get_project_by_name(
+        &self,
+        workspace_id: &WorkspaceId,
+        name: &str,
+    ) -> Result<zopp_storage::Project, StoreError> {
+        let ws_id_str = workspace_id.0.to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT id, workspace_id, name,
+               created_at as "created_at: DateTime<Utc>",
+               updated_at as "updated_at: DateTime<Utc>"
+               FROM projects WHERE workspace_id = ? AND name = ?"#,
+            ws_id_str,
+            name
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(zopp_storage::Project {
+            id: zopp_storage::ProjectId(
+                Uuid::parse_str(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            workspace_id: zopp_storage::WorkspaceId(
+                Uuid::parse_str(&row.workspace_id)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            name: row.name,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+
     async fn delete_project(&self, project_id: &zopp_storage::ProjectId) -> Result<(), StoreError> {
         let id_str = project_id.0.to_string();
 
@@ -899,6 +977,41 @@ impl Store for SqliteStore {
                updated_at as "updated_at: DateTime<Utc>"
                FROM environments WHERE id = ?"#,
             env_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(Environment {
+            id: EnvironmentId(
+                Uuid::parse_str(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            project_id: zopp_storage::ProjectId(
+                Uuid::parse_str(&row.project_id).map_err(|e| StoreError::Backend(e.to_string()))?,
+            ),
+            name: row.name,
+            dek_wrapped: row.dek_wrapped,
+            dek_nonce: row.dek_nonce,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+
+    async fn get_environment_by_name(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        name: &str,
+    ) -> Result<Environment, StoreError> {
+        let proj_id_str = project_id.0.to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce,
+               created_at as "created_at: DateTime<Utc>",
+               updated_at as "updated_at: DateTime<Utc>"
+               FROM environments WHERE project_id = ? AND name = ?"#,
+            proj_id_str,
+            name
         )
         .fetch_optional(&self.pool)
         .await
@@ -1068,9 +1181,9 @@ mod tests {
     use super::*;
     use zopp_storage::{CreateWorkspaceParams, EnvName, ProjectName, StoreError, UserId};
 
-    fn workspace_params(owner_user_id: UserId) -> CreateWorkspaceParams {
+    fn workspace_params(owner_user_id: UserId, name: &str) -> CreateWorkspaceParams {
         CreateWorkspaceParams {
-            name: "test-workspace".to_string(),
+            name: name.to_string(),
             owner_user_id,
             kdf_salt: b"abcdef0123456789".to_vec(),
             m_cost_kib: 1024,
@@ -1091,13 +1204,13 @@ mod tests {
             .await
             .unwrap();
         let ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
         let got = s.get_workspace(&ws).await.unwrap();
         assert_eq!(
             got.kdf_salt,
-            workspace_params(got.owner_user_id.clone()).kdf_salt
+            workspace_params(got.owner_user_id.clone(), "test-workspace").kdf_salt
         );
         assert_eq!(got.m_cost_kib, 1024);
         assert_eq!(got.t_cost, 2);
@@ -1116,7 +1229,7 @@ mod tests {
             .await
             .unwrap();
         let ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
         let name = ProjectName("app".into());
@@ -1150,11 +1263,11 @@ mod tests {
             .await
             .unwrap();
         let ws1 = s
-            .create_workspace(&workspace_params(user_id.clone()))
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace-1"))
             .await
             .unwrap();
         let ws2 = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace-2"))
             .await
             .unwrap();
 
@@ -1217,7 +1330,7 @@ mod tests {
             .await
             .unwrap();
         let ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
 
@@ -1266,7 +1379,7 @@ mod tests {
             .await
             .unwrap();
         let _ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
 
@@ -1296,7 +1409,7 @@ mod tests {
             .await
             .unwrap();
         let ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
         let p = ProjectName("app".into());
@@ -1341,7 +1454,7 @@ mod tests {
             .await
             .unwrap();
         let ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
 
@@ -1392,11 +1505,11 @@ mod tests {
             .await
             .unwrap();
         let ws1 = s
-            .create_workspace(&workspace_params(user_id.clone()))
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace-1"))
             .await
             .unwrap();
         let ws2 = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace-2"))
             .await
             .unwrap();
 
@@ -1496,7 +1609,7 @@ mod tests {
             .await
             .unwrap();
         let ws = s
-            .create_workspace(&workspace_params(user_id))
+            .create_workspace(&workspace_params(user_id, "test-workspace"))
             .await
             .unwrap();
 

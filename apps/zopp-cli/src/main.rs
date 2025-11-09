@@ -111,25 +111,35 @@ enum PrincipalCommand {
 enum ProjectCommand {
     /// List projects in a workspace
     List {
-        /// Workspace ID
-        workspace_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
     },
     /// Create a new project
     Create {
-        /// Workspace ID
-        workspace_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
         /// Project name
         name: String,
     },
     /// Get project details
     Get {
-        /// Project ID
-        project_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
     },
     /// Delete a project
     Delete {
-        /// Project ID
-        project_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
     },
 }
 
@@ -137,13 +147,21 @@ enum ProjectCommand {
 enum EnvironmentCommand {
     /// List environments in a project
     List {
-        /// Project ID
-        project_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
     },
     /// Create a new environment
     Create {
-        /// Project ID
-        project_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
         /// Environment name
         name: String,
         /// Wrapped DEK (hex-encoded)
@@ -155,13 +173,27 @@ enum EnvironmentCommand {
     },
     /// Get environment details
     Get {
-        /// Environment ID
-        environment_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
     },
     /// Delete an environment
     Delete {
-        /// Environment ID
-        environment_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
     },
 }
 
@@ -169,8 +201,15 @@ enum EnvironmentCommand {
 enum SecretCommand {
     /// Set (upsert) a secret
     Set {
-        /// Environment ID
-        environment_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
         /// Secret key
         key: String,
         /// Nonce (hex-encoded, 24 bytes)
@@ -182,20 +221,41 @@ enum SecretCommand {
     },
     /// Get a secret
     Get {
-        /// Environment ID
-        environment_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
         /// Secret key
         key: String,
     },
     /// List all secrets in an environment
     List {
-        /// Environment ID
-        environment_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
     },
     /// Delete a secret
     Delete {
-        /// Environment ID
-        environment_id: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
         /// Secret key
         key: String,
     },
@@ -360,9 +420,9 @@ async fn cmd_workspace_list(server: &str) -> Result<(), Box<dyn std::error::Erro
     if response.workspaces.is_empty() {
         println!("No workspaces found.");
     } else {
-        println!("Workspaces:\n");
+        println!("Workspaces:");
         for ws in response.workspaces {
-            println!("  {} ({})", ws.name, ws.id);
+            println!("  {}", ws.name);
         }
     }
 
@@ -573,7 +633,7 @@ async fn cmd_principal_delete(name: &str) -> Result<(), Box<dyn std::error::Erro
 
 async fn cmd_project_list(
     server: &str,
-    workspace_id: &str,
+    workspace_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -583,7 +643,7 @@ async fn cmd_project_list(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::ListProjectsRequest {
-        workspace_id: workspace_id.to_string(),
+        workspace_name: workspace_name.to_string(),
     });
     request
         .metadata_mut()
@@ -603,10 +663,7 @@ async fn cmd_project_list(
     } else {
         println!("Projects:");
         for project in response.projects {
-            println!(
-                "  {} - {} (ID: {})",
-                project.name, project.workspace_id, project.id
-            );
+            println!("  {}", project.name);
         }
     }
 
@@ -615,7 +672,7 @@ async fn cmd_project_list(
 
 async fn cmd_project_create(
     server: &str,
-    workspace_id: &str,
+    workspace_name: &str,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
@@ -626,7 +683,7 @@ async fn cmd_project_create(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::CreateProjectRequest {
-        workspace_id: workspace_id.to_string(),
+        workspace_name: workspace_name.to_string(),
         name: name.to_string(),
     });
     request
@@ -650,7 +707,11 @@ async fn cmd_project_create(
     Ok(())
 }
 
-async fn cmd_project_get(server: &str, project_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn cmd_project_get(
+    server: &str,
+    workspace_name: &str,
+    project_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
@@ -659,7 +720,8 @@ async fn cmd_project_get(server: &str, project_id: &str) -> Result<(), Box<dyn s
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::GetProjectRequest {
-        project_id: project_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
     });
     request
         .metadata_mut()
@@ -695,7 +757,8 @@ async fn cmd_project_get(server: &str, project_id: &str) -> Result<(), Box<dyn s
 
 async fn cmd_project_delete(
     server: &str,
-    project_id: &str,
+    workspace_name: &str,
+    project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -705,7 +768,8 @@ async fn cmd_project_delete(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteProjectRequest {
-        project_id: project_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
     });
     request
         .metadata_mut()
@@ -720,14 +784,15 @@ async fn cmd_project_delete(
 
     client.delete_project(request).await?;
 
-    println!("✓ Project '{}' deleted", project_id);
+    println!("✓ Project '{}' deleted", project_name);
 
     Ok(())
 }
 
 async fn cmd_environment_list(
     server: &str,
-    project_id: &str,
+    workspace_name: &str,
+    project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -737,7 +802,8 @@ async fn cmd_environment_list(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::ListEnvironmentsRequest {
-        project_id: project_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
     });
     request
         .metadata_mut()
@@ -757,10 +823,7 @@ async fn cmd_environment_list(
     } else {
         println!("Environments:");
         for env in response.environments {
-            println!(
-                "  {} (ID: {}, Project: {})",
-                env.name, env.id, env.project_id
-            );
+            println!("  {}", env.name);
         }
     }
 
@@ -769,7 +832,8 @@ async fn cmd_environment_list(
 
 async fn cmd_environment_create(
     server: &str,
-    project_id: &str,
+    workspace_name: &str,
+    project_name: &str,
     name: &str,
     dek_wrapped_hex: &str,
     dek_nonce_hex: &str,
@@ -796,7 +860,8 @@ async fn cmd_environment_create(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::CreateEnvironmentRequest {
-        project_id: project_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
         name: name.to_string(),
         dek_wrapped,
         dek_nonce,
@@ -824,7 +889,9 @@ async fn cmd_environment_create(
 
 async fn cmd_environment_get(
     server: &str,
-    environment_id: &str,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -834,7 +901,9 @@ async fn cmd_environment_get(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
-        environment_id: environment_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
     });
     request
         .metadata_mut()
@@ -872,7 +941,9 @@ async fn cmd_environment_get(
 
 async fn cmd_environment_delete(
     server: &str,
-    environment_id: &str,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -882,7 +953,9 @@ async fn cmd_environment_delete(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteEnvironmentRequest {
-        environment_id: environment_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
     });
     request
         .metadata_mut()
@@ -897,14 +970,16 @@ async fn cmd_environment_delete(
 
     client.delete_environment(request).await?;
 
-    println!("✓ Environment '{}' deleted", environment_id);
+    println!("✓ Environment '{}' deleted", environment_name);
 
     Ok(())
 }
 
 async fn cmd_secret_set(
     server: &str,
-    environment_id: &str,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
     key: &str,
     nonce_hex: &str,
     ciphertext_hex: &str,
@@ -926,7 +1001,9 @@ async fn cmd_secret_set(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::UpsertSecretRequest {
-        environment_id: environment_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
         key: key.to_string(),
         nonce,
         ciphertext,
@@ -951,7 +1028,9 @@ async fn cmd_secret_set(
 
 async fn cmd_secret_get(
     server: &str,
-    environment_id: &str,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
@@ -962,7 +1041,9 @@ async fn cmd_secret_get(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::GetSecretRequest {
-        environment_id: environment_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
         key: key.to_string(),
     });
     request
@@ -987,7 +1068,9 @@ async fn cmd_secret_get(
 
 async fn cmd_secret_list(
     server: &str,
-    environment_id: &str,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -997,7 +1080,9 @@ async fn cmd_secret_list(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
-        environment_id: environment_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
     });
     request
         .metadata_mut()
@@ -1026,7 +1111,9 @@ async fn cmd_secret_list(
 
 async fn cmd_secret_delete(
     server: &str,
-    environment_id: &str,
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
@@ -1037,7 +1124,9 @@ async fn cmd_secret_delete(
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteSecretRequest {
-        environment_id: environment_id.to_string(),
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+        environment_name: environment_name.to_string(),
         key: key.to_string(),
     });
     request
@@ -1101,62 +1190,97 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Command::Project { project_cmd } => match project_cmd {
-            ProjectCommand::List { workspace_id } => {
-                cmd_project_list(&cli.server, &workspace_id).await?;
+            ProjectCommand::List { workspace } => {
+                cmd_project_list(&cli.server, &workspace).await?;
             }
-            ProjectCommand::Create { workspace_id, name } => {
-                cmd_project_create(&cli.server, &workspace_id, &name).await?;
+            ProjectCommand::Create { workspace, name } => {
+                cmd_project_create(&cli.server, &workspace, &name).await?;
             }
-            ProjectCommand::Get { project_id } => {
-                cmd_project_get(&cli.server, &project_id).await?;
+            ProjectCommand::Get { workspace, project } => {
+                cmd_project_get(&cli.server, &workspace, &project).await?;
             }
-            ProjectCommand::Delete { project_id } => {
-                cmd_project_delete(&cli.server, &project_id).await?;
+            ProjectCommand::Delete { workspace, project } => {
+                cmd_project_delete(&cli.server, &workspace, &project).await?;
             }
         },
         Command::Environment { environment_cmd } => match environment_cmd {
-            EnvironmentCommand::List { project_id } => {
-                cmd_environment_list(&cli.server, &project_id).await?;
+            EnvironmentCommand::List { workspace, project } => {
+                cmd_environment_list(&cli.server, &workspace, &project).await?;
             }
             EnvironmentCommand::Create {
-                project_id,
+                workspace,
+                project,
                 name,
                 dek_wrapped,
                 dek_nonce,
             } => {
-                cmd_environment_create(&cli.server, &project_id, &name, &dek_wrapped, &dek_nonce)
-                    .await?;
+                cmd_environment_create(
+                    &cli.server,
+                    &workspace,
+                    &project,
+                    &name,
+                    &dek_wrapped,
+                    &dek_nonce,
+                )
+                .await?;
             }
-            EnvironmentCommand::Get { environment_id } => {
-                cmd_environment_get(&cli.server, &environment_id).await?;
+            EnvironmentCommand::Get {
+                workspace,
+                project,
+                environment,
+            } => {
+                cmd_environment_get(&cli.server, &workspace, &project, &environment).await?;
             }
-            EnvironmentCommand::Delete { environment_id } => {
-                cmd_environment_delete(&cli.server, &environment_id).await?;
+            EnvironmentCommand::Delete {
+                workspace,
+                project,
+                environment,
+            } => {
+                cmd_environment_delete(&cli.server, &workspace, &project, &environment).await?;
             }
         },
         Command::Secret { secret_cmd } => match secret_cmd {
             SecretCommand::Set {
-                environment_id,
+                workspace,
+                project,
+                environment,
                 key,
                 nonce,
                 ciphertext,
             } => {
-                cmd_secret_set(&cli.server, &environment_id, &key, &nonce, &ciphertext).await?;
+                cmd_secret_set(
+                    &cli.server,
+                    &workspace,
+                    &project,
+                    &environment,
+                    &key,
+                    &nonce,
+                    &ciphertext,
+                )
+                .await?;
             }
             SecretCommand::Get {
-                environment_id,
+                workspace,
+                project,
+                environment,
                 key,
             } => {
-                cmd_secret_get(&cli.server, &environment_id, &key).await?;
+                cmd_secret_get(&cli.server, &workspace, &project, &environment, &key).await?;
             }
-            SecretCommand::List { environment_id } => {
-                cmd_secret_list(&cli.server, &environment_id).await?;
+            SecretCommand::List {
+                workspace,
+                project,
+                environment,
+            } => {
+                cmd_secret_list(&cli.server, &workspace, &project, &environment).await?;
             }
             SecretCommand::Delete {
-                environment_id,
+                workspace,
+                project,
+                environment,
                 key,
             } => {
-                cmd_secret_delete(&cli.server, &environment_id, &key).await?;
+                cmd_secret_delete(&cli.server, &workspace, &project, &environment, &key).await?;
             }
         },
     }

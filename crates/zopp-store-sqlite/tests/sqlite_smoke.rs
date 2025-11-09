@@ -4,9 +4,9 @@ use zopp_storage::{
 };
 use zopp_store_sqlite::SqliteStore;
 
-fn workspace_params(owner_user_id: UserId) -> CreateWorkspaceParams {
+fn workspace_params(owner_user_id: UserId, name: &str) -> CreateWorkspaceParams {
     CreateWorkspaceParams {
-        name: "test-workspace".to_string(),
+        name: name.to_string(),
         owner_user_id,
         kdf_salt: b"0123456789abcdef".to_vec(),
         m_cost_kib: 64 * 1024,
@@ -31,7 +31,7 @@ async fn end_to_end_happy_path_and_updates() {
 
     // workspace + project + env
     let ws = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace"))
         .await
         .unwrap();
     let p = ProjectName("p1".into());
@@ -109,11 +109,11 @@ async fn workspace_isolation_end_to_end() {
         .unwrap();
 
     let ws1 = s
-        .create_workspace(&workspace_params(user_id.clone()))
+        .create_workspace(&workspace_params(user_id.clone(), "test-workspace-1"))
         .await
         .unwrap();
     let ws2 = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace-2"))
         .await
         .unwrap();
 
@@ -179,7 +179,7 @@ async fn common_error_mapping_paths() {
         .unwrap();
 
     let ws = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace"))
         .await
         .unwrap();
     let p = ProjectName("dup".into());
@@ -221,7 +221,7 @@ async fn project_crud_operations() {
         .unwrap();
 
     let ws = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace"))
         .await
         .unwrap();
 
@@ -317,12 +317,12 @@ async fn project_isolation_across_workspaces() {
         .unwrap();
 
     let ws1 = s
-        .create_workspace(&workspace_params(user_id.clone()))
+        .create_workspace(&workspace_params(user_id.clone(), "test-workspace-1"))
         .await
         .unwrap();
 
     let ws2 = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace-2"))
         .await
         .unwrap();
 
@@ -371,7 +371,7 @@ async fn environment_crud_operations() {
         .unwrap();
 
     let ws = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace"))
         .await
         .unwrap();
 
@@ -483,7 +483,7 @@ async fn environment_isolation_across_projects() {
         .unwrap();
 
     let ws = s
-        .create_workspace(&workspace_params(user_id))
+        .create_workspace(&workspace_params(user_id, "test-workspace"))
         .await
         .unwrap();
 
