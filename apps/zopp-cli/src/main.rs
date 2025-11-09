@@ -276,8 +276,12 @@ struct CliConfig {
 struct PrincipalConfig {
     id: String,
     name: String,
-    private_key: String, // hex-encoded
-    public_key: String,  // hex-encoded
+    private_key: String, // Ed25519 private key (hex-encoded)
+    public_key: String,  // Ed25519 public key (hex-encoded)
+    #[serde(default)]
+    x25519_private_key: Option<String>, // X25519 private key (hex-encoded)
+    #[serde(default)]
+    x25519_public_key: Option<String>, // X25519 public key (hex-encoded)
 }
 
 fn config_path() -> PathBuf {
@@ -350,10 +354,14 @@ async fn cmd_join(
         Some(name) => name.to_string(),
         None => hostname::get()?.to_string_lossy().to_string(),
     };
-    // Generate new keypair
+    // Generate Ed25519 keypair for authentication
     let signing_key = SigningKey::generate(&mut rand_core::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key = verifying_key.to_bytes().to_vec();
+
+    // Generate X25519 keypair for encryption (ECDH)
+    let x25519_keypair = zopp_crypto::Keypair::generate();
+    let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
 
     let mut client = connect(server).await?;
 
@@ -363,6 +371,10 @@ async fn cmd_join(
             email: email.to_string(),
             principal_name: principal_name.clone(),
             public_key,
+            x25519_public_key: x25519_public_bytes,
+            ephemeral_pub: vec![], // TODO: implement KEK wrapping
+            kek_wrapped: vec![],
+            kek_nonce: vec![],
         })
         .await?
         .into_inner();
@@ -385,6 +397,8 @@ async fn cmd_join(
             name: principal_name.clone(),
             private_key: hex::encode(signing_key.to_bytes()),
             public_key: hex::encode(verifying_key.to_bytes()),
+            x25519_private_key: Some(hex::encode(x25519_keypair.secret_key_bytes())),
+            x25519_public_key: Some(hex::encode(x25519_keypair.public_key_bytes())),
         }],
         current_principal: Some(principal_name),
     };
@@ -439,6 +453,9 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
 
     let mut request = tonic::Request::new(CreateWorkspaceRequest {
         name: name.to_string(),
+        ephemeral_pub: vec![], // TODO: implement KEK generation and wrapping
+        kek_wrapped: vec![],
+        kek_nonce: vec![],
     });
     request
         .metadata_mut()
@@ -495,9 +512,14 @@ async fn cmd_principal_create(server: &str, name: &str) -> Result<(), Box<dyn st
         return Err(format!("Principal '{}' already exists", name).into());
     }
 
+    // Generate Ed25519 keypair for authentication
     let signing_key = SigningKey::generate(&mut rand_core::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key = verifying_key.to_bytes().to_vec();
+
+    // Generate X25519 keypair for encryption (ECDH)
+    let x25519_keypair = zopp_crypto::Keypair::generate();
+    let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
 
     let mut client = connect(server).await?;
     let principal = get_current_principal(&config)?;
@@ -507,6 +529,7 @@ async fn cmd_principal_create(server: &str, name: &str) -> Result<(), Box<dyn st
         email: config.email.clone(),
         principal_name: name.to_string(),
         public_key,
+        x25519_public_key: x25519_public_bytes,
     });
     request
         .metadata_mut()
@@ -526,6 +549,8 @@ async fn cmd_principal_create(server: &str, name: &str) -> Result<(), Box<dyn st
         name: name.to_string(),
         private_key: hex::encode(signing_key.to_bytes()),
         public_key: hex::encode(verifying_key.to_bytes()),
+        x25519_private_key: Some(hex::encode(x25519_keypair.secret_key_bytes())),
+        x25519_public_key: Some(hex::encode(x25519_keypair.public_key_bytes())),
     });
     save_config(&config)?;
 

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT nonce, ciphertext FROM secrets WHERE env_id = ? AND key_name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "nonce",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "ciphertext",
+        "ordinal": 1,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5699d66791578833f0d6813ce765a30f059843cb50196cb8118504c2f81d3a52"
+}

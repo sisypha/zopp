@@ -134,6 +134,18 @@ impl Keypair {
         Self { secret, public }
     }
 
+    /// Construct keypair from secret key bytes (e.g., from config file)
+    pub fn from_secret_bytes(bytes: &[u8; 32]) -> Self {
+        let secret = StaticSecret::from(*bytes);
+        let public = PublicKey::from(&secret);
+        Self { secret, public }
+    }
+
+    /// Get the secret key as bytes (for storage)
+    pub fn secret_key_bytes(&self) -> [u8; 32] {
+        self.secret.to_bytes()
+    }
+
     /// Get the public key
     pub fn public_key(&self) -> &PublicKey {
         &self.public

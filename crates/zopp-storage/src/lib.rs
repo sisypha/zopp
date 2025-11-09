@@ -66,7 +66,8 @@ pub struct CreateUserParams {
 #[derive(Clone, Debug)]
 pub struct CreatePrincipalData {
     pub name: String,
-    pub public_key: Vec<u8>,
+    pub public_key: Vec<u8>,                // Ed25519 for authentication
+    pub x25519_public_key: Option<Vec<u8>>, // X25519 for encryption (ECDH)
 }
 
 /// Parameters for creating a principal
@@ -74,7 +75,8 @@ pub struct CreatePrincipalData {
 pub struct CreatePrincipalParams {
     pub user_id: Option<UserId>, // None for service accounts
     pub name: String,
-    pub public_key: Vec<u8>,
+    pub public_key: Vec<u8>,                // Ed25519 for authentication
+    pub x25519_public_key: Option<Vec<u8>>, // X25519 for encryption (ECDH)
 }
 
 /// Parameters for creating a workspace
@@ -92,6 +94,8 @@ pub struct CreateWorkspaceParams {
 #[derive(Clone, Debug)]
 pub struct CreateInviteParams {
     pub workspace_ids: Vec<WorkspaceId>,
+    pub kek_encrypted: Option<Vec<u8>>, // Workspace KEK encrypted with invite secret
+    pub kek_nonce: Option<Vec<u8>>,     // 24-byte nonce for KEK encryption
     pub expires_at: DateTime<Utc>,
     pub created_by_user_id: Option<UserId>, // None for server-created invites
 }
@@ -127,7 +131,8 @@ pub struct Principal {
     pub id: PrincipalId,
     pub user_id: Option<UserId>, // None for service accounts
     pub name: String,
-    pub public_key: Vec<u8>,
+    pub public_key: Vec<u8>,                // Ed25519 for authentication
+    pub x25519_public_key: Option<Vec<u8>>, // X25519 for encryption (ECDH)
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -138,6 +143,8 @@ pub struct Invite {
     pub id: InviteId,
     pub token: String,
     pub workspace_ids: Vec<WorkspaceId>,
+    pub kek_encrypted: Option<Vec<u8>>, // Workspace KEK encrypted with invite secret
+    pub kek_nonce: Option<Vec<u8>>,     // 24-byte nonce for KEK encryption
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
@@ -156,6 +163,27 @@ pub struct Workspace {
     pub p_cost: u32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Workspace-Principal junction with wrapped KEK
+#[derive(Clone, Debug)]
+pub struct WorkspacePrincipal {
+    pub workspace_id: WorkspaceId,
+    pub principal_id: PrincipalId,
+    pub ephemeral_pub: Vec<u8>, // Ephemeral X25519 public key for wrapping
+    pub kek_wrapped: Vec<u8>,   // Workspace KEK wrapped for this principal
+    pub kek_nonce: Vec<u8>,     // 24-byte nonce for wrapping
+    pub created_at: DateTime<Utc>,
+}
+
+/// Parameters for adding a principal to a workspace with wrapped KEK
+#[derive(Clone, Debug)]
+pub struct AddWorkspacePrincipalParams {
+    pub workspace_id: WorkspaceId,
+    pub principal_id: PrincipalId,
+    pub ephemeral_pub: Vec<u8>,
+    pub kek_wrapped: Vec<u8>,
+    pub kek_nonce: Vec<u8>,
 }
 
 /// Project record
@@ -270,12 +298,24 @@ pub trait Store {
         name: &str,
     ) -> Result<Workspace, StoreError>;
 
-    /// Add a principal to a workspace.
-    async fn add_principal_to_workspace(
+    /// Add a principal to a workspace with wrapped KEK.
+    async fn add_workspace_principal(
+        &self,
+        params: &AddWorkspacePrincipalParams,
+    ) -> Result<(), StoreError>;
+
+    /// Get workspace principal (to access wrapped KEK).
+    async fn get_workspace_principal(
         &self,
         workspace_id: &WorkspaceId,
         principal_id: &PrincipalId,
-    ) -> Result<(), StoreError>;
+    ) -> Result<WorkspacePrincipal, StoreError>;
+
+    /// List all principals in a workspace (with their wrapped KEKs).
+    async fn list_workspace_principals(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<WorkspacePrincipal>, StoreError>;
 
     /// Add a user to a workspace (user-level membership).
     async fn add_user_to_workspace(
@@ -433,6 +473,8 @@ mod tests {
                 id: InviteId(Uuid::new_v4()),
                 token: "test-token".to_string(),
                 workspace_ids: vec![],
+                kek_encrypted: None,
+                kek_nonce: None,
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
                 expires_at: Utc::now(),
@@ -475,12 +517,26 @@ mod tests {
             Err(StoreError::NotFound)
         }
 
-        async fn add_principal_to_workspace(
+        async fn add_workspace_principal(
+            &self,
+            _params: &AddWorkspacePrincipalParams,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_workspace_principal(
             &self,
             _workspace_id: &WorkspaceId,
             _principal_id: &PrincipalId,
-        ) -> Result<(), StoreError> {
-            Ok(())
+        ) -> Result<WorkspacePrincipal, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_workspace_principals(
+            &self,
+            _workspace_id: &WorkspaceId,
+        ) -> Result<Vec<WorkspacePrincipal>, StoreError> {
+            Ok(vec![])
         }
 
         async fn add_user_to_workspace(

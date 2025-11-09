@@ -47,7 +47,11 @@ message JoinRequest {
   string invite_token = 1;
   string email = 2;
   string principal_name = 3;
-  bytes public_key = 4;
+  bytes public_key = 4;              // Ed25519 for authentication
+  bytes x25519_public_key = 5;       // X25519 for encryption (ECDH)
+  bytes ephemeral_pub = 6;           // Ephemeral X25519 public key for wrapping KEK
+  bytes kek_wrapped = 7;             // Workspace KEK wrapped for this principal
+  bytes kek_nonce = 8;               // 24-byte nonce for wrapping
 }
 
 message JoinResponse {
@@ -59,7 +63,8 @@ message JoinResponse {
 message RegisterRequest {
   string email = 1;
   string principal_name = 2;
-  bytes public_key = 3;
+  bytes public_key = 3;              // Ed25519 for authentication
+  bytes x25519_public_key = 4;       // X25519 for encryption (ECDH)
 }
 
 message RegisterResponse {
@@ -82,6 +87,9 @@ message LoginResponse {
 // Workspace messages
 message CreateWorkspaceRequest {
   string name = 1;
+  bytes ephemeral_pub = 2;           // Ephemeral X25519 public key for wrapping KEK
+  bytes kek_wrapped = 3;             // Workspace KEK wrapped for creator
+  bytes kek_nonce = 4;               // 24-byte nonce for wrapping
 }
 
 message Workspace {
@@ -97,6 +105,8 @@ message WorkspaceList {
 message CreateInviteRequest {
   repeated string workspace_ids = 1;
   int64 expires_at = 2;
+  bytes kek_encrypted = 3;           // Workspace KEK encrypted with invite secret
+  bytes kek_nonce = 4;               // 24-byte nonce for KEK encryption
 }
 
 message InviteToken {
@@ -105,6 +115,9 @@ message InviteToken {
   repeated string workspace_ids = 3;
   int64 created_at = 4;
   int64 expires_at = 5;
+  bytes kek_encrypted = 6;           // Workspace KEK encrypted with invite secret
+  bytes kek_nonce = 7;               // 24-byte nonce for KEK encryption
+  string invite_secret = 8;          // Secret to decrypt KEK (only returned on create)
 }
 
 message InviteList {
@@ -123,7 +136,8 @@ message GetPrincipalRequest {
 message Principal {
   string id = 1;
   string name = 2;
-  bytes public_key = 3;
+  bytes public_key = 3;              // Ed25519 for authentication
+  bytes x25519_public_key = 4;       // X25519 for encryption (ECDH), optional
 }
 
 message RenamePrincipalRequest {
