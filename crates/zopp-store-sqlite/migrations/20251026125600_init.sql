@@ -15,11 +15,15 @@ END;
 CREATE TABLE IF NOT EXISTS principals (
   id TEXT PRIMARY KEY NOT NULL,     -- UUID string
   user_id TEXT REFERENCES users(id) ON DELETE CASCADE,  -- NULL for service accounts
-  name TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,               -- Unique per user, not globally
   public_key BLOB NOT NULL,
+  x25519_public_key BLOB,           -- X25519 for encryption (ECDH)
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now'))
 );
+
+-- Principal names are unique per user (alice can have "laptop", bob can also have "laptop")
+CREATE UNIQUE INDEX principals_user_name_unique ON principals(user_id, name) WHERE user_id IS NOT NULL;
 
 CREATE TRIGGER IF NOT EXISTS principals_updated_at AFTER UPDATE ON principals
 BEGIN
@@ -28,7 +32,7 @@ END;
 
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY NOT NULL,     -- UUID string
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,        -- Globally unique workspace names
   owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   kdf_salt BLOB NOT NULL,
   kdf_m_cost_kib INTEGER NOT NULL,
@@ -53,6 +57,9 @@ CREATE TABLE IF NOT EXISTS workspace_members (
 CREATE TABLE IF NOT EXISTS workspace_principals (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   principal_id TEXT NOT NULL REFERENCES principals(id) ON DELETE CASCADE,
+  ephemeral_pub BLOB NOT NULL,  -- Ephemeral X25519 public key for KEK wrapping
+  kek_wrapped BLOB NOT NULL,     -- Workspace KEK wrapped for this principal
+  kek_nonce BLOB NOT NULL,       -- 24-byte nonce for KEK wrapping
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
   PRIMARY KEY (workspace_id, principal_id)
 );
@@ -60,6 +67,8 @@ CREATE TABLE IF NOT EXISTS workspace_principals (
 CREATE TABLE IF NOT EXISTS invites (
   id TEXT PRIMARY KEY NOT NULL,     -- UUID string
   token TEXT NOT NULL UNIQUE,
+  kek_encrypted BLOB,               -- Workspace KEK encrypted with invite secret
+  kek_nonce BLOB,                   -- 24-byte nonce for KEK encryption
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
   expires_at TEXT NOT NULL,

@@ -10,11 +10,11 @@ use uuid::Uuid;
 
 use zopp_proto::zopp_service_server::{ZoppService, ZoppServiceServer};
 use zopp_proto::{
-    CreateInviteRequest, CreateWorkspaceRequest, Empty, GetPrincipalRequest, InviteList,
-    InviteToken, JoinRequest, JoinResponse, LoginRequest, LoginResponse, PrincipalList,
+    CreateInviteRequest, CreateWorkspaceRequest, Empty, GetInviteRequest, GetPrincipalRequest,
+    InviteList, InviteToken, JoinRequest, JoinResponse, LoginRequest, LoginResponse, PrincipalList,
     RegisterRequest, RegisterResponse, RenamePrincipalRequest, RevokeInviteRequest, WorkspaceList,
 };
-use zopp_storage::{CreatePrincipalData, Principal, *};
+use zopp_storage::{AddWorkspacePrincipalParams, CreatePrincipalData, Principal, *};
 use zopp_store_sqlite::SqliteStore;
 
 // ────────────────────────────────────── CLI Types ──────────────────────────────────────
@@ -136,7 +136,17 @@ impl ZoppService for ZoppServer {
             .await
             .map_err(|e| Status::not_found(format!("Invalid invite: {}", e)))?;
 
-        let (user_id, principal_id) = self
+        // Check if invite is expired
+        let now = chrono::Utc::now();
+        if now > invite.expires_at {
+            return Err(Status::permission_denied(format!(
+                "Invite expired at {}",
+                invite.expires_at
+            )));
+        }
+
+        // Try to create user, but if they already exist, that's okay for workspace invites
+        let result = self
             .store
             .create_user(&CreateUserParams {
                 email: req.email.clone(),
@@ -151,10 +161,38 @@ impl ZoppService for ZoppServer {
                 }),
                 workspace_ids: invite.workspace_ids.clone(),
             })
-            .await
-            .map_err(|e| Status::internal(format!("Failed to create user: {}", e)))?;
+            .await;
 
-        let principal_id = principal_id.expect("principal_id should be present");
+        let (user_id, principal_id) = match result {
+            Ok((uid, pid)) => (uid, pid.expect("principal_id should be present")),
+            Err(StoreError::AlreadyExists) if !invite.workspace_ids.is_empty() => {
+                // User exists - this must be a workspace invite for an existing user
+                // For now, return error - this needs proper implementation
+                return Err(Status::unimplemented(
+                    "Workspace invites for existing users not yet fully implemented. \
+                     Use the same principal name you used when first joining.",
+                ));
+            }
+            Err(e) => return Err(Status::internal(format!("Failed to create user: {}", e))),
+        };
+
+        // For workspace invites, store the wrapped KEK for this principal
+        if !invite.workspace_ids.is_empty() && !req.kek_wrapped.is_empty() {
+            for workspace_id in &invite.workspace_ids {
+                self.store
+                    .add_workspace_principal(&AddWorkspacePrincipalParams {
+                        workspace_id: workspace_id.clone(),
+                        principal_id: principal_id.clone(),
+                        ephemeral_pub: req.ephemeral_pub.clone(),
+                        kek_wrapped: req.kek_wrapped.clone(),
+                        kek_nonce: req.kek_nonce.clone(),
+                    })
+                    .await
+                    .map_err(|e| {
+                        Status::internal(format!("Failed to add principal to workspace: {}", e))
+                    })?;
+            }
+        }
 
         let mut workspaces = Vec::new();
         for workspace_id in invite.workspace_ids {
@@ -261,9 +299,15 @@ impl ZoppService for ZoppServer {
             .user_id
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot create workspaces"))?;
 
-        let workspace_id = self
-            .store
+        // Parse client-provided workspace ID
+        let workspace_id = WorkspaceId(
+            Uuid::parse_str(&req.id)
+                .map_err(|_| Status::invalid_argument("Invalid workspace ID"))?,
+        );
+
+        self.store
             .create_workspace(&CreateWorkspaceParams {
+                id: workspace_id.clone(),
                 name: req.name.clone(),
                 owner_user_id: user_id.clone(),
                 kdf_salt: salt,
@@ -357,6 +401,7 @@ impl ZoppService for ZoppServer {
             .map_err(|e| Status::not_found(format!("KEK not found for principal: {}", e)))?;
 
         Ok(Response::new(zopp_proto::WorkspaceKeys {
+            workspace_id: workspace.id.0.to_string(),
             ephemeral_pub: wp.ephemeral_pub,
             kek_wrapped: wp.kek_wrapped,
             kek_nonce: wp.kek_nonce,
@@ -391,6 +436,7 @@ impl ZoppService for ZoppServer {
             .store
             .create_invite(&CreateInviteParams {
                 workspace_ids: workspace_ids?,
+                token: req.token,
                 kek_encrypted: if req.kek_encrypted.is_empty() {
                     None
                 } else {
@@ -421,6 +467,35 @@ impl ZoppService for ZoppServer {
             kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
             kek_nonce: invite.kek_nonce.unwrap_or_default(),
             invite_secret: String::new(), // TODO: generate and return invite secret
+        }))
+    }
+
+    async fn get_invite(
+        &self,
+        request: Request<GetInviteRequest>,
+    ) -> Result<Response<InviteToken>, Status> {
+        // No authentication required - the invite secret itself is the credential
+        let req = request.into_inner();
+
+        let invite = self
+            .store
+            .get_invite_by_token(&req.token)
+            .await
+            .map_err(|_| Status::not_found("Invite not found or expired"))?;
+
+        Ok(Response::new(InviteToken {
+            id: invite.id.0.to_string(),
+            token: invite.token,
+            workspace_ids: invite
+                .workspace_ids
+                .into_iter()
+                .map(|id| id.0.to_string())
+                .collect(),
+            created_at: invite.created_at.timestamp(),
+            expires_at: invite.expires_at.timestamp(),
+            kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
+            kek_nonce: invite.kek_nonce.unwrap_or_default(),
+            invite_secret: String::new(), // Never returned
         }))
     }
 
@@ -468,12 +543,15 @@ impl ZoppService for ZoppServer {
             .await?;
         let req = request.into_inner();
 
-        let invite_id = Uuid::parse_str(&req.invite_id)
-            .map(InviteId)
-            .map_err(|_| Status::invalid_argument("Invalid invite ID"))?;
+        // Look up invite by token (which is the hash)
+        let invite = self
+            .store
+            .get_invite_by_token(&req.token)
+            .await
+            .map_err(|e| Status::not_found(format!("Invite not found: {}", e)))?;
 
         self.store
-            .revoke_invite(&invite_id)
+            .revoke_invite(&invite.id)
             .await
             .map_err(|e| Status::internal(format!("Failed to revoke invite: {}", e)))?;
 
@@ -1278,10 +1356,17 @@ async fn cmd_invite_create(
     };
     let store = SqliteStore::open(&db_url).await?;
 
+    // Generate random token for server invite (32 bytes = 256 bits)
+    use rand_core::RngCore;
+    let mut token_bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut token_bytes);
+    let token = hex::encode(token_bytes);
+
     let expires_at = Utc::now() + chrono::Duration::hours(expires_hours);
     let invite = store
         .create_invite(&CreateInviteParams {
             workspace_ids: vec![],
+            token,
             kek_encrypted: None,
             kek_nonce: None,
             expires_at,
@@ -1398,9 +1483,15 @@ mod tests {
         let server = ZoppServer::new(store.clone());
 
         // Create a server invite (no workspaces)
+        let mut invite_secret = [0u8; 32];
+        rand_core::RngCore::fill_bytes(&mut OsRng, &mut invite_secret);
+        let secret_hash = zopp_crypto::hash_sha256(&invite_secret);
         let invite = store
             .create_invite(&CreateInviteParams {
                 workspace_ids: vec![],
+                token: hex::encode(secret_hash),
+                kek_encrypted: None,
+                kek_nonce: None,
                 expires_at: Utc::now() + chrono::Duration::hours(24),
                 created_by_user_id: None,
             })
@@ -1411,12 +1502,20 @@ mod tests {
         let signing_key = SigningKey::generate(&mut OsRng);
         let public_key = signing_key.verifying_key().to_bytes().to_vec();
 
+        // Generate X25519 keypair for encryption
+        let x25519_keypair = zopp_crypto::Keypair::generate();
+        let x25519_public_key = x25519_keypair.public_key_bytes().to_vec();
+
         // Join using server invite
         let request = tonic::Request::new(JoinRequest {
             invite_token: invite.token.clone(),
             email: "test@example.com".to_string(),
             principal_name: "test-laptop".to_string(),
             public_key,
+            x25519_public_key,
+            ephemeral_pub: vec![],
+            kek_wrapped: vec![],
+            kek_nonce: vec![],
         });
 
         let response = server.join(request).await.unwrap().into_inner();
@@ -1455,6 +1554,7 @@ mod tests {
                 user_id: None,
                 name: "test-principal".to_string(),
                 public_key,
+                x25519_public_key: None,
             })
             .await
             .unwrap();
@@ -1494,6 +1594,7 @@ mod tests {
                 user_id: None,
                 name: "test-principal".to_string(),
                 public_key,
+                x25519_public_key: None,
             })
             .await
             .unwrap();
@@ -1533,6 +1634,7 @@ mod tests {
                 user_id: None,
                 name: "test-principal".to_string(),
                 public_key,
+                x25519_public_key: None,
             })
             .await
             .unwrap();
@@ -1567,6 +1669,7 @@ mod tests {
                 user_id: None,
                 name: "test-principal".to_string(),
                 public_key,
+                x25519_public_key: None,
             })
             .await
             .unwrap();

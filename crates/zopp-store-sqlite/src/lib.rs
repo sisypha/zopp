@@ -354,12 +354,6 @@ impl Store for SqliteStore {
         let invite_id = Uuid::now_v7();
         let invite_id_str = invite_id.to_string();
 
-        // Generate cryptographically secure random token (32 bytes = 256 bits)
-        use rand_core::RngCore;
-        let mut token_bytes = [0u8; 32];
-        rand_core::OsRng.fill_bytes(&mut token_bytes);
-        let token = hex::encode(token_bytes);
-
         let created_by_user_id_str = params
             .created_by_user_id
             .as_ref()
@@ -368,7 +362,7 @@ impl Store for SqliteStore {
         sqlx::query!(
             "INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce) VALUES(?, ?, ?, ?, ?, ?)",
             invite_id_str,
-            token,
+            params.token,
             params.expires_at,
             created_by_user_id_str,
             params.kek_encrypted,
@@ -404,7 +398,7 @@ impl Store for SqliteStore {
 
         Ok(Invite {
             id: InviteId(invite_id),
-            token,
+            token: params.token.clone(),
             workspace_ids: params.workspace_ids.clone(),
             kek_encrypted: params.kek_encrypted.clone(),
             kek_nonce: params.kek_nonce.clone(),
@@ -561,8 +555,7 @@ impl Store for SqliteStore {
         &self,
         params: &CreateWorkspaceParams,
     ) -> Result<WorkspaceId, StoreError> {
-        let ws_id = Uuid::now_v7();
-        let ws_id_str = ws_id.to_string();
+        let ws_id_str = params.id.0.to_string();
         let owner_user_id_str = params.owner_user_id.0.to_string();
         let m_cost = params.m_cost_kib as i64;
         let t_cost = params.t_cost as i64;
@@ -582,7 +575,7 @@ impl Store for SqliteStore {
         .execute(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
-        Ok(WorkspaceId(ws_id))
+        Ok(params.id.clone())
     }
 
     async fn list_workspaces(&self, user_id: &UserId) -> Result<Vec<Workspace>, StoreError> {
@@ -1265,10 +1258,13 @@ impl Store for SqliteStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zopp_storage::{CreateWorkspaceParams, EnvName, ProjectName, StoreError, UserId};
+    use zopp_storage::{
+        CreateWorkspaceParams, EnvName, ProjectName, StoreError, UserId, WorkspaceId,
+    };
 
     fn workspace_params(owner_user_id: UserId, name: &str) -> CreateWorkspaceParams {
         CreateWorkspaceParams {
+            id: WorkspaceId(uuid::Uuid::now_v7()),
             name: name.to_string(),
             owner_user_id,
             kdf_salt: b"abcdef0123456789".to_vec(),

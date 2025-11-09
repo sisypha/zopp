@@ -82,6 +82,7 @@ pub struct CreatePrincipalParams {
 /// Parameters for creating a workspace
 #[derive(Clone, Debug)]
 pub struct CreateWorkspaceParams {
+    pub id: WorkspaceId, // Client-generated workspace ID
     pub name: String,
     pub owner_user_id: UserId,
     pub kdf_salt: Vec<u8>, // >= 16 bytes
@@ -94,6 +95,7 @@ pub struct CreateWorkspaceParams {
 #[derive(Clone, Debug)]
 pub struct CreateInviteParams {
     pub workspace_ids: Vec<WorkspaceId>,
+    pub token: String,                  // Hash of invite secret (for lookup)
     pub kek_encrypted: Option<Vec<u8>>, // Workspace KEK encrypted with invite secret
     pub kek_nonce: Option<Vec<u8>>,     // 24-byte nonce for KEK encryption
     pub expires_at: DateTime<Utc>,
@@ -666,6 +668,7 @@ mod tests {
 
         let ws = s
             .create_workspace(&CreateWorkspaceParams {
+                id: WorkspaceId(uuid::Uuid::now_v7()),
                 name: "test-workspace".to_string(),
                 owner_user_id: user_id.clone(),
                 kdf_salt: b"0123456789abcdef".to_vec(),

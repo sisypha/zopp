@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "apps/e2e-test",
     "apps/hello_cli",
     "apps/zopp-cli",
     "apps/zopp-server",
@@ -36,3 +37,4 @@ tonic-prost-build = "0.14"
 uuid = { version = "1.18.1", features = ["v4", "v7", "fast-rng"] }
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 zeroize = { version = "1.8.2", features = ["derive"] }
+sha2 = "0.10"

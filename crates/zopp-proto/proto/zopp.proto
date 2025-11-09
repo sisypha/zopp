@@ -14,6 +14,7 @@ service ZoppService {
 
   // Invites
   rpc CreateInvite(CreateInviteRequest) returns (InviteToken);
+  rpc GetInvite(GetInviteRequest) returns (InviteToken);  // Unauthenticated - for joining
   rpc ListInvites(Empty) returns (InviteList);
   rpc RevokeInvite(RevokeInviteRequest) returns (Empty);
 
@@ -87,10 +88,11 @@ message LoginResponse {
 
 // Workspace messages
 message CreateWorkspaceRequest {
-  string name = 1;
-  bytes ephemeral_pub = 2;           // Ephemeral X25519 public key for wrapping KEK
-  bytes kek_wrapped = 3;             // Workspace KEK wrapped for creator
-  bytes kek_nonce = 4;               // 24-byte nonce for wrapping
+  string id = 1;                     // Client-generated workspace ID (UUID v7)
+  string name = 2;
+  bytes ephemeral_pub = 3;           // Ephemeral X25519 public key for wrapping KEK
+  bytes kek_wrapped = 4;             // Workspace KEK wrapped for creator
+  bytes kek_nonce = 5;               // 24-byte nonce for wrapping
 }
 
 message Workspace {
@@ -107,28 +109,34 @@ message GetWorkspaceKeysRequest {
 }
 
 message WorkspaceKeys {
-  bytes ephemeral_pub = 1;  // Ephemeral X25519 public key for unwrapping
-  bytes kek_wrapped = 2;    // Workspace KEK wrapped for requesting principal
-  bytes kek_nonce = 3;      // 24-byte nonce for unwrapping
+  string workspace_id = 1;  // Workspace ID (for AAD)
+  bytes ephemeral_pub = 2;  // Ephemeral X25519 public key for unwrapping
+  bytes kek_wrapped = 3;    // Workspace KEK wrapped for requesting principal
+  bytes kek_nonce = 4;      // 24-byte nonce for unwrapping
 }
 
 // Invite messages
 message CreateInviteRequest {
   repeated string workspace_ids = 1;
   int64 expires_at = 2;
-  bytes kek_encrypted = 3;           // Workspace KEK encrypted with invite secret
-  bytes kek_nonce = 4;               // 24-byte nonce for KEK encryption
+  string token = 3;                  // Hex-encoded SHA256 hash of invite secret (for lookup)
+  bytes kek_encrypted = 4;           // Workspace KEK encrypted with invite secret
+  bytes kek_nonce = 5;               // 24-byte nonce for KEK encryption
 }
 
 message InviteToken {
   string id = 1;
-  string token = 2;
+  string token = 2;                  // Hex-encoded SHA256 hash of invite secret (for lookup)
   repeated string workspace_ids = 3;
   int64 created_at = 4;
   int64 expires_at = 5;
   bytes kek_encrypted = 6;           // Workspace KEK encrypted with invite secret
   bytes kek_nonce = 7;               // 24-byte nonce for KEK encryption
-  string invite_secret = 8;          // Secret to decrypt KEK (only returned on create)
+  string invite_secret = 8;          // Secret to decrypt KEK (only returned on create, hex-encoded)
+}
+
+message GetInviteRequest {
+  string token = 1;                  // Hex-encoded SHA256 hash of invite secret
 }
 
 message InviteList {
@@ -136,7 +144,7 @@ message InviteList {
 }
 
 message RevokeInviteRequest {
-  string invite_id = 1;
+  string token = 1;                  // Hex-encoded SHA256 hash of invite secret
 }
 
 // Principal messages

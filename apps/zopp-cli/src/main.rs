@@ -38,6 +38,10 @@ enum Command {
         /// Principal name (optional, defaults to hostname)
         #[arg(long)]
         principal: Option<String>,
+
+        /// Invite secret (hex-encoded, required for workspace invites)
+        #[arg(long)]
+        secret: Option<String>,
     },
     /// Workspace commands
     Workspace {
@@ -63,6 +67,11 @@ enum Command {
     Secret {
         #[command(subcommand)]
         secret_cmd: SecretCommand,
+    },
+    /// Invite commands
+    Invite {
+        #[command(subcommand)]
+        invite_cmd: InviteCommand,
     },
 }
 
@@ -164,12 +173,6 @@ enum EnvironmentCommand {
         project: String,
         /// Environment name
         name: String,
-        /// Wrapped DEK (hex-encoded)
-        #[arg(long)]
-        dek_wrapped: String,
-        /// DEK nonce (hex-encoded, 24 bytes)
-        #[arg(long)]
-        dek_nonce: String,
     },
     /// Get environment details
     Get {
@@ -254,6 +257,26 @@ enum SecretCommand {
         environment: String,
         /// Secret key
         key: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum InviteCommand {
+    /// Create a workspace invite
+    Create {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Hours until invite expires (default: 168 = 7 days)
+        #[arg(long, default_value = "168")]
+        expires_hours: i64,
+    },
+    /// List workspace invites
+    List,
+    /// Revoke an invite
+    Revoke {
+        /// Invite code (e.g. inv_abc123...)
+        invite_code: String,
     },
 }
 
@@ -377,8 +400,8 @@ async fn unwrap_workspace_kek(
     let ephemeral_pub = zopp_crypto::public_key_from_bytes(&response.ephemeral_pub)?;
     let shared_secret = x25519_keypair.shared_secret(&ephemeral_pub);
 
-    // Unwrap the KEK
-    let aad = format!("workspace:{}", workspace_name).into_bytes();
+    // Unwrap the KEK (using workspace ID for AAD)
+    let aad = format!("workspace:{}", response.workspace_id).into_bytes();
     let mut nonce_array = [0u8; 24];
     nonce_array.copy_from_slice(&response.kek_nonce);
     let nonce = zopp_crypto::Nonce(nonce_array);
@@ -450,9 +473,10 @@ async fn unwrap_environment_dek(
 
 async fn cmd_join(
     server: &str,
-    token: &str,
+    invite_code: &str,
     email: &str,
     principal_name: Option<&str>,
+    _legacy_secret: Option<&str>, // Deprecated, kept for backwards compat
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use provided principal name or default to hostname
     let principal_name = match principal_name {
@@ -470,16 +494,104 @@ async fn cmd_join(
 
     let mut client = connect(server).await?;
 
+    // Determine if this is a workspace invite (starts with inv_) or server invite
+    let is_workspace_invite = invite_code.starts_with("inv_");
+
+    // Handle workspace invite with KEK decryption and re-wrapping
+    let (ephemeral_pub, kek_wrapped, kek_nonce) = if is_workspace_invite {
+        // This is a workspace invite - need to fetch it, decrypt KEK, and re-wrap it
+
+        // 1. Strip inv_ prefix and decode secret
+        let secret_hex = invite_code
+            .strip_prefix("inv_")
+            .ok_or("Invalid invite code format")?;
+        let invite_secret = hex::decode(secret_hex)?;
+        if invite_secret.len() != 32 {
+            return Err("Invalid invite code length".into());
+        }
+        let mut secret_array = [0u8; 32];
+        secret_array.copy_from_slice(&invite_secret);
+
+        // 2. Hash the secret to look up the invite
+        let secret_hash = zopp_crypto::hash_sha256(&secret_array);
+        let secret_hash_hex = hex::encode(secret_hash);
+
+        // 3. Fetch the invite by hash (unauthenticated)
+        let invite = client
+            .get_invite(zopp_proto::GetInviteRequest {
+                token: secret_hash_hex,
+            })
+            .await?
+            .into_inner();
+
+        if invite.kek_encrypted.is_empty() {
+            return Err("Invalid workspace invite (no encrypted KEK)".into());
+        }
+
+        // 4. Decrypt the KEK using invite secret
+        let dek_for_decryption = zopp_crypto::Dek::from_bytes(&secret_array)?;
+
+        // Get workspace ID from invite
+        let workspace_id = invite
+            .workspace_ids
+            .first()
+            .ok_or("Invite has no workspace IDs")?;
+
+        // Use workspace ID for invite decryption AAD
+        let aad = format!("invite:workspace:{}", workspace_id).into_bytes();
+
+        let mut nonce_array = [0u8; 24];
+        nonce_array.copy_from_slice(&invite.kek_nonce);
+        let nonce = zopp_crypto::Nonce(nonce_array);
+
+        let kek_decrypted =
+            zopp_crypto::decrypt(&invite.kek_encrypted, &nonce, &dek_for_decryption, &aad)?;
+
+        // 5. Re-wrap the KEK with this principal's X25519 key
+        let ephemeral_keypair = zopp_crypto::Keypair::generate();
+        let my_public = zopp_crypto::public_key_from_bytes(&x25519_keypair.public_key_bytes())?;
+        let shared_secret = ephemeral_keypair.shared_secret(&my_public);
+
+        // Use workspace ID for AAD (matches Alice's wrapping)
+        let wrap_aad = format!("workspace:{}", workspace_id).into_bytes();
+        let (wrap_nonce, wrapped) =
+            zopp_crypto::wrap_key(&kek_decrypted, &shared_secret, &wrap_aad)?;
+
+        (
+            ephemeral_keypair.public_key_bytes().to_vec(),
+            wrapped.0,
+            wrap_nonce.0.to_vec(),
+        )
+    } else {
+        // Server invite - no KEK wrapping
+        (vec![], vec![], vec![])
+    };
+
+    // Determine the token to send to server
+    let server_token = if is_workspace_invite {
+        // For workspace invites, send the hash of the secret (already computed above)
+        // We need to recompute it here since we're outside the if block
+        let secret_hex = invite_code.strip_prefix("inv_").unwrap();
+        let invite_secret = hex::decode(secret_hex)?;
+        let mut secret_array = [0u8; 32];
+        secret_array.copy_from_slice(&invite_secret);
+        let secret_hash = zopp_crypto::hash_sha256(&secret_array);
+        hex::encode(secret_hash)
+    } else {
+        // For server invites, send the token as-is
+        invite_code.to_string()
+    };
+
     let response = client
         .join(JoinRequest {
-            invite_token: token.to_string(),
+            invite_token: server_token,
             email: email.to_string(),
             principal_name: principal_name.clone(),
             public_key,
             x25519_public_key: x25519_public_bytes,
-            ephemeral_pub: vec![], // TODO: implement KEK wrapping
-            kek_wrapped: vec![],
-            kek_nonce: vec![],
+            ephemeral_pub,
+            kek_wrapped,
+            kek_nonce,
         })
         .await?
         .into_inner();
@@ -552,6 +664,11 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
+    // Generate workspace ID client-side (UUID v7)
+    use uuid::Uuid;
+    let workspace_id = Uuid::now_v7();
+    let workspace_id_str = workspace_id.to_string();
+
     // Generate random KEK (Key Encryption Key) for this workspace
     let mut kek = [0u8; 32];
     use rand_core::RngCore;
@@ -575,8 +692,8 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
     let my_public = zopp_crypto::public_key_from_bytes(&x25519_keypair.public_key_bytes())?;
     let shared_secret = ephemeral_keypair.shared_secret(&my_public);
 
-    // Wrap the KEK
-    let aad = format!("workspace:{}", name).into_bytes();
+    // Wrap the KEK using workspace ID in AAD
+    let aad = format!("workspace:{}", workspace_id_str).into_bytes();
     let (nonce, wrapped) = zopp_crypto::wrap_key(&kek, &shared_secret, &aad)?;
 
     let (timestamp, signature) = sign_request(&principal.private_key)?;
@@ -584,6 +701,7 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
     let mut client = connect(server).await?;
 
     let mut request = tonic::Request::new(CreateWorkspaceRequest {
+        id: workspace_id_str.clone(),
         name: name.to_string(),
         ephemeral_pub,
         kek_wrapped: wrapped.0,
@@ -992,39 +1110,32 @@ async fn cmd_environment_create(
     workspace_name: &str,
     project_name: &str,
     name: &str,
-    dek_wrapped_hex: &str,
-    dek_nonce_hex: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
-    // TODO: Implement automatic DEK generation by unwrapping workspace KEK
-    // For now, still use manual parameters
-
-    // Decode hex strings to bytes
-    let dek_wrapped =
-        hex::decode(dek_wrapped_hex).map_err(|e| format!("Invalid dek_wrapped hex: {}", e))?;
-    let dek_nonce =
-        hex::decode(dek_nonce_hex).map_err(|e| format!("Invalid dek_nonce hex: {}", e))?;
-
-    if dek_nonce.len() != 24 {
-        return Err(format!(
-            "dek_nonce must be exactly 24 bytes, got {}",
-            dek_nonce.len()
-        )
-        .into());
-    }
-
     let mut client = ZoppServiceClient::connect(server.to_string()).await?;
 
+    // 1. Unwrap workspace KEK
+    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
+
+    // 2. Generate random DEK for this environment
+    let dek = zopp_crypto::generate_dek();
+
+    // 3. Wrap DEK with workspace KEK
+    let kek_key = zopp_crypto::Dek::from_bytes(&kek)?;
+    let aad = format!("environment:{}:{}:{}", workspace_name, project_name, name).into_bytes();
+    let (dek_nonce, dek_wrapped) = zopp_crypto::encrypt(dek.as_bytes(), &kek_key, &aad)?;
+
+    // 4. Send to server
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::CreateEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         name: name.to_string(),
-        dek_wrapped,
-        dek_nonce,
+        dek_wrapped: dek_wrapped.0,
+        dek_nonce: dek_nonce.0.to_vec(),
     });
     request
         .metadata_mut()
@@ -1347,6 +1458,174 @@ async fn cmd_secret_delete(
     Ok(())
 }
 
+// ────────────────────────────────────── Invite Commands ──────────────────────────────────────
+
+async fn cmd_invite_create(
+    server: &str,
+    workspace_name: &str,
+    expires_hours: i64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    // 1. Unwrap the workspace KEK
+    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
+
+    // 2. Generate random invite secret (32 bytes, displayed as hex with prefix)
+    let mut invite_secret = [0u8; 32];
+    use rand_core::RngCore;
+    rand_core::OsRng.fill_bytes(&mut invite_secret);
+    let invite_secret_hex = format!("inv_{}", hex::encode(invite_secret));
+
+    // 3. Hash the secret for server lookup (server never sees plaintext secret)
+    let secret_hash = zopp_crypto::hash_sha256(&invite_secret);
+
+    // 4. Get workspace ID first (needed for AAD)
+    let (ws_timestamp, ws_signature) = sign_request(&principal.private_key)?;
+    let mut ws_request = tonic::Request::new(zopp_proto::Empty {});
+    ws_request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    ws_request.metadata_mut().insert(
+        "timestamp",
+        MetadataValue::try_from(ws_timestamp.to_string())?,
+    );
+    ws_request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&ws_signature))?,
+    );
+    let workspaces = client.list_workspaces(ws_request).await?.into_inner();
+    let workspace = workspaces
+        .workspaces
+        .iter()
+        .find(|w| w.name == workspace_name)
+        .ok_or_else(|| format!("Workspace '{}' not found", workspace_name))?;
+
+    // 5. Encrypt the KEK with the invite secret (using workspace ID in AAD)
+    let dek_for_encryption = zopp_crypto::Dek::from_bytes(&invite_secret)?;
+    let aad = format!("invite:workspace:{}", workspace.id).into_bytes();
+    let (kek_nonce, kek_encrypted) = zopp_crypto::encrypt(&kek, &dek_for_encryption, &aad)?;
+
+    // 6. Calculate expiration time
+    let expires_at = chrono::Utc::now() + chrono::Duration::hours(expires_hours);
+
+    // 7. Send invite to server (with hashed secret as token, not plaintext secret)
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::CreateInviteRequest {
+        workspace_ids: vec![workspace.id.clone()],
+        expires_at: expires_at.timestamp(),
+        token: hex::encode(secret_hash), // Hash as token for lookup
+        kek_encrypted: kek_encrypted.0,
+        kek_nonce: kek_nonce.0.to_vec(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let _response = client.create_invite(request).await?.into_inner();
+
+    println!("✓ Workspace invite created!\n");
+    println!("Invite code: {}", invite_secret_hex);
+    println!("Expires:     {}", expires_at);
+    println!("\n⚠️  Share this invite code with the invitee via secure channel");
+    println!(
+        "   The server does NOT have the plaintext - it's needed to decrypt the workspace key"
+    );
+
+    Ok(())
+}
+
+async fn cmd_invite_list(server: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::Empty {});
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.list_invites(request).await?.into_inner();
+
+    if response.invites.is_empty() {
+        println!("No active invites found.");
+    } else {
+        println!("Active workspace invites:\n");
+        for invite in response.invites {
+            println!("ID:      {}", invite.id);
+            println!("Token:   {}", invite.token);
+            println!(
+                "Expires: {}",
+                chrono::DateTime::from_timestamp(invite.expires_at, 0).unwrap()
+            );
+            println!();
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_invite_revoke(
+    server: &str,
+    invite_code: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    // Strip inv_ prefix and hash the secret to get the token
+    let secret_hex = invite_code
+        .strip_prefix("inv_")
+        .ok_or("Invalid invite code format (must start with inv_)")?;
+    let invite_secret = hex::decode(secret_hex)?;
+    if invite_secret.len() != 32 {
+        return Err("Invalid invite code length".into());
+    }
+    let secret_hash = zopp_crypto::hash_sha256(&invite_secret);
+    let token = hex::encode(secret_hash);
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::RevokeInviteRequest { token });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    client.revoke_invite(request).await?;
+
+    println!("✓ Invite revoked");
+
+    Ok(())
+}
+
 // ────────────────────────────────────── Main ──────────────────────────────────────
 
 #[tokio::main]
@@ -1358,8 +1637,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             token,
             email,
             principal,
+            secret,
         } => {
-            cmd_join(&cli.server, &token, &email, principal.as_deref()).await?;
+            cmd_join(
+                &cli.server,
+                &token,
+                &email,
+                principal.as_deref(),
+                secret.as_deref(),
+            )
+            .await?;
         }
         Command::Workspace { workspace_cmd } => match workspace_cmd {
             WorkspaceCommand::List => {
@@ -1411,18 +1698,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 workspace,
                 project,
                 name,
-                dek_wrapped,
-                dek_nonce,
             } => {
-                cmd_environment_create(
-                    &cli.server,
-                    &workspace,
-                    &project,
-                    &name,
-                    &dek_wrapped,
-                    &dek_nonce,
-                )
-                .await?;
+                cmd_environment_create(&cli.server, &workspace, &project, &name).await?;
             }
             EnvironmentCommand::Get {
                 workspace,
@@ -1479,6 +1756,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 key,
             } => {
                 cmd_secret_delete(&cli.server, &workspace, &project, &environment, &key).await?;
+            }
+        },
+        Command::Invite { invite_cmd } => match invite_cmd {
+            InviteCommand::Create {
+                workspace,
+                expires_hours,
+            } => {
+                cmd_invite_create(&cli.server, &workspace, expires_hours).await?;
+            }
+            InviteCommand::List => {
+                cmd_invite_list(&cli.server).await?;
+            }
+            InviteCommand::Revoke { invite_code } => {
+                cmd_invite_revoke(&cli.server, &invite_code).await?;
             }
         },
     }

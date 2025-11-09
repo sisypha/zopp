@@ -1,5 +1,6 @@
 use chacha20poly1305::{KeyInit, aead::Aead};
 use rand_core::RngCore;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroizing;
@@ -241,6 +242,17 @@ pub fn unwrap_key(
         .map_err(UnwrapError::AeadFailed)?;
 
     Ok(Zeroizing::new(pt))
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hashing utilities
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Hash data with SHA256 (for invite secret lookup, etc.)
+pub fn hash_sha256(data: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher.finalize().into()
 }
 
 #[cfg(test)]

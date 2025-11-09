@@ -1,11 +1,12 @@
 use zopp_storage::{
     CreateEnvParams, CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName,
-    EnvironmentId, ProjectId, ProjectName, Store, StoreError, UserId,
+    EnvironmentId, ProjectId, ProjectName, Store, StoreError, UserId, WorkspaceId,
 };
 use zopp_store_sqlite::SqliteStore;
 
 fn workspace_params(owner_user_id: UserId, name: &str) -> CreateWorkspaceParams {
     CreateWorkspaceParams {
+        id: WorkspaceId(uuid::Uuid::now_v7()),
         name: name.to_string(),
         owner_user_id,
         kdf_salt: b"0123456789abcdef".to_vec(),
