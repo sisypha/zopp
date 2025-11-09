@@ -969,37 +969,24 @@ impl Store for SqliteStore {
 
     async fn upsert_secret(
         &self,
-        ws: &WorkspaceId,
-        project: &ProjectName,
-        env: &EnvName,
+        env_id: &EnvironmentId,
         key: &str,
         nonce: &[u8],
         ciphertext: &[u8],
     ) -> Result<(), StoreError> {
-        // find env id within workspace & project
-        let ws_id = ws.0.to_string();
-        let proj_name = &project.0;
-        let env_name = &env.0;
+        let env_id_str = env_id.0.to_string();
 
+        // Get environment to determine workspace_id
         let env_row = sqlx::query!(
-            "SELECT e.id
-               FROM environments e
-               JOIN projects p ON p.id = e.project_id
-              WHERE e.workspace_id = ? AND p.workspace_id = ? AND p.name = ? AND e.name = ?",
-            ws_id,
-            ws_id,
-            proj_name,
-            env_name
+            "SELECT workspace_id FROM environments WHERE id = ?",
+            env_id_str
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| StoreError::Backend(e.to_string()))?;
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
 
-        let env_id = match env_row {
-            Some(row) => row.id,
-            None => return Err(StoreError::NotFound),
-        };
-
+        let ws_id = env_row.workspace_id;
         let secret_id = Uuid::now_v7().to_string();
 
         sqlx::query!(
@@ -1009,7 +996,7 @@ impl Store for SqliteStore {
              DO UPDATE SET nonce = excluded.nonce, ciphertext = excluded.ciphertext",
             secret_id,
             ws_id,
-            env_id,
+            env_id_str,
             key,
             nonce,
             ciphertext
@@ -1021,31 +1008,12 @@ impl Store for SqliteStore {
         Ok(())
     }
 
-    async fn get_secret(
-        &self,
-        ws: &WorkspaceId,
-        project: &ProjectName,
-        env: &EnvName,
-        key: &str,
-    ) -> Result<SecretRow, StoreError> {
-        let ws_id = ws.0.to_string();
-        let proj_name = &project.0;
-        let env_name = &env.0;
+    async fn get_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<SecretRow, StoreError> {
+        let env_id_str = env_id.0.to_string();
 
         let row = sqlx::query!(
-            "SELECT s.nonce, s.ciphertext
-               FROM secrets s
-               JOIN environments e ON e.id = s.env_id
-               JOIN projects p ON p.id = e.project_id
-              WHERE s.workspace_id = ?
-                AND e.workspace_id = ?
-                AND p.workspace_id = ?
-                AND p.name = ? AND e.name = ? AND s.key_name = ?",
-            ws_id,
-            ws_id,
-            ws_id,
-            proj_name,
-            env_name,
+            "SELECT nonce, ciphertext FROM secrets WHERE env_id = ? AND key_name = ?",
+            env_id_str,
             key
         )
         .fetch_optional(&self.pool)
@@ -1061,37 +1029,37 @@ impl Store for SqliteStore {
         }
     }
 
-    async fn list_secret_keys(
-        &self,
-        ws: &WorkspaceId,
-        project: &ProjectName,
-        env: &EnvName,
-    ) -> Result<Vec<String>, StoreError> {
-        let ws_id = ws.0.to_string();
-        let proj_name = &project.0;
-        let env_name = &env.0;
+    async fn list_secret_keys(&self, env_id: &EnvironmentId) -> Result<Vec<String>, StoreError> {
+        let env_id_str = env_id.0.to_string();
 
         let rows = sqlx::query!(
-            "SELECT s.key_name
-               FROM secrets s
-               JOIN environments e ON e.id = s.env_id
-               JOIN projects p ON p.id = e.project_id
-              WHERE s.workspace_id = ?
-                AND e.workspace_id = ?
-                AND p.workspace_id = ?
-                AND p.name = ? AND e.name = ?
-              ORDER BY s.key_name",
-            ws_id,
-            ws_id,
-            ws_id,
-            proj_name,
-            env_name
+            "SELECT key_name FROM secrets WHERE env_id = ? ORDER BY key_name",
+            env_id_str
         )
         .fetch_all(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         Ok(rows.into_iter().map(|row| row.key_name).collect())
+    }
+
+    async fn delete_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<(), StoreError> {
+        let env_id_str = env_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM secrets WHERE env_id = ? AND key_name = ?",
+            env_id_str,
+            key
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
     }
 }
 
@@ -1200,14 +1168,15 @@ mod tests {
             })
             .await
             .unwrap();
-        s.create_env(&CreateEnvParams {
-            project_id: project_id1,
-            name: e.0.clone(),
-            dek_wrapped: vec![1],
-            dek_nonce: vec![9; 24],
-        })
-        .await
-        .unwrap();
+        let env_id1 = s
+            .create_env(&CreateEnvParams {
+                project_id: project_id1,
+                name: e.0.clone(),
+                dek_wrapped: vec![1],
+                dek_nonce: vec![9; 24],
+            })
+            .await
+            .unwrap();
 
         let project_id2 = s
             .create_project(&CreateProjectParams {
@@ -1216,22 +1185,23 @@ mod tests {
             })
             .await
             .unwrap();
-        s.create_env(&CreateEnvParams {
-            project_id: project_id2,
-            name: e.0.clone(),
-            dek_wrapped: vec![2],
-            dek_nonce: vec![9; 24],
-        })
-        .await
-        .unwrap();
-
-        // only insert secret into ws1
-        s.upsert_secret(&ws1, &p, &e, "TOKEN", &[7; 24], &[1; 8])
+        let env_id2 = s
+            .create_env(&CreateEnvParams {
+                project_id: project_id2,
+                name: e.0.clone(),
+                dek_wrapped: vec![2],
+                dek_nonce: vec![9; 24],
+            })
             .await
             .unwrap();
 
-        // ws2 must NOT be able to see ws1's secret
-        let err = s.get_secret(&ws2, &p, &e, "TOKEN").await.unwrap_err();
+        // only insert secret into env1
+        s.upsert_secret(&env_id1, "TOKEN", &[7; 24], &[1; 8])
+            .await
+            .unwrap();
+
+        // env2 must NOT be able to see env1's secret
+        let err = s.get_secret(&env_id2, "TOKEN").await.unwrap_err();
         matches!(err, StoreError::NotFound);
     }
 
@@ -1260,26 +1230,27 @@ mod tests {
             })
             .await
             .unwrap();
-        s.create_env(&CreateEnvParams {
-            project_id,
-            name: e.0.clone(),
-            dek_wrapped: vec![1],
-            dek_nonce: vec![9; 24],
-        })
-        .await
-        .unwrap();
-
-        s.upsert_secret(&ws, &p, &e, "z_last", &[7; 24], &[1])
-            .await
-            .unwrap();
-        s.upsert_secret(&ws, &p, &e, "a_first", &[7; 24], &[1])
-            .await
-            .unwrap();
-        s.upsert_secret(&ws, &p, &e, "m_middle", &[7; 24], &[1])
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id,
+                name: e.0.clone(),
+                dek_wrapped: vec![1],
+                dek_nonce: vec![9; 24],
+            })
             .await
             .unwrap();
 
-        let keys = s.list_secret_keys(&ws, &p, &e).await.unwrap();
+        s.upsert_secret(&env_id, "z_last", &[7; 24], &[1])
+            .await
+            .unwrap();
+        s.upsert_secret(&env_id, "a_first", &[7; 24], &[1])
+            .await
+            .unwrap();
+        s.upsert_secret(&env_id, "m_middle", &[7; 24], &[1])
+            .await
+            .unwrap();
+
+        let keys = s.list_secret_keys(&env_id).await.unwrap();
         assert_eq!(keys, vec!["a_first", "m_middle", "z_last"]);
     }
 
@@ -1383,24 +1354,25 @@ mod tests {
             })
             .await
             .unwrap();
-        s.create_env(&CreateEnvParams {
-            project_id,
-            name: e.0.clone(),
-            dek_wrapped: vec![1],
-            dek_nonce: vec![9; 24],
-        })
-        .await
-        .unwrap();
-
-        s.upsert_secret(&ws, &p, &e, "API", &[1; 24], &[10; 4])
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id,
+                name: e.0.clone(),
+                dek_wrapped: vec![1],
+                dek_nonce: vec![9; 24],
+            })
             .await
             .unwrap();
-        let a = s.get_secret(&ws, &p, &e, "API").await.unwrap();
 
-        s.upsert_secret(&ws, &p, &e, "API", &[2; 24], &[20; 6])
+        s.upsert_secret(&env_id, "API", &[1; 24], &[10; 4])
             .await
             .unwrap();
-        let b = s.get_secret(&ws, &p, &e, "API").await.unwrap();
+        let a = s.get_secret(&env_id, "API").await.unwrap();
+
+        s.upsert_secret(&env_id, "API", &[2; 24], &[20; 6])
+            .await
+            .unwrap();
+        let b = s.get_secret(&env_id, "API").await.unwrap();
 
         assert_ne!(a.nonce, b.nonce);
         assert_ne!(a.ciphertext, b.ciphertext);
@@ -1539,22 +1511,23 @@ mod tests {
             })
             .await
             .unwrap();
-        s.create_env(&CreateEnvParams {
-            project_id,
-            name: e.0.clone(),
-            dek_wrapped: vec![1, 2, 3],
-            dek_nonce: vec![9; 24],
-        })
-        .await
-        .unwrap();
-        s.upsert_secret(&ws, &p, &e, k, &[7; 24], &[1, 2, 3, 4])
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id,
+                name: e.0.clone(),
+                dek_wrapped: vec![1, 2, 3],
+                dek_nonce: vec![9; 24],
+            })
+            .await
+            .unwrap();
+        s.upsert_secret(&env_id, k, &[7; 24], &[1, 2, 3, 4])
             .await
             .unwrap();
 
-        let row = s.get_secret(&ws, &p, &e, k).await.unwrap();
+        let row = s.get_secret(&env_id, k).await.unwrap();
         assert_eq!(row.ciphertext, vec![1, 2, 3, 4]);
 
-        let keys = s.list_secret_keys(&ws, &p, &e).await.unwrap();
+        let keys = s.list_secret_keys(&env_id).await.unwrap();
         assert_eq!(keys, vec![k]);
     }
 }

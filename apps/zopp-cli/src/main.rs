@@ -59,6 +59,11 @@ enum Command {
         #[command(subcommand)]
         environment_cmd: EnvironmentCommand,
     },
+    /// Secret commands
+    Secret {
+        #[command(subcommand)]
+        secret_cmd: SecretCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -157,6 +162,42 @@ enum EnvironmentCommand {
     Delete {
         /// Environment ID
         environment_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum SecretCommand {
+    /// Set (upsert) a secret
+    Set {
+        /// Environment ID
+        environment_id: String,
+        /// Secret key
+        key: String,
+        /// Nonce (hex-encoded, 24 bytes)
+        #[arg(long)]
+        nonce: String,
+        /// Ciphertext (hex-encoded)
+        #[arg(long)]
+        ciphertext: String,
+    },
+    /// Get a secret
+    Get {
+        /// Environment ID
+        environment_id: String,
+        /// Secret key
+        key: String,
+    },
+    /// List all secrets in an environment
+    List {
+        /// Environment ID
+        environment_id: String,
+    },
+    /// Delete a secret
+    Delete {
+        /// Environment ID
+        environment_id: String,
+        /// Secret key
+        key: String,
     },
 }
 
@@ -861,6 +902,162 @@ async fn cmd_environment_delete(
     Ok(())
 }
 
+async fn cmd_secret_set(
+    server: &str,
+    environment_id: &str,
+    key: &str,
+    nonce_hex: &str,
+    ciphertext_hex: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    // Decode hex strings to bytes
+    let nonce = hex::decode(nonce_hex).map_err(|e| format!("Invalid nonce hex: {}", e))?;
+    let ciphertext =
+        hex::decode(ciphertext_hex).map_err(|e| format!("Invalid ciphertext hex: {}", e))?;
+
+    if nonce.len() != 24 {
+        return Err(format!("nonce must be exactly 24 bytes, got {}", nonce.len()).into());
+    }
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::UpsertSecretRequest {
+        environment_id: environment_id.to_string(),
+        key: key.to_string(),
+        nonce,
+        ciphertext,
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    client.upsert_secret(request).await?;
+
+    println!("✓ Secret '{}' set", key);
+
+    Ok(())
+}
+
+async fn cmd_secret_get(
+    server: &str,
+    environment_id: &str,
+    key: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::GetSecretRequest {
+        environment_id: environment_id.to_string(),
+        key: key.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.get_secret(request).await?.into_inner();
+
+    println!("Secret: {}", response.key);
+    println!("  Nonce: {}", hex::encode(&response.nonce));
+    println!("  Ciphertext: {}", hex::encode(&response.ciphertext));
+
+    Ok(())
+}
+
+async fn cmd_secret_list(
+    server: &str,
+    environment_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
+        environment_id: environment_id.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    let response = client.list_secrets(request).await?.into_inner();
+
+    if response.secrets.is_empty() {
+        println!("No secrets found");
+    } else {
+        println!("Secrets:");
+        for secret in response.secrets {
+            println!("  {}", secret.key);
+        }
+    }
+
+    Ok(())
+}
+
+async fn cmd_secret_delete(
+    server: &str,
+    environment_id: &str,
+    key: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let principal = get_current_principal(&config)?;
+
+    let mut client = ZoppServiceClient::connect(server.to_string()).await?;
+
+    let (timestamp, signature) = sign_request(&principal.private_key)?;
+
+    let mut request = tonic::Request::new(zopp_proto::DeleteSecretRequest {
+        environment_id: environment_id.to_string(),
+        key: key.to_string(),
+    });
+    request
+        .metadata_mut()
+        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
+    request
+        .metadata_mut()
+        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
+    request.metadata_mut().insert(
+        "signature",
+        MetadataValue::try_from(hex::encode(&signature))?,
+    );
+
+    client.delete_secret(request).await?;
+
+    println!("✓ Secret '{}' deleted", key);
+
+    Ok(())
+}
+
 // ────────────────────────────────────── Main ──────────────────────────────────────
 
 #[tokio::main]
@@ -935,6 +1132,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             EnvironmentCommand::Delete { environment_id } => {
                 cmd_environment_delete(&cli.server, &environment_id).await?;
+            }
+        },
+        Command::Secret { secret_cmd } => match secret_cmd {
+            SecretCommand::Set {
+                environment_id,
+                key,
+                nonce,
+                ciphertext,
+            } => {
+                cmd_secret_set(&cli.server, &environment_id, &key, &nonce, &ciphertext).await?;
+            }
+            SecretCommand::Get {
+                environment_id,
+                key,
+            } => {
+                cmd_secret_get(&cli.server, &environment_id, &key).await?;
+            }
+            SecretCommand::List { environment_id } => {
+                cmd_secret_list(&cli.server, &environment_id).await?;
+            }
+            SecretCommand::Delete {
+                environment_id,
+                key,
+            } => {
+                cmd_secret_delete(&cli.server, &environment_id, &key).await?;
             }
         },
     }

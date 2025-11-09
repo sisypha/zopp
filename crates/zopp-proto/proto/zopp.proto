@@ -32,6 +32,12 @@ service ZoppService {
   rpc ListEnvironments(ListEnvironmentsRequest) returns (EnvironmentList);
   rpc GetEnvironment(GetEnvironmentRequest) returns (Environment);
   rpc DeleteEnvironment(DeleteEnvironmentRequest) returns (Empty);
+
+  // Secrets
+  rpc UpsertSecret(UpsertSecretRequest) returns (Empty);
+  rpc GetSecret(GetSecretRequest) returns (Secret);
+  rpc ListSecrets(ListSecretsRequest) returns (SecretList);
+  rpc DeleteSecret(DeleteSecretRequest) returns (Empty);
 }
 
 message Empty {}
@@ -191,4 +197,36 @@ message Environment {
 
 message EnvironmentList {
   repeated Environment environments = 1;
+}
+
+// Secret messages
+message UpsertSecretRequest {
+  string environment_id = 1;
+  string key = 2;
+  bytes nonce = 3;
+  bytes ciphertext = 4;
+}
+
+message GetSecretRequest {
+  string environment_id = 1;
+  string key = 2;
+}
+
+message DeleteSecretRequest {
+  string environment_id = 1;
+  string key = 2;
+}
+
+message ListSecretsRequest {
+  string environment_id = 1;
+}
+
+message Secret {
+  string key = 1;
+  bytes nonce = 2;
+  bytes ciphertext = 3;
+}
+
+message SecretList {
+  repeated Secret secrets = 1;
 }

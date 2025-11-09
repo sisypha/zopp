@@ -916,6 +916,241 @@ impl ZoppService for ZoppServer {
 
         Ok(Response::new(Empty {}))
     }
+
+    async fn upsert_secret(
+        &self,
+        request: Request<zopp_proto::UpsertSecretRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot upsert secrets"))?;
+
+        let req = request.into_inner();
+        let env_id = Uuid::parse_str(&req.environment_id)
+            .map(zopp_storage::EnvironmentId)
+            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
+
+        // Get environment to verify access
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&env.project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        self.store
+            .upsert_secret(&env_id, &req.key, &req.nonce, &req.ciphertext)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to upsert secret: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_secret(
+        &self,
+        request: Request<zopp_proto::GetSecretRequest>,
+    ) -> Result<Response<zopp_proto::Secret>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get secrets"))?;
+
+        let req = request.into_inner();
+        let env_id = Uuid::parse_str(&req.environment_id)
+            .map(zopp_storage::EnvironmentId)
+            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
+
+        // Get environment to verify access
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&env.project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        let secret = self
+            .store
+            .get_secret(&env_id, &req.key)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Secret not found"),
+                _ => Status::internal(format!("Failed to get secret: {}", e)),
+            })?;
+
+        Ok(Response::new(zopp_proto::Secret {
+            key: req.key,
+            nonce: secret.nonce,
+            ciphertext: secret.ciphertext,
+        }))
+    }
+
+    async fn list_secrets(
+        &self,
+        request: Request<zopp_proto::ListSecretsRequest>,
+    ) -> Result<Response<zopp_proto::SecretList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list secrets"))?;
+
+        let req = request.into_inner();
+        let env_id = Uuid::parse_str(&req.environment_id)
+            .map(zopp_storage::EnvironmentId)
+            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
+
+        // Get environment to verify access
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&env.project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        let keys = self
+            .store
+            .list_secret_keys(&env_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list secrets: {}", e)))?;
+
+        // For each key, fetch the secret
+        let mut secrets = Vec::new();
+        for key in keys {
+            let secret = self
+                .store
+                .get_secret(&env_id, &key)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get secret: {}", e)))?;
+            secrets.push(zopp_proto::Secret {
+                key,
+                nonce: secret.nonce,
+                ciphertext: secret.ciphertext,
+            });
+        }
+
+        Ok(Response::new(zopp_proto::SecretList { secrets }))
+    }
+
+    async fn delete_secret(
+        &self,
+        request: Request<zopp_proto::DeleteSecretRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot delete secrets"))?;
+
+        let req = request.into_inner();
+        let env_id = Uuid::parse_str(&req.environment_id)
+            .map(zopp_storage::EnvironmentId)
+            .map_err(|_| Status::invalid_argument("Invalid environment ID"))?;
+
+        // Get environment to verify access
+        let env = self
+            .store
+            .get_environment(&env_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Get project to verify access
+        let project = self
+            .store
+            .get_project(&env.project_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get project: {}", e)))?;
+
+        // Verify user has access to workspace
+        let workspaces =
+            self.store.list_workspaces(&user_id).await.map_err(|e| {
+                Status::internal(format!("Failed to verify workspace access: {}", e))
+            })?;
+
+        if !workspaces.iter().any(|w| w.id == project.workspace_id) {
+            return Err(Status::permission_denied("No access to workspace"));
+        }
+
+        self.store
+            .delete_secret(&env_id, &req.key)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Secret not found"),
+                _ => Status::internal(format!("Failed to delete secret: {}", e)),
+            })?;
+
+        Ok(Response::new(Empty {}))
+    }
 }
 
 fn extract_signature<T>(request: &Request<T>) -> Result<(PrincipalId, i64, Vec<u8>), Status> {

@@ -46,16 +46,17 @@ async fn end_to_end_happy_path_and_updates() {
 
     let dek_wrapped = vec![1, 2, 3, 4];
     let dek_nonce = vec![9u8; 24];
-    s.create_env(&CreateEnvParams {
-        project_id: project_id.clone(),
-        name: e.0.clone(),
-        dek_wrapped: dek_wrapped.clone(),
-        dek_nonce: dek_nonce.clone(),
-    })
-    .await
-    .unwrap();
+    let env_id = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id.clone(),
+            name: e.0.clone(),
+            dek_wrapped: dek_wrapped.clone(),
+            dek_nonce: dek_nonce.clone(),
+        })
+        .await
+        .unwrap();
 
-    // env wrap round-trip
+    // env wrap round-trip (legacy name-based method)
     let (got_wrap, got_nonce) = s.get_env_wrap(&ws, &p, &e).await.unwrap();
     assert_eq!(got_wrap, dek_wrapped);
     assert_eq!(got_nonce, dek_nonce);
@@ -65,32 +66,32 @@ async fn end_to_end_happy_path_and_updates() {
     let nonce = vec![7u8; 24];
     let ct1 = vec![8u8; 32];
 
-    s.upsert_secret(&ws, &p, &e, k, &nonce, &ct1).await.unwrap();
-    let row1 = s.get_secret(&ws, &p, &e, k).await.unwrap();
+    s.upsert_secret(&env_id, k, &nonce, &ct1).await.unwrap();
+    let row1 = s.get_secret(&env_id, k).await.unwrap();
     assert_eq!(row1.nonce, nonce);
     assert_eq!(row1.ciphertext, ct1);
 
     // overwrite same key: new ciphertext should appear
     let ct2 = vec![42u8; 48];
-    s.upsert_secret(&ws, &p, &e, k, &nonce, &ct2).await.unwrap();
-    let row2 = s.get_secret(&ws, &p, &e, k).await.unwrap();
+    s.upsert_secret(&env_id, k, &nonce, &ct2).await.unwrap();
+    let row2 = s.get_secret(&env_id, k).await.unwrap();
     assert_eq!(
         row2.ciphertext, ct2,
         "upsert should update the value in-place"
     );
 
     // add a few more keys out-of-order and verify sorted listing
-    s.upsert_secret(&ws, &p, &e, "z_last", &nonce, b"Z")
+    s.upsert_secret(&env_id, "z_last", &nonce, b"Z")
         .await
         .unwrap();
-    s.upsert_secret(&ws, &p, &e, "a_first", &nonce, b"A")
+    s.upsert_secret(&env_id, "a_first", &nonce, b"A")
         .await
         .unwrap();
-    s.upsert_secret(&ws, &p, &e, "m_middle", &nonce, b"M")
+    s.upsert_secret(&env_id, "m_middle", &nonce, b"M")
         .await
         .unwrap();
 
-    let keys = s.list_secret_keys(&ws, &p, &e).await.unwrap();
+    let keys = s.list_secret_keys(&env_id).await.unwrap();
     assert_eq!(keys, vec!["DB_PASSWORD", "a_first", "m_middle", "z_last"]);
 }
 
@@ -127,14 +128,15 @@ async fn workspace_isolation_end_to_end() {
         })
         .await
         .unwrap();
-    s.create_env(&CreateEnvParams {
-        project_id: project_id1,
-        name: e.0.clone(),
-        dek_wrapped: vec![1],
-        dek_nonce: vec![9; 24],
-    })
-    .await
-    .unwrap();
+    let env_id1 = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id1,
+            name: e.0.clone(),
+            dek_wrapped: vec![1],
+            dek_nonce: vec![9; 24],
+        })
+        .await
+        .unwrap();
 
     let project_id2 = s
         .create_project(&CreateProjectParams {
@@ -143,22 +145,23 @@ async fn workspace_isolation_end_to_end() {
         })
         .await
         .unwrap();
-    s.create_env(&CreateEnvParams {
-        project_id: project_id2,
-        name: e.0.clone(),
-        dek_wrapped: vec![2],
-        dek_nonce: vec![9; 24],
-    })
-    .await
-    .unwrap();
-
-    // only write secret in ws1
-    s.upsert_secret(&ws1, &p, &e, "TOKEN", &[7; 24], &[1; 8])
+    let env_id2 = s
+        .create_env(&CreateEnvParams {
+            project_id: project_id2,
+            name: e.0.clone(),
+            dek_wrapped: vec![2],
+            dek_nonce: vec![9; 24],
+        })
         .await
         .unwrap();
 
-    // ws2 cannot read ws1’s data
-    let err = s.get_secret(&ws2, &p, &e, "TOKEN").await.unwrap_err();
+    // only write secret in env1
+    s.upsert_secret(&env_id1, "TOKEN", &[7; 24], &[1; 8])
+        .await
+        .unwrap();
+
+    // env2 cannot read env1's data
+    let err = s.get_secret(&env_id2, "TOKEN").await.unwrap_err();
     matches!(err, StoreError::NotFound);
 }
 
@@ -197,10 +200,9 @@ async fn common_error_mapping_paths() {
         .unwrap_err();
     matches!(err, StoreError::AlreadyExists);
 
-    // Reading a non-existent secret → NotFound
-    let e = EnvName("missing-env".into());
-    // env doesn't exist yet, so this should not be found
-    let err = s.get_secret(&ws, &p, &e, "NOPE").await.unwrap_err();
+    // Reading a secret from a non-existent environment → NotFound
+    let fake_env_id = EnvironmentId(uuid::Uuid::new_v4());
+    let err = s.get_secret(&fake_env_id, "NOPE").await.unwrap_err();
     matches!(err, StoreError::NotFound);
 }
 
