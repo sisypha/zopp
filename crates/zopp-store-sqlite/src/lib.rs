@@ -2,10 +2,10 @@ use chrono::{DateTime, Utc};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use uuid::Uuid;
 use zopp_storage::{
-    CreateEnvParams, CreateInviteParams, CreatePrincipalParams, CreateProjectParams,
-    CreateUserParams, CreateWorkspaceParams, EnvName, Environment, EnvironmentId, Invite, InviteId,
-    Principal, PrincipalId, ProjectName, SecretRow, Store, StoreError, Transaction, User, UserId,
-    Workspace, WorkspaceId,
+    AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalParams,
+    CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName, Environment,
+    EnvironmentId, Invite, InviteId, Principal, PrincipalId, ProjectName, SecretRow, Store,
+    StoreError, Transaction, User, UserId, Workspace, WorkspaceId, WorkspacePrincipal,
 };
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -112,11 +112,12 @@ impl Store for SqliteStore {
                 let principal_id_str = principal_id.to_string();
 
                 sqlx::query!(
-                    "INSERT INTO principals(id, user_id, name, public_key) VALUES(?, ?, ?, ?)",
+                    "INSERT INTO principals(id, user_id, name, public_key, x25519_public_key) VALUES(?, ?, ?, ?, ?)",
                     principal_id_str,
                     user_id_str,
                     principal_data.name,
-                    principal_data.public_key
+                    principal_data.public_key,
+                    principal_data.x25519_public_key
                 )
                 .execute(&mut *tx)
                 .await
@@ -233,11 +234,12 @@ impl Store for SqliteStore {
         let user_id_str = params.user_id.as_ref().map(|id| id.0.to_string());
 
         sqlx::query!(
-            "INSERT INTO principals(id, user_id, name, public_key) VALUES(?, ?, ?, ?)",
+            "INSERT INTO principals(id, user_id, name, public_key, x25519_public_key) VALUES(?, ?, ?, ?, ?)",
             principal_id_str,
             user_id_str,
             params.name,
-            params.public_key
+            params.public_key,
+            params.x25519_public_key
         )
         .execute(&self.pool)
         .await
@@ -255,7 +257,7 @@ impl Store for SqliteStore {
     async fn get_principal(&self, principal_id: &PrincipalId) -> Result<Principal, StoreError> {
         let principal_id_str = principal_id.0.to_string();
         let row = sqlx::query!(
-            r#"SELECT id, user_id, name, public_key,
+            r#"SELECT id, user_id, name, public_key, x25519_public_key,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM principals WHERE id = ?"#,
@@ -281,6 +283,7 @@ impl Store for SqliteStore {
                     user_id,
                     name: row.name,
                     public_key: row.public_key,
+                    x25519_public_key: row.x25519_public_key,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                 })
@@ -313,7 +316,7 @@ impl Store for SqliteStore {
     async fn list_principals(&self, user_id: &UserId) -> Result<Vec<Principal>, StoreError> {
         let user_id_str = user_id.0.to_string();
         let rows = sqlx::query!(
-            r#"SELECT id, user_id, name, public_key,
+            r#"SELECT id, user_id, name, public_key, x25519_public_key,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM principals WHERE user_id = ?"#,
@@ -337,6 +340,7 @@ impl Store for SqliteStore {
                 user_id,
                 name: row.name,
                 public_key: row.public_key,
+                x25519_public_key: row.x25519_public_key,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
             });
@@ -362,11 +366,13 @@ impl Store for SqliteStore {
             .map(|id| id.0.to_string());
 
         sqlx::query!(
-            "INSERT INTO invites(id, token, expires_at, created_by_user_id) VALUES(?, ?, ?, ?)",
+            "INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce) VALUES(?, ?, ?, ?, ?, ?)",
             invite_id_str,
             token,
             params.expires_at,
-            created_by_user_id_str
+            created_by_user_id_str,
+            params.kek_encrypted,
+            params.kek_nonce
         )
         .execute(&self.pool)
         .await
@@ -400,6 +406,8 @@ impl Store for SqliteStore {
             id: InviteId(invite_id),
             token,
             workspace_ids: params.workspace_ids.clone(),
+            kek_encrypted: params.kek_encrypted.clone(),
+            kek_nonce: params.kek_nonce.clone(),
             created_at: row.created_at,
             updated_at: row.updated_at,
             expires_at: params.expires_at,
@@ -413,7 +421,7 @@ impl Store for SqliteStore {
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>",
-               created_by_user_id, revoked
+               created_by_user_id, revoked, kek_encrypted, kek_nonce
                FROM invites WHERE token = ?"#,
             token
         )
@@ -458,6 +466,8 @@ impl Store for SqliteStore {
                     id: InviteId(id),
                     token: row.token,
                     workspace_ids,
+                    kek_encrypted: row.kek_encrypted,
+                    kek_nonce: row.kek_nonce,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                     expires_at: row.expires_at,
@@ -476,7 +486,7 @@ impl Store for SqliteStore {
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>",
-               created_by_user_id, revoked
+               created_by_user_id, revoked, kek_encrypted, kek_nonce
                FROM invites
                WHERE revoked = 0 AND (
                    (? IS NOT NULL AND created_by_user_id = ?) OR
@@ -520,6 +530,8 @@ impl Store for SqliteStore {
                 id: InviteId(id),
                 token: row.token,
                 workspace_ids,
+                kek_encrypted: row.kek_encrypted,
+                kek_nonce: row.kek_nonce,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
                 expires_at: row.expires_at,
@@ -689,18 +701,20 @@ impl Store for SqliteStore {
         }
     }
 
-    async fn add_principal_to_workspace(
+    async fn add_workspace_principal(
         &self,
-        workspace_id: &WorkspaceId,
-        principal_id: &PrincipalId,
+        params: &AddWorkspacePrincipalParams,
     ) -> Result<(), StoreError> {
-        let ws_id = workspace_id.0.to_string();
-        let p_id = principal_id.0.to_string();
+        let ws_id = params.workspace_id.0.to_string();
+        let p_id = params.principal_id.0.to_string();
 
         sqlx::query!(
-            "INSERT INTO workspace_principals(workspace_id, principal_id) VALUES(?, ?)",
+            "INSERT INTO workspace_principals(workspace_id, principal_id, ephemeral_pub, kek_wrapped, kek_nonce) VALUES(?, ?, ?, ?, ?)",
             ws_id,
-            p_id
+            p_id,
+            params.ephemeral_pub,
+            params.kek_wrapped,
+            params.kek_nonce
         )
         .execute(&self.pool)
         .await
@@ -711,6 +725,78 @@ impl Store for SqliteStore {
             _ => StoreError::Backend(e.to_string()),
         })?;
         Ok(())
+    }
+
+    async fn get_workspace_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<WorkspacePrincipal, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT workspace_id, principal_id, ephemeral_pub, kek_wrapped, kek_nonce,
+               created_at as "created_at: DateTime<Utc>"
+               FROM workspace_principals WHERE workspace_id = ? AND principal_id = ?"#,
+            ws_id,
+            p_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => {
+                let workspace_id = Uuid::try_parse(&row.workspace_id)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?;
+                let principal_id = Uuid::try_parse(&row.principal_id)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?;
+                Ok(WorkspacePrincipal {
+                    workspace_id: WorkspaceId(workspace_id),
+                    principal_id: PrincipalId(principal_id),
+                    ephemeral_pub: row.ephemeral_pub,
+                    kek_wrapped: row.kek_wrapped,
+                    kek_nonce: row.kek_nonce,
+                    created_at: row.created_at,
+                })
+            }
+        }
+    }
+
+    async fn list_workspace_principals(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<WorkspacePrincipal>, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT workspace_id, principal_id, ephemeral_pub, kek_wrapped, kek_nonce,
+               created_at as "created_at: DateTime<Utc>"
+               FROM workspace_principals WHERE workspace_id = ?"#,
+            ws_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut principals = Vec::with_capacity(rows.len());
+        for row in rows {
+            let workspace_id = Uuid::try_parse(&row.workspace_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            principals.push(WorkspacePrincipal {
+                workspace_id: WorkspaceId(workspace_id),
+                principal_id: PrincipalId(principal_id),
+                ephemeral_pub: row.ephemeral_pub,
+                kek_wrapped: row.kek_wrapped,
+                kek_nonce: row.kek_nonce,
+                created_at: row.created_at,
+            });
+        }
+        Ok(principals)
     }
 
     async fn add_user_to_workspace(
@@ -1575,6 +1661,7 @@ mod tests {
                 user_id: Some(user_id.clone()),
                 name: "old-name".to_string(),
                 public_key: vec![1, 2, 3],
+                x25519_public_key: None,
             })
             .await
             .unwrap();

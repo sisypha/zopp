@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,\n               w.created_at as \"created_at: DateTime<Utc>\",\n               w.updated_at as \"updated_at: DateTime<Utc>\"\n               FROM workspaces w\n               LEFT JOIN workspace_members wm ON w.id = wm.workspace_id\n               WHERE w.name = ? AND (w.owner_user_id = ? OR wm.user_id = ?)\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "owner_user_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kdf_salt",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kdf_m_cost_kib",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kdf_t_cost",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kdf_p_cost",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8f15a889825e7781dbd5d0783804db595eceaaad9cd2cad1143fd63f9fa5eed6"
+}

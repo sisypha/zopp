@@ -12,6 +12,7 @@ tonic = { workspace = true }
 tokio = { workspace = true }
 prost = { workspace = true }
 zopp-proto = { path = "../../crates/zopp-proto" }
+zopp-crypto = { path = "../../crates/zopp-crypto" }
 uuid = { workspace = true }
 thiserror = { workspace = true }
 chrono = { workspace = true }

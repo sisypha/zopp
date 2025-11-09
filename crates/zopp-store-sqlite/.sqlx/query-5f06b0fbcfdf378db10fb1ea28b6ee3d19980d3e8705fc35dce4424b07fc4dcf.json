@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM invites WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at: DateTime<Utc>",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5f06b0fbcfdf378db10fb1ea28b6ee3d19980d3e8705fc35dce4424b07fc4dcf"
+}

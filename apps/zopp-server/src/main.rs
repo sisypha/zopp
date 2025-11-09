@@ -139,10 +139,15 @@ impl ZoppService for ZoppServer {
         let (user_id, principal_id) = self
             .store
             .create_user(&CreateUserParams {
-                email: req.email,
+                email: req.email.clone(),
                 principal: Some(CreatePrincipalData {
-                    name: req.principal_name,
-                    public_key: req.public_key,
+                    name: req.principal_name.clone(),
+                    public_key: req.public_key.clone(),
+                    x25519_public_key: if req.x25519_public_key.is_empty() {
+                        None
+                    } else {
+                        Some(req.x25519_public_key.clone())
+                    },
                 }),
                 workspace_ids: invite.workspace_ids.clone(),
             })
@@ -182,8 +187,13 @@ impl ZoppService for ZoppServer {
             .create_user(&CreateUserParams {
                 email: req.email,
                 principal: Some(CreatePrincipalData {
-                    name: req.principal_name,
-                    public_key: req.public_key,
+                    name: req.principal_name.clone(),
+                    public_key: req.public_key.clone(),
+                    x25519_public_key: if req.x25519_public_key.is_empty() {
+                        None
+                    } else {
+                        Some(req.x25519_public_key.clone())
+                    },
                 }),
                 workspace_ids: vec![],
             })
@@ -269,12 +279,8 @@ impl ZoppService for ZoppServer {
             .await
             .map_err(|e| Status::internal(format!("Failed to add user to workspace: {}", e)))?;
 
-        self.store
-            .add_principal_to_workspace(&workspace_id, &principal_id)
-            .await
-            .map_err(|e| {
-                Status::internal(format!("Failed to add principal to workspace: {}", e))
-            })?;
+        // TODO: Wrap KEK for this principal using add_workspace_principal
+        // For now, skip adding to workspace_principals (will be added later with KEK wrapping)
 
         Ok(Response::new(zopp_proto::Workspace {
             id: workspace_id.0.to_string(),
@@ -337,6 +343,16 @@ impl ZoppService for ZoppServer {
             .store
             .create_invite(&CreateInviteParams {
                 workspace_ids: workspace_ids?,
+                kek_encrypted: if req.kek_encrypted.is_empty() {
+                    None
+                } else {
+                    Some(req.kek_encrypted)
+                },
+                kek_nonce: if req.kek_nonce.is_empty() {
+                    None
+                } else {
+                    Some(req.kek_nonce)
+                },
                 expires_at: chrono::DateTime::from_timestamp(req.expires_at, 0)
                     .ok_or_else(|| Status::invalid_argument("Invalid expires_at timestamp"))?,
                 created_by_user_id: Some(user_id),
@@ -346,7 +362,7 @@ impl ZoppService for ZoppServer {
 
         Ok(Response::new(InviteToken {
             id: invite.id.0.to_string(),
-            token: invite.token,
+            token: invite.token.clone(),
             workspace_ids: invite
                 .workspace_ids
                 .into_iter()
@@ -354,6 +370,9 @@ impl ZoppService for ZoppServer {
                 .collect(),
             created_at: invite.created_at.timestamp(),
             expires_at: invite.expires_at.timestamp(),
+            kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
+            kek_nonce: invite.kek_nonce.unwrap_or_default(),
+            invite_secret: String::new(), // TODO: generate and return invite secret
         }))
     }
 
@@ -382,6 +401,9 @@ impl ZoppService for ZoppServer {
                     .collect(),
                 created_at: inv.created_at.timestamp(),
                 expires_at: inv.expires_at.timestamp(),
+                kek_encrypted: inv.kek_encrypted.unwrap_or_default(),
+                kek_nonce: inv.kek_nonce.unwrap_or_default(),
+                invite_secret: String::new(), // Not returned on list
             })
             .collect();
 
@@ -434,6 +456,7 @@ impl ZoppService for ZoppServer {
             id: principal.id.0.to_string(),
             name: principal.name,
             public_key: principal.public_key,
+            x25519_public_key: principal.x25519_public_key.unwrap_or_default(),
         }))
     }
 
@@ -481,6 +504,7 @@ impl ZoppService for ZoppServer {
                 id: p.id.0.to_string(),
                 name: p.name,
                 public_key: p.public_key,
+                x25519_public_key: p.x25519_public_key.unwrap_or_default(),
             })
             .collect();
 
@@ -1210,6 +1234,8 @@ async fn cmd_invite_create(
     let invite = store
         .create_invite(&CreateInviteParams {
             workspace_ids: vec![],
+            kek_encrypted: None,
+            kek_nonce: None,
             expires_at,
             created_by_user_id: None,
         })
