@@ -1,4 +1,5 @@
 use std::fs;
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -49,14 +50,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Give server time to start and run migrations
-    // Wait longer and verify it's actually ready
-    for i in 1..=10 {
-        sleep(Duration::from_millis(500)).await;
-        // Try to check if server is responding (we'll just wait for now)
-        if i == 10 {
-            println!("✓ Server started (PID: {})\n", server.id());
+    // Wait for server to be ready by checking if it's listening on port 50051
+    let mut ready = false;
+    for i in 1..=30 {
+        sleep(Duration::from_millis(200)).await;
+        if TcpStream::connect("127.0.0.1:50051").is_ok() {
+            ready = true;
+            println!("✓ Server started and ready (PID: {})\n", server.id());
+            break;
         }
+        if i == 30 {
+            eprintln!("❌ Server failed to start within 6 seconds");
+            let _ = server.kill();
+            return Err("Server not ready".into());
+        }
+    }
+    if !ready {
+        return Err("Server failed to start".into());
     }
 
     // Step 1: Admin creates server invite for Alice
