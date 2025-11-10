@@ -381,7 +381,6 @@ async fn unwrap_workspace_kek(
 
     let response = client.get_workspace_keys(request).await?.into_inner();
 
-    // Get principal's X25519 private key
     let x25519_private_key = principal
         .x25519_private_key
         .as_ref()
@@ -391,11 +390,9 @@ async fn unwrap_workspace_kek(
     x25519_array.copy_from_slice(&x25519_private_bytes);
     let x25519_keypair = zopp_crypto::Keypair::from_secret_bytes(&x25519_array);
 
-    // Derive shared secret using ephemeral public key
     let ephemeral_pub = zopp_crypto::public_key_from_bytes(&response.ephemeral_pub)?;
     let shared_secret = x25519_keypair.shared_secret(&ephemeral_pub);
 
-    // Unwrap the KEK (using workspace ID for AAD)
     let aad = format!("workspace:{}", response.workspace_id).into_bytes();
     let mut nonce_array = [0u8; 24];
     nonce_array.copy_from_slice(&response.kek_nonce);
@@ -441,7 +438,6 @@ async fn unwrap_environment_dek(
 
     let response = client.get_environment(request).await?.into_inner();
 
-    // Unwrap the DEK using the KEK
     let mut nonce_array = [0u8; 24];
     nonce_array.copy_from_slice(&response.dek_nonce);
     let nonce = zopp_crypto::Nonce(nonce_array);
@@ -477,25 +473,19 @@ async fn cmd_join(
         Some(name) => name.to_string(),
         None => hostname::get()?.to_string_lossy().to_string(),
     };
-    // Generate Ed25519 keypair for authentication
+
     let signing_key = SigningKey::generate(&mut rand_core::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key = verifying_key.to_bytes().to_vec();
 
-    // Generate X25519 keypair for encryption (ECDH)
     let x25519_keypair = zopp_crypto::Keypair::generate();
     let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
 
     let mut client = connect(server).await?;
 
-    // Determine if this is a workspace invite (starts with inv_) or server invite
     let is_workspace_invite = invite_code.starts_with("inv_");
 
-    // Handle workspace invite with KEK decryption and re-wrapping
     let (ephemeral_pub, kek_wrapped, kek_nonce) = if is_workspace_invite {
-        // This is a workspace invite - need to fetch it, decrypt KEK, and re-wrap it
-
-        // 1. Strip inv_ prefix and decode secret
         let secret_hex = invite_code
             .strip_prefix("inv_")
             .ok_or("Invalid invite code format")?;
@@ -506,11 +496,9 @@ async fn cmd_join(
         let mut secret_array = [0u8; 32];
         secret_array.copy_from_slice(&invite_secret);
 
-        // 2. Hash the secret to look up the invite
         let secret_hash = zopp_crypto::hash_sha256(&secret_array);
         let secret_hash_hex = hex::encode(secret_hash);
 
-        // 3. Fetch the invite by hash (unauthenticated)
         let invite = client
             .get_invite(zopp_proto::GetInviteRequest {
                 token: secret_hash_hex,
@@ -522,16 +510,13 @@ async fn cmd_join(
             return Err("Invalid workspace invite (no encrypted KEK)".into());
         }
 
-        // 4. Decrypt the KEK using invite secret
         let dek_for_decryption = zopp_crypto::Dek::from_bytes(&secret_array)?;
 
-        // Get workspace ID from invite
         let workspace_id = invite
             .workspace_ids
             .first()
             .ok_or("Invite has no workspace IDs")?;
 
-        // Use workspace ID for invite decryption AAD
         let aad = format!("invite:workspace:{}", workspace_id).into_bytes();
 
         let mut nonce_array = [0u8; 24];
@@ -540,13 +525,10 @@ async fn cmd_join(
 
         let kek_decrypted =
             zopp_crypto::decrypt(&invite.kek_encrypted, &nonce, &dek_for_decryption, &aad)?;
-
-        // 5. Re-wrap the KEK with this principal's X25519 key
         let ephemeral_keypair = zopp_crypto::Keypair::generate();
         let my_public = zopp_crypto::public_key_from_bytes(&x25519_keypair.public_key_bytes())?;
         let shared_secret = ephemeral_keypair.shared_secret(&my_public);
 
-        // Use workspace ID for AAD (matches Alice's wrapping)
         let wrap_aad = format!("workspace:{}", workspace_id).into_bytes();
         let (wrap_nonce, wrapped) =
             zopp_crypto::wrap_key(&kek_decrypted, &shared_secret, &wrap_aad)?;
@@ -557,14 +539,10 @@ async fn cmd_join(
             wrap_nonce.0.to_vec(),
         )
     } else {
-        // Server invite - no KEK wrapping
         (vec![], vec![], vec![])
     };
 
-    // Determine the token to send to server
     let server_token = if is_workspace_invite {
-        // For workspace invites, send the hash of the secret (already computed above)
-        // We need to recompute it here since we're outside the if block
         let secret_hex = invite_code.strip_prefix("inv_").unwrap();
         let invite_secret = hex::decode(secret_hex)?;
         let mut secret_array = [0u8; 32];
@@ -572,7 +550,6 @@ async fn cmd_join(
         let secret_hash = zopp_crypto::hash_sha256(&secret_array);
         hex::encode(secret_hash)
     } else {
-        // For server invites, send the token as-is
         invite_code.to_string()
     };
 
@@ -658,12 +635,10 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
-    // Generate workspace ID client-side (UUID v7)
     use uuid::Uuid;
     let workspace_id = Uuid::now_v7();
     let workspace_id_str = workspace_id.to_string();
 
-    // Generate random KEK (Key Encryption Key) for this workspace
     let mut kek = [0u8; 32];
     use rand_core::RngCore;
     rand_core::OsRng.fill_bytes(&mut kek);
@@ -678,15 +653,12 @@ async fn cmd_workspace_create(server: &str, name: &str) -> Result<(), Box<dyn st
     x25519_array.copy_from_slice(&x25519_private_bytes);
     let x25519_keypair = zopp_crypto::Keypair::from_secret_bytes(&x25519_array);
 
-    // Generate ephemeral keypair for wrapping
     let ephemeral_keypair = zopp_crypto::Keypair::generate();
     let ephemeral_pub = ephemeral_keypair.public_key_bytes().to_vec();
 
-    // Derive shared secret with our own public key using ephemeral private key
     let my_public = zopp_crypto::public_key_from_bytes(&x25519_keypair.public_key_bytes())?;
     let shared_secret = ephemeral_keypair.shared_secret(&my_public);
 
-    // Wrap the KEK using workspace ID in AAD
     let aad = format!("workspace:{}", workspace_id_str).into_bytes();
     let (nonce, wrapped) = zopp_crypto::wrap_key(&kek, &shared_secret, &aad)?;
 
@@ -756,12 +728,10 @@ async fn cmd_principal_create(server: &str, name: &str) -> Result<(), Box<dyn st
         return Err(format!("Principal '{}' already exists", name).into());
     }
 
-    // Generate Ed25519 keypair for authentication
     let signing_key = SigningKey::generate(&mut rand_core::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key = verifying_key.to_bytes().to_vec();
 
-    // Generate X25519 keypair for encryption (ECDH)
     let x25519_keypair = zopp_crypto::Keypair::generate();
     let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
 
@@ -1110,18 +1080,13 @@ async fn cmd_environment_create(
 
     let mut client = ZoppServiceClient::connect(server.to_string()).await?;
 
-    // 1. Unwrap workspace KEK
     let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
-
-    // 2. Generate random DEK for this environment
     let dek = zopp_crypto::generate_dek();
 
-    // 3. Wrap DEK with workspace KEK
     let kek_key = zopp_crypto::Dek::from_bytes(&kek)?;
     let aad = format!("environment:{}:{}:{}", workspace_name, project_name, name).into_bytes();
     let (dek_nonce, dek_wrapped) = zopp_crypto::encrypt(dek.as_bytes(), &kek_key, &aad)?;
 
-    // 4. Send to server
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(zopp_proto::CreateEnvironmentRequest {
@@ -1591,7 +1556,6 @@ async fn cmd_invite_revoke(
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
 
-    // Strip inv_ prefix and hash the secret to get the token
     let secret_hex = invite_code
         .strip_prefix("inv_")
         .ok_or("Invalid invite code format (must start with inv_)")?;
