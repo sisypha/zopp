@@ -53,6 +53,9 @@ enum InviteCommand {
         /// Expiration duration in hours
         #[arg(long, default_value = "24")]
         expires_hours: i64,
+        /// Output only the token (for scripts)
+        #[arg(long)]
+        plain: bool,
     },
     /// List all server invites
     List,
@@ -1348,6 +1351,7 @@ fn extract_signature<T>(request: &Request<T>) -> Result<(PrincipalId, i64, Vec<u
 async fn cmd_invite_create(
     db_path: &str,
     expires_hours: i64,
+    plain: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let db_url = if db_path.starts_with("sqlite:") {
         db_path.to_string()
@@ -1374,10 +1378,14 @@ async fn cmd_invite_create(
         })
         .await?;
 
-    println!("✓ Server invite created!\n");
-    println!("Token:   {}", invite.token);
-    println!("Expires: {}", invite.expires_at);
-    println!("\nUse this token to join this server using zopp join");
+    if plain {
+        println!("{}", invite.token);
+    } else {
+        println!("✓ Server invite created!\n");
+        println!("Token:   {}", invite.token);
+        println!("Expires: {}", invite.expires_at);
+        println!("\nUse this token to join this server using zopp join");
+    }
 
     Ok(())
 }
@@ -1454,8 +1462,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             cmd_serve(&cli.db, &addr).await?;
         }
         Command::Invite { invite_cmd } => match invite_cmd {
-            InviteCommand::Create { expires_hours } => {
-                cmd_invite_create(&cli.db, expires_hours).await?;
+            InviteCommand::Create {
+                expires_hours,
+                plain,
+            } => {
+                cmd_invite_create(&cli.db, expires_hours, plain).await?;
             }
             InviteCommand::List => {
                 cmd_invite_list(&cli.db).await?;

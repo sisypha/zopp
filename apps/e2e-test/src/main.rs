@@ -85,11 +85,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "create",
             "--expires-hours",
             "1",
+            "--plain",
         ])
         .output()?;
 
-    let invite_output = String::from_utf8_lossy(&output.stdout);
-    let alice_server_invite = extract_token(&invite_output)?;
+    if !output.status.success() {
+        eprintln!(
+            "Server invite creation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Err("Failed to create server invite".into());
+    }
+
+    let alice_server_invite = String::from_utf8_lossy(&output.stdout).trim().to_string();
     println!("✓ Alice's server invite: {}\n", alice_server_invite);
 
     // Step 2: Alice joins server
@@ -134,7 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📁 Step 4: Alice creates project 'api'...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args(["project", "create", "api", "--workspace", "acme"])
+        .args(["project", "create", "api", "-w", "acme"])
         .output()?;
 
     if !output.status.success() {
@@ -154,9 +162,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "environment",
             "create",
             "production",
-            "--workspace",
+            "-w",
             "acme",
-            "--project",
+            "-p",
             "api",
         ])
         .output()?;
@@ -181,6 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "acme",
             "--expires-hours",
             "1",
+            "--plain",
         ])
         .output()?;
 
@@ -192,8 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Failed to create invite".into());
     }
 
-    let invite_output = String::from_utf8_lossy(&output.stdout);
-    let workspace_invite = extract_invite_code(&invite_output)?;
+    let workspace_invite = String::from_utf8_lossy(&output.stdout).trim().to_string();
     println!("✓ Workspace invite: {}\n", workspace_invite);
 
     // Step 7: Bob joins using workspace invite
@@ -374,30 +382,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Zero-knowledge architecture verified");
 
     Ok(())
-}
-
-fn extract_token(output: &str) -> Result<String, Box<dyn std::error::Error>> {
-    for line in output.lines() {
-        if line.contains("Token:") {
-            let token = line
-                .split_whitespace()
-                .last()
-                .ok_or("Failed to extract token")?;
-            return Ok(token.to_string());
-        }
-    }
-    Err("Token not found in output".into())
-}
-
-fn extract_invite_code(output: &str) -> Result<String, Box<dyn std::error::Error>> {
-    for line in output.lines() {
-        if line.contains("Invite code:") {
-            let code = line
-                .split_whitespace()
-                .last()
-                .ok_or("Failed to extract invite code")?;
-            return Ok(code.to_string());
-        }
-    }
-    Err("Invite code not found in output".into())
 }

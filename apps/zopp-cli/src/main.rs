@@ -38,10 +38,6 @@ enum Command {
         /// Principal name (optional, defaults to hostname)
         #[arg(long)]
         principal: Option<String>,
-
-        /// Invite secret (hex-encoded, required for workspace invites)
-        #[arg(long)]
-        secret: Option<String>,
     },
     /// Workspace commands
     Workspace {
@@ -126,29 +122,27 @@ enum ProjectCommand {
     },
     /// Create a new project
     Create {
+        /// Project name
+        name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: String,
-        /// Project name
-        name: String,
     },
     /// Get project details
     Get {
+        /// Project name
+        name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: String,
-        /// Project name
-        #[arg(long, short = 'p')]
-        project: String,
     },
     /// Delete a project
     Delete {
+        /// Project name
+        name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: String,
-        /// Project name
-        #[arg(long, short = 'p')]
-        project: String,
     },
 }
 
@@ -165,38 +159,36 @@ enum EnvironmentCommand {
     },
     /// Create a new environment
     Create {
+        /// Environment name
+        name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: String,
         /// Project name
         #[arg(long, short = 'p')]
         project: String,
-        /// Environment name
-        name: String,
     },
     /// Get environment details
     Get {
+        /// Environment name
+        name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: String,
         /// Project name
         #[arg(long, short = 'p')]
         project: String,
-        /// Environment name
-        #[arg(long, short = 'e')]
-        environment: String,
     },
     /// Delete an environment
     Delete {
+        /// Environment name
+        name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: String,
         /// Project name
         #[arg(long, short = 'p')]
         project: String,
-        /// Environment name
-        #[arg(long, short = 'e')]
-        environment: String,
     },
 }
 
@@ -270,6 +262,9 @@ enum InviteCommand {
         /// Hours until invite expires (default: 168 = 7 days)
         #[arg(long, default_value = "168")]
         expires_hours: i64,
+        /// Output only the invite code (for scripts)
+        #[arg(long)]
+        plain: bool,
     },
     /// List workspace invites
     List,
@@ -476,7 +471,6 @@ async fn cmd_join(
     invite_code: &str,
     email: &str,
     principal_name: Option<&str>,
-    _legacy_secret: Option<&str>, // Deprecated, kept for backwards compat
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use provided principal name or default to hostname
     let principal_name = match principal_name {
@@ -1464,6 +1458,7 @@ async fn cmd_invite_create(
     server: &str,
     workspace_name: &str,
     expires_hours: i64,
+    plain: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
@@ -1534,13 +1529,17 @@ async fn cmd_invite_create(
 
     let _response = client.create_invite(request).await?.into_inner();
 
-    println!("✓ Workspace invite created!\n");
-    println!("Invite code: {}", invite_secret_hex);
-    println!("Expires:     {}", expires_at);
-    println!("\n⚠️  Share this invite code with the invitee via secure channel");
-    println!(
-        "   The server does NOT have the plaintext - it's needed to decrypt the workspace key"
-    );
+    if plain {
+        println!("{}", invite_secret_hex);
+    } else {
+        println!("✓ Workspace invite created!\n");
+        println!("Invite code: {}", invite_secret_hex);
+        println!("Expires:     {}", expires_at);
+        println!("\n⚠️  Share this invite code with the invitee via secure channel");
+        println!(
+            "   The server does NOT have the plaintext - it's needed to decrypt the workspace key"
+        );
+    }
 
     Ok(())
 }
@@ -1637,16 +1636,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             token,
             email,
             principal,
-            secret,
         } => {
-            cmd_join(
-                &cli.server,
-                &token,
-                &email,
-                principal.as_deref(),
-                secret.as_deref(),
-            )
-            .await?;
+            cmd_join(&cli.server, &token, &email, principal.as_deref()).await?;
         }
         Command::Workspace { workspace_cmd } => match workspace_cmd {
             WorkspaceCommand::List => {
@@ -1683,11 +1674,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ProjectCommand::Create { workspace, name } => {
                 cmd_project_create(&cli.server, &workspace, &name).await?;
             }
-            ProjectCommand::Get { workspace, project } => {
-                cmd_project_get(&cli.server, &workspace, &project).await?;
+            ProjectCommand::Get { name, workspace } => {
+                cmd_project_get(&cli.server, &workspace, &name).await?;
             }
-            ProjectCommand::Delete { workspace, project } => {
-                cmd_project_delete(&cli.server, &workspace, &project).await?;
+            ProjectCommand::Delete { name, workspace } => {
+                cmd_project_delete(&cli.server, &workspace, &name).await?;
             }
         },
         Command::Environment { environment_cmd } => match environment_cmd {
@@ -1702,18 +1693,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cmd_environment_create(&cli.server, &workspace, &project, &name).await?;
             }
             EnvironmentCommand::Get {
+                name,
                 workspace,
                 project,
-                environment,
             } => {
-                cmd_environment_get(&cli.server, &workspace, &project, &environment).await?;
+                cmd_environment_get(&cli.server, &workspace, &project, &name).await?;
             }
             EnvironmentCommand::Delete {
+                name,
                 workspace,
                 project,
-                environment,
             } => {
-                cmd_environment_delete(&cli.server, &workspace, &project, &environment).await?;
+                cmd_environment_delete(&cli.server, &workspace, &project, &name).await?;
             }
         },
         Command::Secret { secret_cmd } => match secret_cmd {
@@ -1762,8 +1753,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             InviteCommand::Create {
                 workspace,
                 expires_hours,
+                plain,
             } => {
-                cmd_invite_create(&cli.server, &workspace, expires_hours).await?;
+                cmd_invite_create(&cli.server, &workspace, expires_hours, plain).await?;
             }
             InviteCommand::List => {
                 cmd_invite_list(&cli.server).await?;
