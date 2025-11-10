@@ -9,6 +9,25 @@ use tokio::time::sleep;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Starting Zopp E2E Test\n");
 
+    // Find the binary paths (built by cargo build --bins)
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
+    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let bin_dir = PathBuf::from(&target_dir).join(&profile);
+
+    let zopp_server_bin = bin_dir.join("zopp-server");
+    let zopp_bin = bin_dir.join("zopp");
+
+    if !zopp_server_bin.exists() || !zopp_bin.exists() {
+        eprintln!("❌ Binaries not found. Please run 'cargo build --bins' first.");
+        eprintln!("   Expected: {}", zopp_server_bin.display());
+        eprintln!("   Expected: {}", zopp_bin.display());
+        return Err("Binaries not built".into());
+    }
+
+    println!("✓ Using prebuilt binaries:");
+    println!("  zopp-server: {}", zopp_server_bin.display());
+    println!("  zopp:        {}\n", zopp_bin.display());
+
     // Setup test directories
     let test_dir = PathBuf::from("/tmp/zopp-e2e-test");
     let alice_home = test_dir.join("alice");
@@ -30,22 +49,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 0: Start server
     println!("📡 Step 0: Starting server...");
     let db_path_str = db_path.to_str().unwrap();
-    println!("   DB path: {}", db_path_str);
-    println!(
-        "   Command: cargo run --bin zopp-server -- --db {} serve\n",
-        db_path_str
-    );
 
-    let mut server = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "zopp-server",
-            "--",
-            "--db",
-            db_path_str,
-            "serve",
-        ])
+    let mut server = Command::new(&zopp_server_bin)
+        .args(["--db", db_path_str, "serve"])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -71,12 +77,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 1: Admin creates server invite for Alice
     println!("🎫 Step 1: Admin creates server invite for Alice...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_server_bin)
         .args([
-            "run",
-            "--bin",
-            "zopp-server",
-            "--",
             "--db",
             db_path.to_str().unwrap(),
             "invite",
@@ -92,13 +94,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 2: Alice joins server
     println!("👩 Step 2: Alice joins server...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "join",
             &alice_server_invite,
             "alice@example.com",
@@ -118,9 +116,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 3: Alice creates workspace
     println!("🏢 Step 3: Alice creates workspace 'acme'...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args(["run", "--bin", "zopp", "--", "workspace", "create", "acme"])
+        .args(["workspace", "create", "acme"])
         .output()?;
 
     if !output.status.success() {
@@ -134,19 +132,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 4: Alice creates project
     println!("📁 Step 4: Alice creates project 'api'...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
-            "project",
-            "create",
-            "api",
-            "--workspace",
-            "acme",
-        ])
+        .args(["project", "create", "api", "--workspace", "acme"])
         .output()?;
 
     if !output.status.success() {
@@ -160,13 +148,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 5: Alice creates environment
     println!("🌍 Step 5: Alice creates environment 'production'...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "environment",
             "create",
             "production",
@@ -188,13 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 6: Alice creates workspace invite for Bob
     println!("🎟️  Step 6: Alice creates workspace invite for Bob...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "invite",
             "create",
             "--workspace",
@@ -218,13 +198,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 7: Bob joins using workspace invite
     println!("👨 Step 7: Bob joins using Alice's workspace invite...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &bob_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "join",
             &workspace_invite,
             "bob@example.com",
@@ -245,13 +221,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 8: Bob writes a secret
     println!("🔐 Step 8: Bob writes secret 'FLUXMAIL_API_TOKEN'...");
     let secret_value = "fxt_8k2m9p4x7n1q5w3e6r8t0y2u4i6o8p0a";
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &bob_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "secret",
             "set",
             "FLUXMAIL_API_TOKEN",
@@ -276,13 +248,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 9: Alice reads Bob's secret
     println!("🔓 Step 9: Alice reads Bob's secret...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "secret",
             "get",
             "FLUXMAIL_API_TOKEN",
@@ -318,13 +286,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 10: Alice writes a secret
     println!("🔐 Step 10: Alice writes secret 'PAYFLOW_MERCHANT_ID'...");
     let secret_value2 = "mch_9x8v7c6b5n4m3";
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "secret",
             "set",
             "PAYFLOW_MERCHANT_ID",
@@ -349,13 +313,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 11: Bob reads Alice's secret
     println!("🔓 Step 11: Bob reads Alice's secret...");
-    let output = Command::new("cargo")
+    let output = Command::new(&zopp_bin)
         .env("HOME", &bob_home)
         .args([
-            "run",
-            "--bin",
-            "zopp",
-            "--",
             "secret",
             "get",
             "PAYFLOW_MERCHANT_ID",
