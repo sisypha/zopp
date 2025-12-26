@@ -243,8 +243,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 8: Sync to k8s
     println!("☸️  Step 8: Syncing secrets to Kubernetes...");
+
+    // Get real HOME for kubeconfig access (kind writes to ~/.kube/config)
+    let real_home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let kubeconfig = PathBuf::from(&real_home).join(".kube/config");
+
     let output = Command::new(&zopp_bin)
-        .env("HOME", &alice_home)
+        .env("HOME", &alice_home) // For zopp config
+        .env("KUBECONFIG", &kubeconfig) // For k8s config
         .current_dir(&test_dir)
         .args([
             "sync",
@@ -295,6 +301,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
             "sync",
@@ -351,6 +358,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Testing sync without --force (should fail)...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
             "sync",
@@ -373,6 +381,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Testing sync with --force (should succeed)...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
             "sync",
