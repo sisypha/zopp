@@ -62,6 +62,33 @@ fn find_project_config() -> Option<ProjectConfig> {
     None
 }
 
+fn resolve_workspace(workspace_arg: Option<&String>) -> Result<String, Box<dyn std::error::Error>> {
+    let config = find_project_config();
+    workspace_arg
+        .cloned()
+        .or_else(|| config.as_ref().and_then(|c| c.defaults.workspace.clone()))
+        .ok_or("workspace not specified (use -w flag or set in zopp.toml)".into())
+}
+
+fn resolve_workspace_project(
+    workspace_arg: Option<&String>,
+    project_arg: Option<&String>,
+) -> Result<(String, String), Box<dyn std::error::Error>> {
+    let config = find_project_config();
+
+    let workspace = workspace_arg
+        .cloned()
+        .or_else(|| config.as_ref().and_then(|c| c.defaults.workspace.clone()))
+        .ok_or("workspace not specified (use -w flag or set in zopp.toml)")?;
+
+    let project = project_arg
+        .cloned()
+        .or_else(|| config.as_ref().and_then(|c| c.defaults.project.clone()))
+        .ok_or("project not specified (use -p flag or set in zopp.toml)")?;
+
+    Ok((workspace, project))
+}
+
 fn resolve_context(
     workspace_arg: Option<&String>,
     project_arg: Option<&String>,
@@ -243,10 +270,10 @@ enum EnvironmentCommand {
     List {
         /// Workspace name
         #[arg(long, short = 'w')]
-        workspace: String,
+        workspace: Option<String>,
         /// Project name
         #[arg(long, short = 'p')]
-        project: String,
+        project: Option<String>,
     },
     /// Create a new environment
     Create {
@@ -254,10 +281,10 @@ enum EnvironmentCommand {
         name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
-        workspace: String,
+        workspace: Option<String>,
         /// Project name
         #[arg(long, short = 'p')]
-        project: String,
+        project: Option<String>,
     },
     /// Get environment details
     Get {
@@ -265,10 +292,10 @@ enum EnvironmentCommand {
         name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
-        workspace: String,
+        workspace: Option<String>,
         /// Project name
         #[arg(long, short = 'p')]
-        project: String,
+        project: Option<String>,
     },
     /// Delete an environment
     Delete {
@@ -276,10 +303,10 @@ enum EnvironmentCommand {
         name: String,
         /// Workspace name
         #[arg(long, short = 'w')]
-        workspace: String,
+        workspace: Option<String>,
         /// Project name
         #[arg(long, short = 'p')]
-        project: String,
+        project: Option<String>,
     },
 }
 
@@ -379,7 +406,7 @@ enum InviteCommand {
     Create {
         /// Workspace name
         #[arg(long, short = 'w')]
-        workspace: String,
+        workspace: Option<String>,
         /// Hours until invite expires (default: 168 = 7 days)
         #[arg(long, default_value = "168")]
         expires_hours: i64,
@@ -2049,6 +2076,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Command::Environment { environment_cmd } => match environment_cmd {
             EnvironmentCommand::List { workspace, project } => {
+                let (workspace, project) =
+                    resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
                 cmd_environment_list(&cli.server, &workspace, &project).await?;
             }
             EnvironmentCommand::Create {
@@ -2056,6 +2085,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 project,
                 name,
             } => {
+                let (workspace, project) =
+                    resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
                 cmd_environment_create(&cli.server, &workspace, &project, &name).await?;
             }
             EnvironmentCommand::Get {
@@ -2063,6 +2094,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 workspace,
                 project,
             } => {
+                let (workspace, project) =
+                    resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
                 cmd_environment_get(&cli.server, &workspace, &project, &name).await?;
             }
             EnvironmentCommand::Delete {
@@ -2070,6 +2103,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 workspace,
                 project,
             } => {
+                let (workspace, project) =
+                    resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
                 cmd_environment_delete(&cli.server, &workspace, &project, &name).await?;
             }
         },
@@ -2163,6 +2198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 expires_hours,
                 plain,
             } => {
+                let workspace = resolve_workspace(workspace.as_ref())?;
                 cmd_invite_create(&cli.server, &workspace, expires_hours, plain).await?;
             }
             InviteCommand::List => {

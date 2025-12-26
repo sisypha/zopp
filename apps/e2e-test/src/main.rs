@@ -14,8 +14,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
     let bin_dir = PathBuf::from(&target_dir).join(&profile);
 
-    let zopp_server_bin = bin_dir.join("zopp-server");
-    let zopp_bin = bin_dir.join("zopp");
+    // Convert to absolute paths so they work when we change current_dir
+    let zopp_server_bin = std::fs::canonicalize(bin_dir.join("zopp-server"))?;
+    let zopp_bin = std::fs::canonicalize(bin_dir.join("zopp"))?;
 
     if !zopp_server_bin.exists() || !zopp_bin.exists() {
         eprintln!("❌ Binaries not found. Please run 'cargo build --bins' first.");
@@ -46,7 +47,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Bob home:   {}", bob_home.display());
     println!("  Database:   {}\n", db_path.display());
 
-    // Step 0: Start server
     println!("📡 Step 0: Starting server...");
     let db_path_str = db_path.to_str().unwrap();
 
@@ -75,7 +75,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Server failed to start".into());
     }
 
-    // Step 1: Admin creates server invite for Alice
     println!("🎫 Step 1: Admin creates server invite for Alice...");
     let output = Command::new(&zopp_server_bin)
         .args([
@@ -100,7 +99,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let alice_server_invite = String::from_utf8_lossy(&output.stdout).trim().to_string();
     println!("✓ Alice's server invite: {}\n", alice_server_invite);
 
-    // Step 2: Alice joins server
     println!("👩 Step 2: Alice joins server...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
@@ -122,7 +120,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✓ Alice joined successfully\n");
 
-    // Step 3: Alice creates workspace
     println!("🏢 Step 3: Alice creates workspace 'acme'...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
@@ -138,7 +135,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✓ Workspace 'acme' created\n");
 
-    // Step 4: Alice creates project
     println!("📁 Step 4: Alice creates project 'api'...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
@@ -154,14 +150,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✓ Project 'api' created\n");
 
-    // Step 5: Alice creates environment
-    println!("🌍 Step 5: Alice creates environment 'production'...");
+    println!("🌍 Step 5: Alice creates environment 'development'...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
         .args([
             "environment",
             "create",
-            "production",
+            "development",
             "-w",
             "acme",
             "-p",
@@ -176,21 +171,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Err("Failed to create environment".into());
     }
-    println!("✓ Environment 'production' created\n");
+    println!("✓ Environment 'development' created");
 
-    // Step 6: Alice creates workspace invite for Bob
+    let zopp_toml_path = test_dir.join("zopp.toml");
+    fs::write(
+        &zopp_toml_path,
+        "[defaults]\nworkspace = \"acme\"\nproject = \"api\"\nenvironment = \"development\"\n",
+    )?;
+    println!("✓ Created zopp.toml with defaults\n");
+
     println!("🎟️  Step 6: Alice creates workspace invite for Bob...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args([
-            "invite",
-            "create",
-            "--workspace",
-            "acme",
-            "--expires-hours",
-            "1",
-            "--plain",
-        ])
+        .current_dir(&test_dir)
+        .args(["invite", "create", "--expires-hours", "1", "--plain"])
         .output()?;
 
     if !output.status.success() {
@@ -198,13 +192,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "Invite creation failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
+        eprintln!("Stdout: {}", String::from_utf8_lossy(&output.stdout));
         return Err("Failed to create invite".into());
     }
 
     let workspace_invite = String::from_utf8_lossy(&output.stdout).trim().to_string();
     println!("✓ Workspace invite: {}\n", workspace_invite);
 
-    // Step 7: Bob joins using workspace invite
     println!("👨 Step 7: Bob joins using Alice's workspace invite...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &bob_home)
@@ -226,23 +220,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✓ Bob joined workspace 'acme'\n");
 
-    // Step 8: Bob writes a secret
     println!("🔐 Step 8: Bob writes secret 'FLUXMAIL_API_TOKEN'...");
     let secret_value = "fxt_8k2m9p4x7n1q5w3e6r8t0y2u4i6o8p0a";
     let output = Command::new(&zopp_bin)
         .env("HOME", &bob_home)
-        .args([
-            "secret",
-            "set",
-            "FLUXMAIL_API_TOKEN",
-            secret_value,
-            "--workspace",
-            "acme",
-            "--project",
-            "api",
-            "--environment",
-            "production",
-        ])
+        .current_dir(&test_dir)
+        .args(["secret", "set", "FLUXMAIL_API_TOKEN", secret_value])
         .output()?;
 
     if !output.status.success() {
@@ -254,21 +237,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✓ Secret written by Bob\n");
 
-    // Step 9: Alice reads Bob's secret
     println!("🔓 Step 9: Alice reads Bob's secret...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args([
-            "secret",
-            "get",
-            "FLUXMAIL_API_TOKEN",
-            "--workspace",
-            "acme",
-            "--project",
-            "api",
-            "--environment",
-            "production",
-        ])
+        .current_dir(&test_dir)
+        .args(["secret", "get", "FLUXMAIL_API_TOKEN"])
         .output()?;
 
     if !output.status.success() {
@@ -291,23 +264,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Secret value mismatch".into());
     }
 
-    // Step 10: Alice writes a secret
     println!("🔐 Step 10: Alice writes secret 'PAYFLOW_MERCHANT_ID'...");
     let secret_value2 = "mch_9x8v7c6b5n4m3";
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args([
-            "secret",
-            "set",
-            "PAYFLOW_MERCHANT_ID",
-            secret_value2,
-            "--workspace",
-            "acme",
-            "--project",
-            "api",
-            "--environment",
-            "production",
-        ])
+        .current_dir(&test_dir)
+        .args(["secret", "set", "PAYFLOW_MERCHANT_ID", secret_value2])
         .output()?;
 
     if !output.status.success() {
@@ -319,21 +281,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("✓ Secret written by Alice\n");
 
-    // Step 11: Bob reads Alice's secret
     println!("🔓 Step 11: Bob reads Alice's secret...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &bob_home)
-        .args([
-            "secret",
-            "get",
-            "PAYFLOW_MERCHANT_ID",
-            "--workspace",
-            "acme",
-            "--project",
-            "api",
-            "--environment",
-            "production",
-        ])
+        .current_dir(&test_dir)
+        .args(["secret", "get", "PAYFLOW_MERCHANT_ID"])
         .output()?;
 
     if !output.status.success() {
@@ -356,23 +308,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Secret value mismatch".into());
     }
 
-    // Step 12: Alice exports secrets to .env file
     println!("📤 Step 12: Alice exports secrets to .env file...");
-    let env_file = test_dir.join("production.env");
+    let env_file = test_dir.join("development.env");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
-        .args([
-            "secret",
-            "export",
-            "-w",
-            "acme",
-            "-p",
-            "api",
-            "-e",
-            "production",
-            "-o",
-            env_file.to_str().unwrap(),
-        ])
+        .current_dir(&test_dir)
+        .args(["secret", "export", "-o", env_file.to_str().unwrap()])
         .output()?;
 
     if !output.status.success() {
@@ -389,33 +330,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(env_contents.contains("FLUXMAIL_API_TOKEN="));
     assert!(env_contents.contains("PAYFLOW_MERCHANT_ID="));
 
-    // Step 13: Bob creates staging env and imports secrets
-    println!("🌍 Step 13: Bob creates staging environment...");
-    Command::new(&zopp_bin)
-        .env("HOME", &bob_home)
-        .args([
-            "environment",
-            "create",
-            "staging",
-            "-w",
-            "acme",
-            "-p",
-            "api",
-        ])
+    println!("🌍 Step 13: Alice creates production environment...");
+    let output = Command::new(&zopp_bin)
+        .env("HOME", &alice_home)
+        .current_dir(&test_dir)
+        .args(["environment", "create", "production"])
         .output()?;
 
-    println!("📥 Step 14: Bob imports secrets from .env...");
+    if !output.status.success() {
+        eprintln!(
+            "Environment creation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Err("Failed to create environment".into());
+    }
+    println!("✓ Environment 'production' created\n");
+
+    println!("📥 Step 14: Alice imports secrets to production (using -e flag override)...");
     let output = Command::new(&zopp_bin)
-        .env("HOME", &bob_home)
+        .env("HOME", &alice_home)
+        .current_dir(&test_dir)
         .args([
             "secret",
             "import",
-            "-w",
-            "acme",
-            "-p",
-            "api",
             "-e",
-            "staging",
+            "production",
             "-i",
             env_file.to_str().unwrap(),
         ])
@@ -428,23 +367,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Err("Failed to import secrets".into());
     }
-    println!("✓ Secrets imported to staging\n");
+    println!("✓ Secrets imported to production\n");
 
-    // Step 15: Verify imported secret
-    println!("🔍 Step 15: Verify imported secrets...");
+    println!("🔍 Step 15: Verify imported secret in production (using -e flag override)...");
     let output = Command::new(&zopp_bin)
-        .env("HOME", &bob_home)
-        .args([
-            "secret",
-            "get",
-            "FLUXMAIL_API_TOKEN",
-            "-w",
-            "acme",
-            "-p",
-            "api",
-            "-e",
-            "staging",
-        ])
+        .env("HOME", &alice_home)
+        .current_dir(&test_dir)
+        .args(["secret", "get", "FLUXMAIL_API_TOKEN", "-e", "production"])
         .output()?;
 
     let imported = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -458,15 +387,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
 
-    println!("🏃 Step 16: Alice injects secrets into production environment and runs command...");
+    println!("🏃 Step 16: Alice injects secrets from production and runs command (using -e override)...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .current_dir(&test_dir)
         .args([
             "run",
-            "-w",
-            "acme",
-            "-p",
-            "api",
             "-e",
             "production",
             "--",
@@ -513,11 +439,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📊 Summary:");
     println!("  ✓ Server started and stopped");
     println!("  ✓ Alice registered and created workspace");
+    println!("  ✓ Created zopp.toml with defaults (workspace/project/environment)");
     println!("  ✓ Bob registered and joined workspace via invite");
-    println!("  ✓ Bob wrote secret, Alice read it (E2E encryption)");
-    println!("  ✓ Alice wrote secret, Bob read it (E2E encryption)");
-    println!("  ✓ Secrets exported to .env and imported to new environment");
-    println!("  ✓ Secrets injected into process environment via run command");
+    println!("  ✓ Bob wrote secret, Alice read it (E2E encryption, using zopp.toml)");
+    println!("  ✓ Alice wrote secret, Bob read it (E2E encryption, using zopp.toml)");
+    println!("  ✓ Secrets exported from development (using zopp.toml defaults)");
+    println!("  ✓ Created production environment and imported secrets (using -e flag override)");
+    println!("  ✓ Secrets injected from production via run command (using -e flag override)");
     println!("  ✓ Zero-knowledge architecture verified");
 
     Ok(())
