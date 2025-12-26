@@ -3710,6 +3710,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zopp-e2e-test-k8s"
+version = "0.1.0"
+dependencies = [
+ "k8s-openapi",
+ "kube",
+ "tokio",
+]
+
+[[package]]
 name = "zopp-proto"
 version = "0.1.0"
 dependencies = [
