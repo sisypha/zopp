@@ -520,7 +520,10 @@ fn check_prerequisites() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Check if kubectl is installed
-    let output = Command::new("kubectl").arg("version").arg("--client").output();
+    let output = Command::new("kubectl")
+        .arg("version")
+        .arg("--client")
+        .output();
     if output.is_err() || !output.as_ref().unwrap().status.success() {
         return Err("kubectl is not installed. Install with: brew install kubectl".into());
     }
@@ -572,7 +575,9 @@ async fn verify_k8s_secret(
     let data = secret.data.as_ref().ok_or("No data found in Secret")?;
 
     for (key, expected_value) in expected_secrets {
-        let actual_value = data.get(*key).ok_or_else(|| format!("Key {} not found", key))?;
+        let actual_value = data
+            .get(*key)
+            .ok_or_else(|| format!("Key {} not found", key))?;
         let decoded = String::from_utf8(actual_value.0.clone())?;
 
         if decoded != *expected_value {
@@ -583,7 +588,10 @@ async fn verify_k8s_secret(
             .into());
         }
     }
-    println!("  ✓ Secret data verified ({} keys)\n", expected_secrets.len());
+    println!(
+        "  ✓ Secret data verified ({} keys)\n",
+        expected_secrets.len()
+    );
 
     Ok(())
 }

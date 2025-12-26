@@ -2107,6 +2107,7 @@ async fn cmd_invite_revoke(
 
 // ────────────────────────────────────── Sync Commands ──────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn cmd_sync_k8s(
     server: &str,
     workspace_name: &str,
@@ -2121,7 +2122,7 @@ async fn cmd_sync_k8s(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use k8s_openapi::api::core::v1::Secret;
     use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-    use kube::{api::PostParams, Api, Client, Config};
+    use kube::{Api, Client, Config, api::PostParams};
     use std::collections::BTreeMap;
 
     // 1. Fetch all secrets from zopp
@@ -2173,8 +2174,8 @@ async fn cmd_sync_k8s(
         )
         .into_bytes();
         let plaintext = zopp_crypto::decrypt(&secret.ciphertext, &nonce, &dek, &aad)?;
-        let plaintext_str = String::from_utf8(plaintext.to_vec())
-            .map_err(|_| "Secret value is not valid UTF-8")?;
+        let plaintext_str =
+            String::from_utf8(plaintext.to_vec()).map_err(|_| "Secret value is not valid UTF-8")?;
 
         // Store plaintext (k8s will base64 encode internally)
         secret_data.insert(secret.key.clone(), plaintext_str);
@@ -2240,20 +2241,14 @@ async fn cmd_sync_k8s(
     );
 
     let mut annotations = BTreeMap::new();
-    annotations.insert(
-        "zopp.io/workspace".to_string(),
-        workspace_name.to_string(),
-    );
+    annotations.insert("zopp.io/workspace".to_string(), workspace_name.to_string());
     annotations.insert("zopp.io/project".to_string(), project_name.to_string());
     annotations.insert(
         "zopp.io/environment".to_string(),
         environment_name.to_string(),
     );
     annotations.insert("zopp.io/synced-at".to_string(), synced_at.clone());
-    annotations.insert(
-        "zopp.io/synced-by".to_string(),
-        config.email.clone(),
-    );
+    annotations.insert("zopp.io/synced-by".to_string(), config.email.clone());
 
     let secret = Secret {
         metadata: ObjectMeta {
@@ -2273,7 +2268,10 @@ async fn cmd_sync_k8s(
 
         match secrets_api.get(secret_name).await {
             Ok(existing) => {
-                println!("Would UPDATE existing Secret '{}/{}':", namespace, secret_name);
+                println!(
+                    "Would UPDATE existing Secret '{}/{}':",
+                    namespace, secret_name
+                );
 
                 let existing_data = existing.data.as_ref();
                 let new_data = secret.string_data.as_ref().unwrap();
@@ -2346,6 +2344,7 @@ async fn cmd_sync_k8s(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn cmd_diff_k8s(
     server: &str,
     workspace_name: &str,
@@ -2409,8 +2408,8 @@ async fn cmd_diff_k8s(
         )
         .into_bytes();
         let plaintext = zopp_crypto::decrypt(&secret.ciphertext, &nonce, &dek, &aad)?;
-        let plaintext_str = String::from_utf8(plaintext.to_vec())
-            .map_err(|_| "Secret value is not valid UTF-8")?;
+        let plaintext_str =
+            String::from_utf8(plaintext.to_vec()).map_err(|_| "Secret value is not valid UTF-8")?;
 
         zopp_secrets.insert(secret.key.clone(), plaintext_str);
     }
@@ -2438,7 +2437,10 @@ async fn cmd_diff_k8s(
     let secrets_api: Api<Secret> = Api::namespaced(k8s_client, namespace);
 
     // 3. Compare and show diff
-    println!("Comparing zopp → k8s Secret '{}/{}':\n", namespace, secret_name);
+    println!(
+        "Comparing zopp → k8s Secret '{}/{}':\n",
+        namespace, secret_name
+    );
 
     match secrets_api.get(secret_name).await {
         Ok(existing) => {
@@ -2479,7 +2481,10 @@ async fn cmd_diff_k8s(
             }
         }
         Err(kube::Error::Api(api_err)) if api_err.code == 404 => {
-            println!("Secret does not exist in k8s. Would create with {} keys:", zopp_secrets.len());
+            println!(
+                "Secret does not exist in k8s. Would create with {} keys:",
+                zopp_secrets.len()
+            );
             for key in zopp_secrets.keys() {
                 println!("  + {}", key);
             }
