@@ -262,6 +262,49 @@ zopp secret get "PAYFLOW_MERCHANT_ID" \
 - Both can encrypt/decrypt secrets
 - **Server sees ZERO plaintext at any point**
 
+## Step 11: Exporting and Importing Secrets
+
+Alice can export all secrets in an environment to a `.env` file:
+
+```bash
+# Terminal 3 (Alice) - Export secrets to .env file
+zopp secret export \
+  --workspace acme \
+  --project api \
+  --environment production \
+  --output production.env
+
+# Output:
+# ✓ Exported 2 secrets to production.env
+
+cat production.env
+# FLUXMAIL_API_TOKEN=fxt_8k2m9p4x7n1q5w3e6r8t0y2u4i6o8p0a
+# PAYFLOW_MERCHANT_ID=mch_9x8v7c6b5n4m3
+```
+
+Bob can create a new environment and import the secrets:
+
+```bash
+# Terminal 4 (Bob) - Create staging environment
+zopp environment create staging --workspace acme --project api
+
+# Import secrets from .env file
+zopp secret import \
+  --workspace acme \
+  --project api \
+  --environment staging \
+  --input production.env
+
+# Output:
+# ✓ Imported 2 secrets
+```
+
+**What happened:**
+- Alice decrypted all production secrets and exported them as plaintext `.env` file
+- Bob imported the `.env` file, encrypting each secret with staging's DEK
+- Same secrets, different encryption keys (different environment = different DEK)
+- **Server never saw the plaintext during transfer - only encrypted blobs**
+
 ## Architecture Summary
 
 ```

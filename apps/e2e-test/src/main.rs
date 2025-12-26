@@ -356,9 +356,110 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Secret value mismatch".into());
     }
 
+    // Step 12: Alice exports secrets to .env file
+    println!("📤 Step 12: Alice exports secrets to .env file...");
+    let env_file = test_dir.join("production.env");
+    let output = Command::new(&zopp_bin)
+        .env("HOME", &alice_home)
+        .args([
+            "secret",
+            "export",
+            "-w",
+            "acme",
+            "-p",
+            "api",
+            "-e",
+            "production",
+            "-o",
+            env_file.to_str().unwrap(),
+        ])
+        .output()?;
+
+    if !output.status.success() {
+        eprintln!(
+            "Secret export failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Err("Failed to export secrets".into());
+    }
+
+    let env_contents = fs::read_to_string(&env_file)?;
+    println!("✓ Secrets exported:\n{}", env_contents);
+
+    assert!(env_contents.contains("FLUXMAIL_API_TOKEN="));
+    assert!(env_contents.contains("PAYFLOW_MERCHANT_ID="));
+
+    // Step 13: Bob creates staging env and imports secrets
+    println!("🌍 Step 13: Bob creates staging environment...");
+    Command::new(&zopp_bin)
+        .env("HOME", &bob_home)
+        .args([
+            "environment",
+            "create",
+            "staging",
+            "-w",
+            "acme",
+            "-p",
+            "api",
+        ])
+        .output()?;
+
+    println!("📥 Step 14: Bob imports secrets from .env...");
+    let output = Command::new(&zopp_bin)
+        .env("HOME", &bob_home)
+        .args([
+            "secret",
+            "import",
+            "-w",
+            "acme",
+            "-p",
+            "api",
+            "-e",
+            "staging",
+            "-i",
+            env_file.to_str().unwrap(),
+        ])
+        .output()?;
+
+    if !output.status.success() {
+        eprintln!(
+            "Secret import failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Err("Failed to import secrets".into());
+    }
+    println!("✓ Secrets imported to staging\n");
+
+    // Step 15: Verify imported secret
+    println!("🔍 Step 15: Verify imported secrets...");
+    let output = Command::new(&zopp_bin)
+        .env("HOME", &bob_home)
+        .args([
+            "secret",
+            "get",
+            "FLUXMAIL_API_TOKEN",
+            "-w",
+            "acme",
+            "-p",
+            "api",
+            "-e",
+            "staging",
+        ])
+        .output()?;
+
+    let imported = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if imported == secret_value {
+        println!("✓ Import/export roundtrip verified!\n");
+    } else {
+        return Err(format!(
+            "Imported secret mismatch: expected {}, got {}",
+            secret_value, imported
+        )
+        .into());
+    }
+
     // Cleanup
     println!("🧹 Cleaning up...");
-    // Kill server process and wait for it to exit
     let _ = server.kill();
     let _ = server.wait();
 
@@ -379,6 +480,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Bob registered and joined workspace via invite");
     println!("  ✓ Bob wrote secret, Alice read it (E2E encryption)");
     println!("  ✓ Alice wrote secret, Bob read it (E2E encryption)");
+    println!("  ✓ Secrets exported to .env and imported to new environment");
     println!("  ✓ Zero-knowledge architecture verified");
 
     Ok(())
