@@ -11,6 +11,82 @@ use zopp_proto::{
     CreateWorkspaceRequest, Empty, JoinRequest, RegisterRequest, RenamePrincipalRequest,
 };
 
+// ────────────────────────────────────── Project Config (zopp.toml) ──────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct ProjectConfig {
+    #[serde(default)]
+    defaults: ProjectDefaults,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ProjectDefaults {
+    workspace: Option<String>,
+    project: Option<String>,
+    environment: Option<String>,
+}
+
+fn find_project_config() -> Option<ProjectConfig> {
+    let mut current_dir = std::env::current_dir().ok()?;
+
+    loop {
+        // Try toml, yaml, then json
+        let candidates = [
+            ("zopp.toml", "toml"),
+            ("zopp.yaml", "yaml"),
+            ("zopp.yml", "yaml"),
+            ("zopp.json", "json"),
+        ];
+
+        for (filename, format) in candidates {
+            let config_path = current_dir.join(filename);
+            if let Ok(content) = std::fs::read_to_string(&config_path) {
+                let config_result: Result<ProjectConfig, Box<dyn std::error::Error>> = match format {
+                    "toml" => toml::from_str::<ProjectConfig>(&content).map_err(|e| e.into()),
+                    "yaml" => serde_yaml::from_str::<ProjectConfig>(&content).map_err(|e| e.into()),
+                    "json" => serde_json::from_str::<ProjectConfig>(&content).map_err(|e| e.into()),
+                    _ => continue,
+                };
+                if let Ok(config) = config_result {
+                    return Some(config);
+                }
+            }
+        }
+
+        // Move up to parent directory
+        if !current_dir.pop() {
+            break;
+        }
+    }
+
+    None
+}
+
+fn resolve_context(
+    workspace_arg: Option<&String>,
+    project_arg: Option<&String>,
+    environment_arg: Option<&String>,
+) -> Result<(String, String, String), Box<dyn std::error::Error>> {
+    let config = find_project_config();
+
+    let workspace = workspace_arg
+        .cloned()
+        .or_else(|| config.as_ref().and_then(|c| c.defaults.workspace.clone()))
+        .ok_or("workspace not specified (use -w flag or set in zopp.toml)")?;
+
+    let project = project_arg
+        .cloned()
+        .or_else(|| config.as_ref().and_then(|c| c.defaults.project.clone()))
+        .ok_or("project not specified (use -p flag or set in zopp.toml)")?;
+
+    let environment = environment_arg
+        .cloned()
+        .or_else(|| config.as_ref().and_then(|c| c.defaults.environment.clone()))
+        .ok_or("environment not specified (use -e flag or set in zopp.toml)")?;
+
+    Ok((workspace, project, environment))
+}
+
 // ────────────────────────────────────── CLI Types ──────────────────────────────────────
 
 #[derive(Parser)]
@@ -71,15 +147,15 @@ enum Command {
     },
     /// Run a command with secrets injected as environment variables
     Run {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
         /// Command and arguments to run
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
@@ -211,15 +287,15 @@ enum EnvironmentCommand {
 enum SecretCommand {
     /// Set (upsert) a secret
     Set {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
         /// Secret key
         key: String,
         /// Secret value (plaintext - will be encrypted automatically)
@@ -227,70 +303,70 @@ enum SecretCommand {
     },
     /// Get a secret
     Get {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
         /// Secret key
         key: String,
     },
     /// List all secrets in an environment
     List {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
     },
     /// Delete a secret
     Delete {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
         /// Secret key
         key: String,
     },
     /// Export secrets to .env file
     Export {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
         /// Output file (defaults to stdout)
         #[arg(long, short = 'o')]
         output: Option<String>,
     },
     /// Import secrets from .env file
     Import {
-        /// Workspace name
+        /// Workspace name (defaults from zopp.toml)
         #[arg(long, short = 'w')]
-        workspace: String,
-        /// Project name
+        workspace: Option<String>,
+        /// Project name (defaults from zopp.toml)
         #[arg(long, short = 'p')]
-        project: String,
-        /// Environment name
+        project: Option<String>,
+        /// Environment name (defaults from zopp.toml)
         #[arg(long, short = 'e')]
-        environment: String,
+        environment: Option<String>,
         /// Input file (defaults to stdin)
         #[arg(long, short = 'i')]
         input: Option<String>,
@@ -2005,6 +2081,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 key,
                 value,
             } => {
+                let (workspace, project, environment) =
+                    resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_set(
                     &cli.server,
                     &workspace,
@@ -2021,6 +2099,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 environment,
                 key,
             } => {
+                let (workspace, project, environment) =
+                    resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_get(&cli.server, &workspace, &project, &environment, &key).await?;
             }
             SecretCommand::List {
@@ -2028,6 +2108,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 project,
                 environment,
             } => {
+                let (workspace, project, environment) =
+                    resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_list(&cli.server, &workspace, &project, &environment).await?;
             }
             SecretCommand::Delete {
@@ -2036,6 +2118,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 environment,
                 key,
             } => {
+                let (workspace, project, environment) =
+                    resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_delete(&cli.server, &workspace, &project, &environment, &key).await?;
             }
             SecretCommand::Export {
@@ -2044,6 +2128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 environment,
                 output,
             } => {
+                let (workspace, project, environment) =
+                    resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_export(
                     &cli.server,
                     &workspace,
@@ -2059,6 +2145,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 environment,
                 input,
             } => {
+                let (workspace, project, environment) =
+                    resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_import(
                     &cli.server,
                     &workspace,
@@ -2090,6 +2178,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             environment,
             command,
         } => {
+            let (workspace, project, environment) =
+                resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
             cmd_secret_run(&cli.server, &workspace, &project, &environment, &command).await?;
         }
     }
