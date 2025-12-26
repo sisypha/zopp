@@ -4,7 +4,7 @@ End-to-end test that validates the complete zero-knowledge encryption flow.
 
 ## What it tests
 
-This test executes the entire workflow from DEMO.md (Steps 0-15), verifying:
+This test executes the entire workflow from [DEMO.md](../../DEMO.md), verifying:
 - Server and user setup (invites, registration, workspace creation)
 - Cross-user secret sharing with zero-knowledge encryption
 - `.env` file import/export
