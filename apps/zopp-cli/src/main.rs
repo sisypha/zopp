@@ -2241,14 +2241,14 @@ async fn cmd_sync_k8s(
     );
 
     let mut annotations = BTreeMap::new();
-    annotations.insert("zopp.io/workspace".to_string(), workspace_name.to_string());
-    annotations.insert("zopp.io/project".to_string(), project_name.to_string());
+    annotations.insert("zopp.dev/workspace".to_string(), workspace_name.to_string());
+    annotations.insert("zopp.dev/project".to_string(), project_name.to_string());
     annotations.insert(
-        "zopp.io/environment".to_string(),
+        "zopp.dev/environment".to_string(),
         environment_name.to_string(),
     );
-    annotations.insert("zopp.io/synced-at".to_string(), synced_at.clone());
-    annotations.insert("zopp.io/synced-by".to_string(), config.email.clone());
+    annotations.insert("zopp.dev/synced-at".to_string(), synced_at.clone());
+    annotations.insert("zopp.dev/synced-by".to_string(), config.email.clone());
 
     let secret = Secret {
         metadata: ObjectMeta {

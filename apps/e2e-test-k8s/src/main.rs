@@ -563,9 +563,9 @@ async fn verify_k8s_secret(
         .annotations
         .as_ref()
         .ok_or("No annotations found")?;
-    if !annotations.contains_key("zopp.io/workspace")
-        || !annotations.contains_key("zopp.io/project")
-        || !annotations.contains_key("zopp.io/environment")
+    if !annotations.contains_key("zopp.dev/workspace")
+        || !annotations.contains_key("zopp.dev/project")
+        || !annotations.contains_key("zopp.dev/environment")
     {
         return Err("Missing zopp annotations".into());
     }

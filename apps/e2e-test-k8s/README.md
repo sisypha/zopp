@@ -57,7 +57,7 @@ cargo run --bin zopp-e2e-test-k8s
 ✅ `zopp sync k8s` syncs secrets to Kubernetes Secret
 ✅ Kubernetes Secret contains correct data
 ✅ Metadata labels (`app.kubernetes.io/managed-by: zopp`)
-✅ Metadata annotations (`zopp.io/workspace`, `zopp.io/project`, `zopp.io/environment`)
+✅ Metadata annotations (`zopp.dev/workspace`, `zopp.dev/project`, `zopp.dev/environment`)
 ✅ Secret updates propagate on re-sync
 ✅ Ownership validation (sync fails without --force on non-zopp Secret)
 ✅ `--force` flag takes ownership of existing Secrets
