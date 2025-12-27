@@ -1,0 +1,146 @@
+use crate::config::{CliConfig, PrincipalConfig, save_config};
+use crate::grpc::connect;
+use ed25519_dalek::SigningKey;
+use zopp_proto::JoinRequest;
+
+pub async fn cmd_join(
+    server: &str,
+    invite_code: &str,
+    email: &str,
+    principal_name: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Use provided principal name or default to hostname
+    let principal_name = match principal_name {
+        Some(name) => name.to_string(),
+        None => hostname::get()?.to_string_lossy().to_string(),
+    };
+
+    let signing_key = SigningKey::generate(&mut rand_core::OsRng);
+    let verifying_key = signing_key.verifying_key();
+    let public_key = verifying_key.to_bytes().to_vec();
+
+    let x25519_keypair = zopp_crypto::Keypair::generate();
+    let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
+
+    let mut client = connect(server).await?;
+
+    let is_workspace_invite = invite_code.starts_with("inv_");
+
+    let (ephemeral_pub, kek_wrapped, kek_nonce) = if is_workspace_invite {
+        let secret_hex = invite_code
+            .strip_prefix("inv_")
+            .ok_or("Invalid invite code format")?;
+        let invite_secret = hex::decode(secret_hex)?;
+        if invite_secret.len() != 32 {
+            return Err("Invalid invite code length".into());
+        }
+        let mut secret_array = [0u8; 32];
+        secret_array.copy_from_slice(&invite_secret);
+
+        let secret_hash = zopp_crypto::hash_sha256(&secret_array);
+        let secret_hash_hex = hex::encode(secret_hash);
+
+        let invite = client
+            .get_invite(zopp_proto::GetInviteRequest {
+                token: secret_hash_hex,
+            })
+            .await?
+            .into_inner();
+
+        if invite.kek_encrypted.is_empty() {
+            return Err("Invalid workspace invite (no encrypted KEK)".into());
+        }
+
+        let dek_for_decryption = zopp_crypto::Dek::from_bytes(&secret_array)?;
+
+        let workspace_id = invite
+            .workspace_ids
+            .first()
+            .ok_or("Invite has no workspace IDs")?;
+
+        let aad = format!("invite:workspace:{}", workspace_id).into_bytes();
+
+        let mut nonce_array = [0u8; 24];
+        nonce_array.copy_from_slice(&invite.kek_nonce);
+        let nonce = zopp_crypto::Nonce(nonce_array);
+
+        let kek_decrypted =
+            zopp_crypto::decrypt(&invite.kek_encrypted, &nonce, &dek_for_decryption, &aad)?;
+        let ephemeral_keypair = zopp_crypto::Keypair::generate();
+        let my_public = zopp_crypto::public_key_from_bytes(&x25519_keypair.public_key_bytes())?;
+        let shared_secret = ephemeral_keypair.shared_secret(&my_public);
+
+        let wrap_aad = format!("workspace:{}", workspace_id).into_bytes();
+        let (wrap_nonce, wrapped) =
+            zopp_crypto::wrap_key(&kek_decrypted, &shared_secret, &wrap_aad)?;
+
+        (
+            ephemeral_keypair.public_key_bytes().to_vec(),
+            wrapped.0,
+            wrap_nonce.0.to_vec(),
+        )
+    } else {
+        (vec![], vec![], vec![])
+    };
+
+    let server_token = if is_workspace_invite {
+        let secret_hex = invite_code.strip_prefix("inv_").unwrap();
+        let invite_secret = hex::decode(secret_hex)?;
+        let mut secret_array = [0u8; 32];
+        secret_array.copy_from_slice(&invite_secret);
+        let secret_hash = zopp_crypto::hash_sha256(&secret_array);
+        hex::encode(secret_hash)
+    } else {
+        invite_code.to_string()
+    };
+
+    let response = client
+        .join(JoinRequest {
+            invite_token: server_token,
+            email: email.to_string(),
+            principal_name: principal_name.clone(),
+            public_key,
+            x25519_public_key: x25519_public_bytes,
+            ephemeral_pub,
+            kek_wrapped,
+            kek_nonce,
+        })
+        .await?
+        .into_inner();
+
+    println!("✓ Joined successfully!\n");
+    println!("User ID:      {}", response.user_id);
+    println!("Principal ID: {}", response.principal_id);
+    println!("Principal:    {}", principal_name);
+    println!("\nWorkspaces:");
+    for ws in &response.workspaces {
+        println!("  - {} ({})", ws.name, ws.id);
+    }
+
+    // Save config
+    let config = CliConfig {
+        user_id: response.user_id,
+        email: email.to_string(),
+        principals: vec![PrincipalConfig {
+            id: response.principal_id,
+            name: principal_name.clone(),
+            private_key: hex::encode(signing_key.to_bytes()),
+            public_key: hex::encode(verifying_key.to_bytes()),
+            x25519_private_key: Some(hex::encode(x25519_keypair.secret_key_bytes())),
+            x25519_public_key: Some(hex::encode(x25519_keypair.public_key_bytes())),
+        }],
+        current_principal: Some(principal_name),
+    };
+    save_config(&config)?;
+
+    println!(
+        "\nConfig saved to: {}",
+        dirs::home_dir()
+            .expect("Failed to get home directory")
+            .join(".zopp")
+            .join("config.json")
+            .display()
+    );
+
+    Ok(())
+}
