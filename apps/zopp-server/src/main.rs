@@ -1116,10 +1116,12 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        self.store
+        let _new_version = self.store
             .upsert_secret(&env.id, &req.key, &req.nonce, &req.ciphertext)
             .await
             .map_err(|e| Status::internal(format!("Failed to upsert secret: {}", e)))?;
+
+        // TODO: Broadcast SecretChangeEvent to watchers with new_version
 
         Ok(Response::new(Empty {}))
     }
@@ -1302,13 +1304,15 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
-        self.store
+        let _new_version = self.store
             .delete_secret(&env.id, &req.key)
             .await
             .map_err(|e| match e {
                 zopp_storage::StoreError::NotFound => Status::not_found("Secret not found"),
                 _ => Status::internal(format!("Failed to delete secret: {}", e)),
             })?;
+
+        // TODO: Broadcast SecretChangeEvent to watchers with new_version
 
         Ok(Response::new(Empty {}))
     }

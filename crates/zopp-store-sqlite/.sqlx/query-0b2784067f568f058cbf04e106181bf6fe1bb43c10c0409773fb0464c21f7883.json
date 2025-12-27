@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, project_id, name, dek_wrapped, dek_nonce,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM environments WHERE id = ?",
+  "query": "SELECT id, project_id, name, dek_wrapped, dek_nonce, version,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM environments WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -29,13 +29,18 @@
         "type_info": "Blob"
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "version",
         "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 6,
         "type_info": "Text"
       },
       {
         "name": "updated_at: DateTime<Utc>",
-        "ordinal": 6,
+        "ordinal": 7,
         "type_info": "Text"
       }
     ],
@@ -49,8 +54,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "af63c9ba65ec14adc4afcc8340000de3478f2568d58691f56141919a4d65ca43"
+  "hash": "0b2784067f568f058cbf04e106181bf6fe1bb43c10c0409773fb0464c21f7883"
 }

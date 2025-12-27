@@ -40,6 +40,9 @@ service ZoppService {
   rpc GetSecret(GetSecretRequest) returns (Secret);
   rpc ListSecrets(ListSecretsRequest) returns (SecretList);
   rpc DeleteSecret(DeleteSecretRequest) returns (Empty);
+
+  // Watch (streaming)
+  rpc WatchSecrets(WatchSecretsRequest) returns (stream WatchSecretsResponse);
 }
 
 message Empty {}
@@ -278,4 +281,35 @@ message Secret {
 
 message SecretList {
   repeated Secret secrets = 1;
+}
+
+// Watch messages
+message WatchSecretsRequest {
+  string workspace_name = 1;
+  string project_name = 2;
+  string environment_name = 3;
+  optional int64 since_version = 4;  // Client's last known version
+}
+
+message WatchSecretsResponse {
+  oneof response {
+    ResyncRequired resync = 1;      // Client is behind, needs full resync
+    SecretChangeEvent event = 2;    // Real-time secret change event
+  }
+}
+
+message ResyncRequired {
+  int64 current_version = 1;         // Server's current version
+}
+
+message SecretChangeEvent {
+  enum EventType {
+    CREATED = 0;
+    UPDATED = 1;
+    DELETED = 2;
+  }
+  EventType event_type = 1;
+  string key = 2;                    // Secret key (for informational/logging purposes)
+  int64 version = 3;                 // New version after this change
+  int64 timestamp = 4;               // Unix timestamp
 }
