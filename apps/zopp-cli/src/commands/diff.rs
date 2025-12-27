@@ -1,10 +1,7 @@
 use crate::config::{get_current_principal, load_config};
-use crate::crypto::{unwrap_environment_dek, unwrap_workspace_kek};
-use crate::grpc::sign_request;
+use crate::crypto::fetch_and_decrypt_secrets;
 use k8s_openapi::api::core::v1::Secret;
 use kube::{Api, Client, Config};
-use std::collections::BTreeMap;
-use tonic::metadata::MetadataValue;
 use zopp_proto::zopp_service_client::ZoppServiceClient;
 
 #[allow(clippy::too_many_arguments)]
@@ -23,55 +20,14 @@ pub async fn cmd_diff_k8s(
     let principal = get_current_principal(&config)?;
     let mut client = ZoppServiceClient::connect(server.to_string()).await?;
 
-    // Unwrap KEK and DEK
-    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
-    let dek_bytes = unwrap_environment_dek(
+    let zopp_secrets = fetch_and_decrypt_secrets(
         &mut client,
         principal,
         workspace_name,
         project_name,
         environment_name,
-        &kek,
     )
     .await?;
-    let dek = zopp_crypto::Dek::from_bytes(&dek_bytes)?;
-
-    // List all secrets
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
-    let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
-        workspace_name: workspace_name.to_string(),
-        project_name: project_name.to_string(),
-        environment_name: environment_name.to_string(),
-    });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
-    let secrets_response = client.list_secrets(request).await?.into_inner();
-
-    // Decrypt all secrets into a map
-    let mut zopp_secrets = BTreeMap::new();
-    for secret in secrets_response.secrets {
-        let mut nonce_array = [0u8; 24];
-        nonce_array.copy_from_slice(&secret.nonce);
-        let nonce = zopp_crypto::Nonce(nonce_array);
-        let aad = format!(
-            "secret:{}:{}:{}:{}",
-            workspace_name, project_name, environment_name, secret.key
-        )
-        .into_bytes();
-        let plaintext = zopp_crypto::decrypt(&secret.ciphertext, &nonce, &dek, &aad)?;
-        let plaintext_str =
-            String::from_utf8(plaintext.to_vec()).map_err(|_| "Secret value is not valid UTF-8")?;
-
-        zopp_secrets.insert(secret.key.clone(), plaintext_str);
-    }
 
     // 2. Connect to Kubernetes and fetch existing Secret
     let k8s_config = if kubeconfig_path.is_some() {

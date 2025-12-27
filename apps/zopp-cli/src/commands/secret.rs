@@ -1,5 +1,5 @@
 use crate::config::{get_current_principal, load_config};
-use crate::crypto::{unwrap_environment_dek, unwrap_workspace_kek};
+use crate::crypto::{fetch_and_decrypt_secrets, unwrap_environment_dek, unwrap_workspace_kek};
 use crate::grpc::sign_request;
 use tonic::metadata::MetadataValue;
 use zopp_proto::zopp_service_client::ZoppServiceClient;
@@ -228,87 +228,22 @@ pub async fn cmd_secret_export(
 
     let mut client = ZoppServiceClient::connect(server.to_string()).await?;
 
-    // List all secrets
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
-    let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
-        workspace_name: workspace_name.to_string(),
-        project_name: project_name.to_string(),
-        environment_name: environment_name.to_string(),
-    });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
-
-    let response = client.list_secrets(request).await?.into_inner();
-
-    if response.secrets.is_empty() {
-        return Err("No secrets to export".into());
-    }
-
-    // Unwrap KEK and DEK once for all secrets
-    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
-    let dek = unwrap_environment_dek(
+    // Fetch and decrypt all secrets
+    let secret_data = fetch_and_decrypt_secrets(
         &mut client,
         principal,
         workspace_name,
         project_name,
         environment_name,
-        &kek,
     )
     .await?;
-    let dek_key = zopp_crypto::Dek::from_bytes(&dek)?;
 
-    // Get and decrypt all secrets
-    let mut secrets = Vec::new();
-    for secret in response.secrets {
-        let (timestamp, signature) = sign_request(&principal.private_key)?;
-        let mut request = tonic::Request::new(zopp_proto::GetSecretRequest {
-            workspace_name: workspace_name.to_string(),
-            project_name: project_name.to_string(),
-            environment_name: environment_name.to_string(),
-            key: secret.key.clone(),
-        });
-        request
-            .metadata_mut()
-            .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-        request
-            .metadata_mut()
-            .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-        request.metadata_mut().insert(
-            "signature",
-            MetadataValue::try_from(hex::encode(&signature))?,
-        );
-
-        let response = client.get_secret(request).await?.into_inner();
-
-        let aad = format!(
-            "secret:{}:{}:{}:{}",
-            workspace_name, project_name, environment_name, secret.key
-        )
-        .into_bytes();
-
-        let mut nonce_array = [0u8; 24];
-        nonce_array.copy_from_slice(&response.nonce);
-        let nonce = zopp_crypto::Nonce(nonce_array);
-
-        let plaintext = zopp_crypto::decrypt(&response.ciphertext, &nonce, &dek_key, &aad)?;
-        let value = String::from_utf8(plaintext.to_vec())?;
-
-        secrets.push((secret.key, value));
+    if secret_data.is_empty() {
+        return Err("No secrets to export".into());
     }
 
-    // Sort by key
-    secrets.sort_by(|a, b| a.0.cmp(&b.0));
-
-    // Format as .env
-    let env_content = secrets
+    // Format as .env (BTreeMap is already sorted)
+    let env_content = secret_data
         .iter()
         .map(|(k, v)| format!("{}={}", k, v))
         .collect::<Vec<_>>()
@@ -317,7 +252,7 @@ pub async fn cmd_secret_export(
     // Write to file or stdout
     if let Some(path) = output {
         std::fs::write(path, env_content)?;
-        println!("✓ Exported {} secrets to {}", secrets.len(), path);
+        println!("✓ Exported {} secrets to {}", secret_data.len(), path);
     } else {
         println!("{}", env_content);
     }
@@ -430,63 +365,15 @@ pub async fn cmd_secret_run(
     let principal = get_current_principal(&config)?;
     let mut client = ZoppServiceClient::connect(server.to_string()).await?;
 
-    // Unwrap KEK and DEK
-    let kek = unwrap_workspace_kek(&mut client, principal, workspace_name).await?;
-    let dek = unwrap_environment_dek(
+    // Fetch and decrypt all secrets
+    let env_vars = fetch_and_decrypt_secrets(
         &mut client,
         principal,
         workspace_name,
         project_name,
         environment_name,
-        &kek,
     )
     .await?;
-
-    // List all secrets
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
-    let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
-        workspace_name: workspace_name.to_string(),
-        project_name: project_name.to_string(),
-        environment_name: environment_name.to_string(),
-    });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
-
-    let response = client.list_secrets(request).await?;
-    let secrets = response.into_inner().secrets;
-
-    // Decrypt all secrets
-    let dek_key = zopp_crypto::Dek::from_bytes(&dek)?;
-    let mut env_vars = std::collections::HashMap::new();
-
-    for secret in secrets {
-        let aad = format!(
-            "secret:{}:{}:{}:{}",
-            workspace_name, project_name, environment_name, secret.key
-        )
-        .into_bytes();
-
-        let nonce = zopp_crypto::Nonce(
-            secret
-                .nonce
-                .as_slice()
-                .try_into()
-                .map_err(|_| "Invalid nonce length")?,
-        );
-
-        let plaintext = zopp_crypto::decrypt(&secret.ciphertext, &nonce, &dek_key, &aad)?;
-        let value = String::from_utf8(plaintext.to_vec())?;
-
-        env_vars.insert(secret.key, value);
-    }
 
     // Execute command with injected environment variables
     let status = std::process::Command::new(&command[0])
