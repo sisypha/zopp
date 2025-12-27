@@ -206,6 +206,7 @@ pub struct Environment {
     pub name: String,
     pub dek_wrapped: Vec<u8>,
     pub dek_nonce: Vec<u8>,
+    pub version: i64, // Monotonic version counter for change tracking
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -374,13 +375,14 @@ pub trait Store {
     // ────────────────────────────────────── Secrets ───────────────────────────────────────
 
     /// Upsert a secret value (AEAD ciphertext + nonce) in an environment.
+    /// Returns the new environment version after the update.
     async fn upsert_secret(
         &self,
         env_id: &EnvironmentId,
         key: &str,
         nonce: &[u8],      // per-value 24B nonce
         ciphertext: &[u8], // AEAD ciphertext under DEK
-    ) -> Result<(), StoreError>;
+    ) -> Result<i64, StoreError>;
 
     /// Fetch a secret row (nonce + ciphertext).
     async fn get_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<SecretRow, StoreError>;
@@ -389,7 +391,8 @@ pub trait Store {
     async fn list_secret_keys(&self, env_id: &EnvironmentId) -> Result<Vec<String>, StoreError>;
 
     /// Delete a secret from an environment.
-    async fn delete_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<(), StoreError>;
+    /// Returns the new environment version after the deletion.
+    async fn delete_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<i64, StoreError>;
 
     /// Fetch the (wrapped_dek, dek_nonce) pair for an environment so core can unwrap it (legacy name-based).
     async fn get_env_wrap(
@@ -624,8 +627,8 @@ mod tests {
             _key: &str,
             _nonce: &[u8],
             _ciphertext: &[u8],
-        ) -> Result<(), StoreError> {
-            Ok(())
+        ) -> Result<i64, StoreError> {
+            Ok(1)
         }
 
         async fn get_secret(
@@ -647,8 +650,8 @@ mod tests {
             &self,
             _env_id: &EnvironmentId,
             _key: &str,
-        ) -> Result<(), StoreError> {
-            Ok(())
+        ) -> Result<i64, StoreError> {
+            Ok(1)
         }
     }
 

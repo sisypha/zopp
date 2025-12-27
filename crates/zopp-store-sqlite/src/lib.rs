@@ -1014,7 +1014,7 @@ impl Store for SqliteStore {
         let proj_id_str = project_id.0.to_string();
 
         let rows = sqlx::query!(
-            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce,
+            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce, version,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM environments WHERE project_id = ? ORDER BY created_at DESC"#,
@@ -1038,6 +1038,7 @@ impl Store for SqliteStore {
                     name: row.name,
                     dek_wrapped: row.dek_wrapped,
                     dek_nonce: row.dek_nonce,
+                    version: row.version,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                 })
@@ -1051,7 +1052,7 @@ impl Store for SqliteStore {
         let env_id_str = env_id.0.to_string();
 
         let row = sqlx::query!(
-            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce,
+            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce, version,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM environments WHERE id = ?"#,
@@ -1072,6 +1073,7 @@ impl Store for SqliteStore {
             name: row.name,
             dek_wrapped: row.dek_wrapped,
             dek_nonce: row.dek_nonce,
+            version: row.version,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -1085,7 +1087,7 @@ impl Store for SqliteStore {
         let proj_id_str = project_id.0.to_string();
 
         let row = sqlx::query!(
-            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce,
+            r#"SELECT id, project_id, name, dek_wrapped, dek_nonce, version,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM environments WHERE project_id = ? AND name = ?"#,
@@ -1107,6 +1109,7 @@ impl Store for SqliteStore {
             name: row.name,
             dek_wrapped: row.dek_wrapped,
             dek_nonce: row.dek_nonce,
+            version: row.version,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -1165,15 +1168,21 @@ impl Store for SqliteStore {
         key: &str,
         nonce: &[u8],
         ciphertext: &[u8],
-    ) -> Result<(), StoreError> {
+    ) -> Result<i64, StoreError> {
         let env_id_str = env_id.0.to_string();
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         // Get environment to determine workspace_id
         let env_row = sqlx::query!(
             "SELECT workspace_id FROM environments WHERE id = ?",
             env_id_str
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?
         .ok_or(StoreError::NotFound)?;
@@ -1181,6 +1190,7 @@ impl Store for SqliteStore {
         let ws_id = env_row.workspace_id;
         let secret_id = Uuid::now_v7().to_string();
 
+        // Insert/update the secret
         sqlx::query!(
             "INSERT INTO secrets(id, workspace_id, env_id, key_name, nonce, ciphertext)
              VALUES(?, ?, ?, ?, ?, ?)
@@ -1193,11 +1203,24 @@ impl Store for SqliteStore {
             nonce,
             ciphertext
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(())
+        // Increment environment version
+        let result = sqlx::query!(
+            "UPDATE environments SET version = version + 1 WHERE id = ? RETURNING version",
+            env_id_str
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(result.version)
     }
 
     async fn get_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<SecretRow, StoreError> {
@@ -1235,15 +1258,21 @@ impl Store for SqliteStore {
         Ok(rows.into_iter().map(|row| row.key_name).collect())
     }
 
-    async fn delete_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<(), StoreError> {
+    async fn delete_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<i64, StoreError> {
         let env_id_str = env_id.0.to_string();
+
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         let result = sqlx::query!(
             "DELETE FROM secrets WHERE env_id = ? AND key_name = ?",
             env_id_str,
             key
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
@@ -1251,7 +1280,20 @@ impl Store for SqliteStore {
             return Err(StoreError::NotFound);
         }
 
-        Ok(())
+        // Increment environment version
+        let version_result = sqlx::query!(
+            "UPDATE environments SET version = version + 1 WHERE id = ? RETURNING version",
+            env_id_str
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(version_result.version)
     }
 }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, project_id, name, dek_wrapped, dek_nonce,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM environments WHERE project_id = ? ORDER BY created_at DESC",
+  "query": "SELECT id, project_id, name, dek_wrapped, dek_nonce, version,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM environments WHERE project_id = ? AND name = ?",
   "describe": {
     "columns": [
       {
@@ -29,20 +29,26 @@
         "type_info": "Blob"
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "version",
         "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 6,
         "type_info": "Text"
       },
       {
         "name": "updated_at: DateTime<Utc>",
-        "ordinal": 6,
+        "ordinal": 7,
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -52,5 +58,5 @@
       false
     ]
   },
-  "hash": "43248b55c9b9a07d347be0b65ae450c420cc850d3ebcf0a0d2117cc99a7d02b8"
+  "hash": "470e4d24c88e0ac1895b6924226d5a538715786d0e20d202264b9c836b9c5977"
 }
