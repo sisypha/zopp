@@ -21,8 +21,16 @@ async fn cli_e2e_test() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| workspace_root.join("target").to_str().unwrap().to_string());
     let bin_dir = PathBuf::from(&target_dir).join("debug");
 
-    let zopp_server_bin = bin_dir.join("zopp-server");
-    let zopp_bin = bin_dir.join("zopp");
+    let zopp_server_bin = if cfg!(windows) {
+        bin_dir.join("zopp-server.exe")
+    } else {
+        bin_dir.join("zopp-server")
+    };
+    let zopp_bin = if cfg!(windows) {
+        bin_dir.join("zopp.exe")
+    } else {
+        bin_dir.join("zopp")
+    };
 
     if !zopp_server_bin.exists() || !zopp_bin.exists() {
         eprintln!("❌ Binaries not found. Please run 'cargo build --bins' first.");
