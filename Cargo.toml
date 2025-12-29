@@ -1,8 +1,9 @@
 [workspace]
 members = [
-    "apps/e2e-test-k8s",
     "apps/zopp-cli",
+    "apps/zopp-operator",
     "apps/zopp-server",
+    "crates/zopp-config",
     "crates/zopp-crypto",
     "crates/zopp-events",
     "crates/zopp-events-memory",
@@ -13,6 +14,9 @@ members = [
 ]
 
 resolver = "2"
+
+[workspace.package]
+rust-version = "1.65"
 
 [workspace.dependencies]
 argon2 = "0.5.3"

@@ -5,21 +5,35 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::time::sleep;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Starting Zopp K8s Sync E2E Test\n");
 
     // Check prerequisites
     check_prerequisites()?;
 
-    // Find the binary paths (built by cargo build --bins)
-    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
-    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
-    let bin_dir = PathBuf::from(&target_dir).join(&profile);
+    // Find the binary paths
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
 
-    // Convert to absolute paths so they work when we change current_dir
-    let zopp_server_bin = std::fs::canonicalize(bin_dir.join("zopp-server"))?;
-    let zopp_bin = std::fs::canonicalize(bin_dir.join("zopp"))?;
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .unwrap_or_else(|_| workspace_root.join("target").to_str().unwrap().to_string());
+    let bin_dir = PathBuf::from(&target_dir).join("debug");
+
+    let zopp_server_bin = if cfg!(windows) {
+        bin_dir.join("zopp-server.exe")
+    } else {
+        bin_dir.join("zopp-server")
+    };
+    let zopp_bin = if cfg!(windows) {
+        bin_dir.join("zopp.exe")
+    } else {
+        bin_dir.join("zopp")
+    };
 
     if !zopp_server_bin.exists() || !zopp_bin.exists() {
         eprintln!("❌ Binaries not found. Please run 'cargo build --bins' first.");

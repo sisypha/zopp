@@ -76,9 +76,6 @@ impl Store for SqliteStore {
         &self,
         params: &CreateUserParams,
     ) -> Result<(UserId, Option<PrincipalId>), StoreError> {
-        let user_id = Uuid::now_v7();
-        let user_id_str = user_id.to_string();
-
         // Use transaction if we need to create principal or add to workspaces
         let needs_tx = params.principal.is_some() || !params.workspace_ids.is_empty();
 
@@ -89,32 +86,48 @@ impl Store for SqliteStore {
                 .await
                 .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-            // Create user
-            sqlx::query!(
-                "INSERT INTO users(id, email) VALUES(?, ?)",
-                user_id_str,
-                params.email
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| {
-                let s = e.to_string();
-                if s.contains("UNIQUE") {
-                    StoreError::AlreadyExists
-                } else {
-                    StoreError::Backend(s)
-                }
-            })?;
+            // Get existing user or create new one
+            let user_id = Uuid::now_v7();
+            let user_id_str = user_id.to_string();
+
+            // First try to get existing user
+            let existing_user = sqlx::query!("SELECT id FROM users WHERE email = ?", params.email)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+            let actual_user_id_str = if let Some(existing) = existing_user {
+                // User already exists, use their ID
+                existing.id
+            } else {
+                // Create new user
+                sqlx::query!(
+                    "INSERT INTO users(id, email) VALUES(?, ?)",
+                    user_id_str,
+                    params.email
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+                user_id_str
+            };
 
             // Create principal if provided
             let principal_id = if let Some(principal_data) = &params.principal {
                 let principal_id = Uuid::now_v7();
                 let principal_id_str = principal_id.to_string();
 
+                // Service principals have NULL user_id
+                let user_id_for_principal = if principal_data.is_service {
+                    None
+                } else {
+                    Some(actual_user_id_str.clone())
+                };
+
                 sqlx::query!(
                     "INSERT INTO principals(id, user_id, name, public_key, x25519_public_key) VALUES(?, ?, ?, ?, ?)",
                     principal_id_str,
-                    user_id_str,
+                    user_id_for_principal,
                     principal_data.name,
                     principal_data.public_key,
                     principal_data.x25519_public_key
@@ -134,7 +147,7 @@ impl Store for SqliteStore {
                 sqlx::query!(
                     "INSERT INTO workspace_members(workspace_id, user_id) VALUES(?, ?)",
                     ws_id,
-                    user_id_str
+                    actual_user_id_str
                 )
                 .execute(&mut *tx)
                 .await
@@ -145,9 +158,16 @@ impl Store for SqliteStore {
                 .await
                 .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-            Ok((UserId(user_id), principal_id))
+            // Parse the actual user_id
+            let actual_user_id = Uuid::parse_str(&actual_user_id_str)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+            Ok((UserId(actual_user_id), principal_id))
         } else {
             // Simple case: just create user
+            let user_id = Uuid::now_v7();
+            let user_id_str = user_id.to_string();
+
             sqlx::query!(
                 "INSERT INTO users(id, email) VALUES(?, ?)",
                 user_id_str,
@@ -667,6 +687,49 @@ impl Store for SqliteStore {
             name,
             user_id_str,
             user_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => {
+                let id =
+                    Uuid::try_parse(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?;
+                let owner_user_id = Uuid::try_parse(&row.owner_user_id)
+                    .map_err(|e| StoreError::Backend(e.to_string()))?;
+                Ok(Workspace {
+                    id: WorkspaceId(id),
+                    name: row.name,
+                    owner_user_id: UserId(owner_user_id),
+                    kdf_salt: row.kdf_salt,
+                    m_cost_kib: row.kdf_m_cost_kib as u32,
+                    t_cost: row.kdf_t_cost as u32,
+                    p_cost: row.kdf_p_cost as u32,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                })
+            }
+        }
+    }
+
+    async fn get_workspace_by_name_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+        name: &str,
+    ) -> Result<Workspace, StoreError> {
+        let principal_id_str = principal_id.0.to_string();
+        let row = sqlx::query!(
+            r#"SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,
+               w.created_at as "created_at: DateTime<Utc>",
+               w.updated_at as "updated_at: DateTime<Utc>"
+               FROM workspaces w
+               INNER JOIN workspace_principals wp ON w.id = wp.workspace_id
+               WHERE w.name = ? AND wp.principal_id = ?
+               LIMIT 1"#,
+            name,
+            principal_id_str
         )
         .fetch_optional(&self.pool)
         .await

@@ -6,7 +6,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::test]
-async fn cli_e2e_test() -> Result<(), Box<dyn std::error::Error>> {
+async fn demo() -> Result<(), Box<dyn std::error::Error>> {
     println!("🧪 Starting Zopp E2E Test\n");
 
     // Find the binary paths
