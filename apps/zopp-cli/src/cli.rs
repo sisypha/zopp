@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[command(about = "Zopp secrets management CLI")]
 pub struct Cli {
     /// Server address
-    #[arg(long, env = "ZOPP_SERVER", default_value = "http://0.0.0.0:50051")]
+    #[arg(long, env = "ZOPP_SERVER", default_value = "http://127.0.0.1:50051")]
     pub server: String,
 
     #[command(subcommand)]
