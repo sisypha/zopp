@@ -33,6 +33,7 @@ pub async fn cmd_principal_current() -> Result<(), Box<dyn std::error::Error>> {
 pub async fn cmd_principal_create(
     server: &str,
     name: &str,
+    is_service: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut config = load_config()?;
 
@@ -56,6 +57,7 @@ pub async fn cmd_principal_create(
         principal_name: name.to_string(),
         public_key,
         x25519_public_key: x25519_public_bytes,
+        is_service,
     });
     request
         .metadata_mut()

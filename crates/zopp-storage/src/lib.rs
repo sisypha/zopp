@@ -68,6 +68,7 @@ pub struct CreatePrincipalData {
     pub name: String,
     pub public_key: Vec<u8>,                // Ed25519 for authentication
     pub x25519_public_key: Option<Vec<u8>>, // X25519 for encryption (ECDH)
+    pub is_service: bool,                   // Service principal (user_id will be NULL)
 }
 
 /// Parameters for creating a principal
@@ -301,6 +302,13 @@ pub trait Store {
         name: &str,
     ) -> Result<Workspace, StoreError>;
 
+    /// Get workspace by name for a principal (principal must have access).
+    async fn get_workspace_by_name_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+        name: &str,
+    ) -> Result<Workspace, StoreError>;
+
     /// Add a principal to a workspace with wrapped KEK.
     async fn add_workspace_principal(
         &self,
@@ -517,6 +525,14 @@ mod tests {
         async fn get_workspace_by_name(
             &self,
             _user_id: &UserId,
+            _name: &str,
+        ) -> Result<Workspace, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn get_workspace_by_name_for_principal(
+            &self,
+            _principal_id: &PrincipalId,
             _name: &str,
         ) -> Result<Workspace, StoreError> {
             Err(StoreError::NotFound)

@@ -1,0 +1,34 @@
+[package]
+name = "zopp-operator"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "zopp-operator"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["macros", "signal", "fs"] }
+kube = { workspace = true, features = ["runtime"] }
+k8s-openapi = { workspace = true }
+futures = "0.3"
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tonic = { workspace = true }
+prost = { workspace = true }
+zopp-proto = { path = "../../crates/zopp-proto" }
+zopp-crypto = { path = "../../crates/zopp-crypto" }
+zopp-config = { path = "../../crates/zopp-config" }
+chrono = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
+ed25519-dalek = { workspace = true }
+hex = { workspace = true }
+dirs = { workspace = true }
+clap = { workspace = true }
+base64 = { workspace = true }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+[dev-dependencies]
+zopp-config = { path = "../../crates/zopp-config" }

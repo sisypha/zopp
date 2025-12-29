@@ -105,6 +105,9 @@ pub enum PrincipalCommand {
     Create {
         /// Principal name
         name: String,
+        /// Create as service principal (no user association)
+        #[arg(long)]
+        service: bool,
     },
     /// Switch to a different principal (set as default)
     Use {

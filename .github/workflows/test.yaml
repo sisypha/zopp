@@ -28,8 +28,23 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build all binaries first
-        run: cargo build --bins
+      - name: Install kubectl (Linux only)
+        uses: azure/setup-kubectl@v4
+        if: runner.os == 'Linux'
 
-      - name: Cargo test
+      - name: Install kind (Linux only)
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+        if: runner.os == 'Linux'
+
+      - name: Build all binaries
+        run: cargo build --bins --locked
+
+      - name: Unit tests only (macOS/Windows)
+        run: cargo test --workspace --lib --bins --locked
+        if: runner.os != 'Linux'
+
+      - name: All tests including integration (Linux)
         run: cargo test --workspace --all-features --locked
+        if: runner.os == 'Linux'

@@ -166,6 +166,7 @@ impl ZoppService for ZoppServer {
                     } else {
                         Some(req.x25519_public_key.clone())
                     },
+                    is_service: false, // Join always creates user principals
                 }),
                 workspace_ids: invite.workspace_ids.clone(),
             })
@@ -240,6 +241,7 @@ impl ZoppService for ZoppServer {
                     } else {
                         Some(req.x25519_public_key.clone())
                     },
+                    is_service: req.is_service,
                 }),
                 workspace_ids: vec![],
             })
@@ -1268,7 +1270,10 @@ impl ZoppService for ZoppServer {
             });
         }
 
-        Ok(Response::new(zopp_proto::SecretList { secrets }))
+        Ok(Response::new(zopp_proto::SecretList {
+            secrets,
+            version: env.version,
+        }))
     }
 
     async fn delete_secret(
@@ -1348,23 +1353,25 @@ impl ZoppService for ZoppServer {
         let principal = self
             .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
             .await?;
-        let user_id = principal
-            .user_id
-            .ok_or_else(|| Status::unauthenticated("Service accounts cannot watch secrets"))?;
 
         let req = request.into_inner();
 
-        // Look up workspace by name
-        let workspace = self
-            .store
-            .get_workspace_by_name(&user_id, &req.workspace_name)
-            .await
-            .map_err(|e| match e {
-                zopp_storage::StoreError::NotFound => {
-                    Status::not_found("Workspace not found or access denied")
-                }
-                _ => Status::internal(format!("Failed to get workspace: {}", e)),
-            })?;
+        // Look up workspace by name (use principal-based lookup for service principals)
+        let workspace = if let Some(user_id) = &principal.user_id {
+            self.store
+                .get_workspace_by_name(user_id, &req.workspace_name)
+                .await
+        } else {
+            self.store
+                .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
+                .await
+        }
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => {
+                Status::not_found("Workspace not found or access denied")
+            }
+            _ => Status::internal(format!("Failed to get workspace: {}", e)),
+        })?;
 
         // Look up project by name in workspace
         let project = self

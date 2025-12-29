@@ -41,8 +41,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             PrincipalCommand::Current => {
                 cmd_principal_current().await?;
             }
-            PrincipalCommand::Create { name } => {
-                cmd_principal_create(&cli.server, &name).await?;
+            PrincipalCommand::Create { name, service } => {
+                cmd_principal_create(&cli.server, &name, service).await?;
             }
             PrincipalCommand::Use { name } => {
                 cmd_principal_use(&name).await?;

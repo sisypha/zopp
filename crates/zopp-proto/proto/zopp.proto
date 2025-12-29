@@ -70,6 +70,7 @@ message RegisterRequest {
   string principal_name = 2;
   bytes public_key = 3;              // Ed25519 for authentication
   bytes x25519_public_key = 4;       // X25519 for encryption (ECDH)
+  bool is_service = 5;               // Service principal (user_id will be NULL)
 }
 
 message RegisterResponse {
@@ -281,6 +282,7 @@ message Secret {
 
 message SecretList {
   repeated Secret secrets = 1;
+  int64 version = 2;  // Current environment version
 }
 
 // Watch messages
