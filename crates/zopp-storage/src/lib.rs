@@ -212,25 +212,11 @@ pub struct Environment {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Optional explicit transaction interface.
-/// For simple backends you can stub this out and let methods be atomic.
-pub trait Transaction {
-    fn commit(self) -> Result<(), StoreError>;
-    fn rollback(self) -> Result<(), StoreError>;
-}
-
 /// The storage trait `zopp-core` depends on.
 ///
 /// All methods that act on project/env/secrets are **scoped by workspace**.
 #[async_trait::async_trait]
 pub trait Store {
-    type Txn: Transaction;
-
-    // ─────────────────────────────── Lifecycle  ───────────────────────────────
-
-    /// Optional explicit transaction (backends may ignore if not needed).
-    async fn begin_txn(&self) -> Result<Self::Txn, StoreError>;
-
     // ───────────────────────────────────── Users ──────────────────────────────────────────
 
     /// Create a new user (returns generated ID, and optional principal ID if principal was provided).
@@ -416,25 +402,9 @@ mod tests {
     use super::*;
 
     // Tiny compile-time smoke test for trait object usage.
-    struct NoopTxn;
-    impl Transaction for NoopTxn {
-        fn commit(self) -> Result<(), StoreError> {
-            Ok(())
-        }
-        fn rollback(self) -> Result<(), StoreError> {
-            Ok(())
-        }
-    }
-
     struct NoopStore;
     #[async_trait::async_trait]
     impl Store for NoopStore {
-        type Txn = NoopTxn;
-
-        async fn begin_txn(&self) -> Result<Self::Txn, StoreError> {
-            Ok(NoopTxn)
-        }
-
         async fn create_user(
             &self,
             _params: &CreateUserParams,
@@ -674,7 +644,6 @@ mod tests {
     #[tokio::test]
     async fn trait_smoke() {
         let s = NoopStore;
-        let _txn = s.begin_txn().await.unwrap();
 
         let (user_id, _) = s
             .create_user(&CreateUserParams {

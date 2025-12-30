@@ -5,23 +5,13 @@ use zopp_storage::{
     AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalParams,
     CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName, Environment,
     EnvironmentId, Invite, InviteId, Principal, PrincipalId, ProjectName, SecretRow, Store,
-    StoreError, Transaction, User, UserId, Workspace, WorkspaceId, WorkspacePrincipal,
+    StoreError, User, UserId, Workspace, WorkspaceId, WorkspacePrincipal,
 };
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 pub struct SqliteStore {
     pool: SqlitePool,
-}
-
-pub struct SqliteTxn;
-impl Transaction for SqliteTxn {
-    fn commit(self) -> Result<(), StoreError> {
-        Ok(())
-    }
-    fn rollback(self) -> Result<(), StoreError> {
-        Ok(())
-    }
 }
 
 impl SqliteStore {
@@ -64,12 +54,6 @@ impl SqliteStore {
 
 #[async_trait::async_trait]
 impl Store for SqliteStore {
-    type Txn = SqliteTxn;
-
-    async fn begin_txn(&self) -> Result<Self::Txn, StoreError> {
-        Ok(SqliteTxn)
-    }
-
     // ───────────────────────────── Users ─────────────────────────────
 
     async fn create_user(

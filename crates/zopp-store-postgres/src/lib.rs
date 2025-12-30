@@ -1,53 +1,16 @@
-use sqlx::{PgPool, Postgres, postgres::PgPoolOptions};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use uuid::Uuid;
 use zopp_storage::{
     AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalParams,
     CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName, Environment,
     EnvironmentId, Invite, InviteId, Principal, PrincipalId, ProjectName, SecretRow, Store,
-    StoreError, Transaction, User, UserId, Workspace, WorkspaceId, WorkspacePrincipal,
+    StoreError, User, UserId, Workspace, WorkspaceId, WorkspacePrincipal,
 };
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 pub struct PostgresStore {
     pool: PgPool,
-}
-
-// NOTE: This Transaction implementation is functional but not currently utilized by the Store trait API.
-// Store methods use internal transactions via pool.begin() for multi-step operations.
-// To fully utilize this, the Store trait would need to be refactored to accept &mut Txn parameters.
-pub struct PostgresTxn {
-    inner: Option<sqlx::Transaction<'static, Postgres>>,
-}
-
-impl Transaction for PostgresTxn {
-    fn commit(mut self) -> Result<(), StoreError> {
-        if let Some(txn) = self.inner.take() {
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    txn.commit()
-                        .await
-                        .map_err(|e| StoreError::Backend(e.to_string()))
-                })
-            })
-        } else {
-            Ok(())
-        }
-    }
-
-    fn rollback(mut self) -> Result<(), StoreError> {
-        if let Some(txn) = self.inner.take() {
-            tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    txn.rollback()
-                        .await
-                        .map_err(|e| StoreError::Backend(e.to_string()))
-                })
-            })
-        } else {
-            Ok(())
-        }
-    }
 }
 
 impl PostgresStore {
@@ -69,17 +32,6 @@ impl PostgresStore {
 
 #[async_trait::async_trait]
 impl Store for PostgresStore {
-    type Txn = PostgresTxn;
-
-    async fn begin_txn(&self) -> Result<Self::Txn, StoreError> {
-        let txn = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| StoreError::Backend(e.to_string()))?;
-        Ok(PostgresTxn { inner: Some(txn) })
-    }
-
     // ───────────────────────────── Users ─────────────────────────────
 
     async fn create_user(

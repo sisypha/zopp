@@ -82,37 +82,8 @@ enum StoreBackend {
     Postgres(Arc<PostgresStore>),
 }
 
-enum UnifiedTxn {
-    Sqlite(<SqliteStore as Store>::Txn),
-    Postgres(<PostgresStore as Store>::Txn),
-}
-
-impl Transaction for UnifiedTxn {
-    fn commit(self) -> Result<(), StoreError> {
-        match self {
-            UnifiedTxn::Sqlite(txn) => txn.commit(),
-            UnifiedTxn::Postgres(txn) => txn.commit(),
-        }
-    }
-    fn rollback(self) -> Result<(), StoreError> {
-        match self {
-            UnifiedTxn::Sqlite(txn) => txn.rollback(),
-            UnifiedTxn::Postgres(txn) => txn.rollback(),
-        }
-    }
-}
-
 #[async_trait::async_trait]
 impl Store for StoreBackend {
-    type Txn = UnifiedTxn;
-
-    async fn begin_txn(&self) -> Result<Self::Txn, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.begin_txn().await.map(UnifiedTxn::Sqlite),
-            StoreBackend::Postgres(s) => s.begin_txn().await.map(UnifiedTxn::Postgres),
-        }
-    }
-
     async fn create_user(
         &self,
         params: &CreateUserParams,
