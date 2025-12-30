@@ -1,4 +1,4 @@
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{PgPool, Postgres, postgres::PgPoolOptions};
 use uuid::Uuid;
 use zopp_storage::{
     AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalParams,
@@ -13,13 +13,40 @@ pub struct PostgresStore {
     pool: PgPool,
 }
 
-pub struct PostgresTxn;
+// NOTE: This Transaction implementation is functional but not currently utilized by the Store trait API.
+// Store methods use internal transactions via pool.begin() for multi-step operations.
+// To fully utilize this, the Store trait would need to be refactored to accept &mut Txn parameters.
+pub struct PostgresTxn {
+    inner: Option<sqlx::Transaction<'static, Postgres>>,
+}
+
 impl Transaction for PostgresTxn {
-    fn commit(self) -> Result<(), StoreError> {
-        Ok(())
+    fn commit(mut self) -> Result<(), StoreError> {
+        if let Some(txn) = self.inner.take() {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    txn.commit()
+                        .await
+                        .map_err(|e| StoreError::Backend(e.to_string()))
+                })
+            })
+        } else {
+            Ok(())
+        }
     }
-    fn rollback(self) -> Result<(), StoreError> {
-        Ok(())
+
+    fn rollback(mut self) -> Result<(), StoreError> {
+        if let Some(txn) = self.inner.take() {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    txn.rollback()
+                        .await
+                        .map_err(|e| StoreError::Backend(e.to_string()))
+                })
+            })
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -45,7 +72,12 @@ impl Store for PostgresStore {
     type Txn = PostgresTxn;
 
     async fn begin_txn(&self) -> Result<Self::Txn, StoreError> {
-        Ok(PostgresTxn)
+        let txn = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+        Ok(PostgresTxn { inner: Some(txn) })
     }
 
     // ───────────────────────────── Users ─────────────────────────────

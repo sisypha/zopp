@@ -17,8 +17,17 @@ async fn test_store() -> (PostgresStore, String) {
     let random: u64 = rand_core::OsRng.next_u64();
     let db_name = format!("zopp_test_{}_{}_{}", test_id, timestamp, random);
 
-    let admin_url = "postgres://postgres:postgres@localhost:5433/postgres";
-    let mut conn = PgConnection::connect(admin_url).await.unwrap();
+    // Allow overriding credentials via environment variables for CI/different setups
+    let pg_user = std::env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".to_string());
+    let pg_pass = std::env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "postgres".to_string());
+    let pg_host = std::env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let pg_port = std::env::var("POSTGRES_PORT").unwrap_or_else(|_| "5433".to_string());
+
+    let admin_url = format!(
+        "postgres://{}:{}@{}:{}/postgres",
+        pg_user, pg_pass, pg_host, pg_port
+    );
+    let mut conn = PgConnection::connect(&admin_url).await.unwrap();
 
     // Drop if exists
     let drop_query = format!("DROP DATABASE IF EXISTS {}", db_name);
@@ -29,7 +38,10 @@ async fn test_store() -> (PostgresStore, String) {
     conn.execute(create_query.as_str()).await.unwrap();
     drop(conn);
 
-    let db_url = format!("postgres://postgres:postgres@localhost:5433/{}", db_name);
+    let db_url = format!(
+        "postgres://{}:{}@{}:{}/{}",
+        pg_user, pg_pass, pg_host, pg_port, db_name
+    );
     let store = PostgresStore::open(&db_url).await.unwrap();
 
     (store, db_name)
@@ -37,10 +49,25 @@ async fn test_store() -> (PostgresStore, String) {
 
 /// Cleanup test database
 async fn cleanup_db(db_name: &str) {
-    let admin_url = "postgres://postgres:postgres@localhost:5433/postgres";
-    if let Ok(mut conn) = PgConnection::connect(admin_url).await {
-        let drop_query = format!("DROP DATABASE IF EXISTS {}", db_name);
-        let _ = conn.execute(drop_query.as_str()).await;
+    let pg_user = std::env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".to_string());
+    let pg_pass = std::env::var("POSTGRES_PASSWORD").unwrap_or_else(|_| "postgres".to_string());
+    let pg_host = std::env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let pg_port = std::env::var("POSTGRES_PORT").unwrap_or_else(|_| "5433".to_string());
+
+    let admin_url = format!(
+        "postgres://{}:{}@{}:{}/postgres",
+        pg_user, pg_pass, pg_host, pg_port
+    );
+    match PgConnection::connect(&admin_url).await {
+        Ok(mut conn) => {
+            let drop_query = format!("DROP DATABASE IF EXISTS {}", db_name);
+            if let Err(e) = conn.execute(drop_query.as_str()).await {
+                eprintln!("Warning: Failed to drop test database {}: {}", db_name, e);
+            }
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to connect to database for cleanup: {}", e);
+        }
     }
 }
 
@@ -510,12 +537,12 @@ async fn test_invite_creation_and_revocation() {
 }
 
 #[tokio::test]
-async fn test_concurrent_secret_updates() {
+async fn test_sequential_secret_updates() {
     let (store, db_name) = test_store().await;
 
     let (user_id, _) = store
         .create_user(&CreateUserParams {
-            email: "concurrent@test.com".to_string(),
+            email: "sequential@test.com".to_string(),
             principal: None,
             workspace_ids: vec![],
         })
