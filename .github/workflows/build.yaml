@@ -28,5 +28,10 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cargo build (release)
+      - name: Cargo build (release) - Unix (all workspace)
+        if: runner.os != 'Windows'
         run: cargo build --workspace --all-targets --release --locked
+
+      - name: Cargo build (release) - Windows (CLI only)
+        if: runner.os == 'Windows'
+        run: cargo build --package zopp-cli --all-targets --release --locked
