@@ -11,13 +11,7 @@ pub async fn connect(
     let endpoint = Channel::from_shared(server.to_string())?;
 
     let endpoint = if server.starts_with("https://") {
-        // Extract domain for TLS certificate validation
-        let domain = server
-            .strip_prefix("https://")
-            .and_then(|s| s.split(':').next())
-            .ok_or("Invalid HTTPS URL format")?;
-
-        let tls_config = tonic::transport::ClientTlsConfig::new().domain_name(domain);
+        let tls_config = tonic::transport::ClientTlsConfig::new();
         endpoint.tls_config(tls_config)?
     } else {
         endpoint
