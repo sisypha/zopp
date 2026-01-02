@@ -63,9 +63,54 @@ See [DEMO.md](./DEMO.md) for the complete workflow.
 
 ---
 
-## Build
+## Installation
+
+### Docker (recommended)
 
 ```bash
-# from repo root
+# Pull and run CLI
+docker pull ghcr.io/sisypha/zopp-cli:latest
+alias zopp='docker run --rm -v ~/.zopp:/home/zopp/.zopp ghcr.io/sisypha/zopp-cli:latest'
+
+# Or build locally
+docker build -f cli.Dockerfile -t zopp-cli .
+```
+
+### From source
+
+```bash
+cargo install --path apps/zopp-cli
+```
+
+---
+
+## Deployment
+
+### Docker Compose (quickstart)
+
+```bash
+# Run server + PostgreSQL
+docker-compose up -d
+```
+
+See [docker-compose.yml](./docker-compose.yml) for configuration.
+
+### Kubernetes
+
+```bash
+# Install with Helm (coming soon)
+helm install zopp ./helm/zopp
+
+# Or use raw manifests
+kubectl apply -f deploy/
+```
+
+See [OPERATOR_DESIGN.md](./OPERATOR_DESIGN.md) for Kubernetes operator details.
+
+---
+
+## Build from source
+
+```bash
 cargo build --workspace --release
 ```
