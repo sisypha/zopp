@@ -2495,10 +2495,9 @@ mod tests {
         .await;
 
         let err = result.unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("TLS certificate provided without key")
-        );
+        assert!(err
+            .to_string()
+            .contains("TLS certificate provided without key"));
     }
 
     #[tokio::test]
@@ -2515,10 +2514,9 @@ mod tests {
         .await;
 
         let err = result.unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("--tls-client-ca requires --tls-cert and --tls-key")
-        );
+        assert!(err
+            .to_string()
+            .contains("--tls-client-ca requires --tls-cert and --tls-key"));
     }
 
     #[tokio::test]
