@@ -17,6 +17,7 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tonic = { workspace = true }
+tonic-health = { workspace = true }
 prost = { workspace = true }
 zopp-proto = { path = "../../crates/zopp-proto" }
 zopp-crypto = { path = "../../crates/zopp-crypto" }

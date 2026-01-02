@@ -70,7 +70,13 @@ async fn run_demo_test(
     let health_addr = format!("0.0.0.0:{}", port + 1000); // Use port + 1000 for health checks
     let mut server = Command::new(&zopp_server_bin)
         .env("DATABASE_URL", db_url)
-        .args(["serve", "--addr", &server_addr, "--health-addr", &health_addr])
+        .args([
+            "serve",
+            "--addr",
+            &server_addr,
+            "--health-addr",
+            &health_addr,
+        ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
