@@ -69,4 +69,3 @@ pub fn add_auth_metadata<T>(
 
     Ok(())
 }
-
