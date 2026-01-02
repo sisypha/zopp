@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1"
-axum = "0.7"
+axum = { workspace = true }
 tonic = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }

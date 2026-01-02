@@ -61,6 +61,10 @@ struct Args {
     /// Kubernetes namespace to watch (empty = all namespaces)
     #[arg(long, env = "ZOPP_NAMESPACE")]
     namespace: Option<String>,
+
+    /// Health check HTTP server address
+    #[arg(long, env = "ZOPP_HEALTH_ADDR", default_value = "0.0.0.0:8080")]
+    health_addr: String,
 }
 
 /// Operator state tracking active sync tasks
@@ -77,14 +81,41 @@ impl OperatorState {
     }
 }
 
+async fn health_handler() -> &'static str {
+    "ok"
+}
+
+async fn readiness_handler() -> &'static str {
+    "ok"
+}
+
+async fn shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
+
+    tokio::select! {
+        _ = sigterm.recv() => {
+            info!("Received SIGTERM, shutting down gracefully...");
+        }
+        _ = sigint.recv() => {
+            info!("Received SIGINT, shutting down gracefully...");
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use axum::{routing::get, Router};
+
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();
 
     info!("Starting zopp-operator");
     info!("Server: {}", args.server);
+    info!("Health checks listening on {}", args.health_addr);
 
     // Load credentials - use standard CLI config format
     let config_path = args
@@ -110,6 +141,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = Arc::new(OperatorState::new());
 
+    // Health check endpoints
+    let health_router = Router::new()
+        .route("/healthz", get(health_handler))
+        .route("/readyz", get(readiness_handler));
+
+    let health_addr: std::net::SocketAddr = args.health_addr.parse()?;
+
+    // Start health check server
+    let health_server = tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind(health_addr).await.unwrap();
+        axum::serve(listener, health_router).await.unwrap();
+    });
+
     // Watch Secrets with zopp annotations
     let secrets: Api<Secret> = match &args.namespace {
         Some(ns) => Api::namespaced(k8s_client.clone(), ns),
@@ -123,85 +167,98 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Watching for annotated Secrets...");
 
-    while let Some(event) = stream.next().await {
-        match event {
-            Ok(secret) => {
-                let ns = secret.namespace().unwrap_or_default();
-                let name = secret.name_any();
-                let key = format!("{}/{}", ns, name);
+    let watch_loop = async {
+        while let Some(event) = stream.next().await {
+            match event {
+                Ok(secret) => {
+                    let ns = secret.namespace().unwrap_or_default();
+                    let name = secret.name_any();
+                    let key = format!("{}/{}", ns, name);
 
-                // Check if this Secret has zopp annotations
-                let annotations = secret.metadata.annotations.as_ref();
+                    // Check if this Secret has zopp annotations
+                    let annotations = secret.metadata.annotations.as_ref();
 
-                if let Some(annot) = annotations {
-                    if annot.get("zopp.dev/sync").map(|s| s.as_str()) == Some("true") {
-                        info!("Detected zopp-managed Secret: {}", key);
+                    if let Some(annot) = annotations {
+                        if annot.get("zopp.dev/sync").map(|s| s.as_str()) == Some("true") {
+                            info!("Detected zopp-managed Secret: {}", key);
 
-                        // Parse sync configuration from annotations
-                        match SecretSyncConfig::from_annotations(annot) {
-                            Ok(config) => {
-                                debug!("Sync config: {:?}", config);
+                            // Parse sync configuration from annotations
+                            match SecretSyncConfig::from_annotations(annot) {
+                                Ok(config) => {
+                                    debug!("Sync config: {:?}", config);
 
-                                // Cancel existing sync task if any
-                                let mut syncs = state.active_syncs.write().await;
-                                if let Some(handle) = syncs.remove(&key) {
-                                    debug!("Canceling previous sync task for {}", key);
-                                    handle.abort();
-                                }
-
-                                // Spawn new sync task
-                                let handle = tokio::spawn({
-                                    let grpc_client = grpc_client.clone();
-                                    let k8s_client = k8s_client.clone();
-                                    let credentials = (*credentials).clone();
-                                    let ns = ns.clone();
-                                    let name = name.clone();
-
-                                    async move {
-                                        if let Err(e) = sync::run_sync(
-                                            grpc_client,
-                                            k8s_client,
-                                            credentials,
-                                            ns,
-                                            name,
-                                            config,
-                                        )
-                                        .await
-                                        {
-                                            error!("Sync task failed: {}", e);
-                                        }
+                                    // Cancel existing sync task if any
+                                    let mut syncs = state.active_syncs.write().await;
+                                    if let Some(handle) = syncs.remove(&key) {
+                                        debug!("Canceling previous sync task for {}", key);
+                                        handle.abort();
                                     }
-                                });
 
-                                syncs.insert(key.clone(), handle);
+                                    // Spawn new sync task
+                                    let handle = tokio::spawn({
+                                        let grpc_client = grpc_client.clone();
+                                        let k8s_client = k8s_client.clone();
+                                        let credentials = (*credentials).clone();
+                                        let ns = ns.clone();
+                                        let name = name.clone();
+
+                                        async move {
+                                            if let Err(e) = sync::run_sync(
+                                                grpc_client,
+                                                k8s_client,
+                                                credentials,
+                                                ns,
+                                                name,
+                                                config,
+                                            )
+                                            .await
+                                            {
+                                                error!("Sync task failed: {}", e);
+                                            }
+                                        }
+                                    });
+
+                                    syncs.insert(key.clone(), handle);
+                                }
+                                Err(e) => {
+                                    warn!("Invalid zopp annotations on {}: {}", key, e);
+                                }
                             }
-                            Err(e) => {
-                                warn!("Invalid zopp annotations on {}: {}", key, e);
+                        } else {
+                            // Secret exists but zopp.dev/sync is not "true"
+                            // Cancel sync if it was previously active
+                            let mut syncs = state.active_syncs.write().await;
+                            if let Some(handle) = syncs.remove(&key) {
+                                info!("Stopping sync for {} (annotation removed)", key);
+                                handle.abort();
                             }
                         }
                     } else {
-                        // Secret exists but zopp.dev/sync is not "true"
-                        // Cancel sync if it was previously active
+                        // No annotations - cancel sync if active
                         let mut syncs = state.active_syncs.write().await;
                         if let Some(handle) = syncs.remove(&key) {
-                            info!("Stopping sync for {} (annotation removed)", key);
+                            info!("Stopping sync for {} (annotations removed)", key);
                             handle.abort();
                         }
                     }
-                } else {
-                    // No annotations - cancel sync if active
-                    let mut syncs = state.active_syncs.write().await;
-                    if let Some(handle) = syncs.remove(&key) {
-                        info!("Stopping sync for {} (annotations removed)", key);
-                        handle.abort();
-                    }
+                }
+                Err(e) => {
+                    error!("Watch error: {}", e);
                 }
             }
-            Err(e) => {
-                error!("Watch error: {}", e);
-            }
+        }
+    };
+
+    // Run watch loop with graceful shutdown
+    tokio::select! {
+        _ = watch_loop => {},
+        _ = shutdown_signal() => {
+            info!("Shutting down operator");
         }
     }
+
+    // Wait for health server to finish
+    let _ = health_server.await;
 
     Ok(())
 }

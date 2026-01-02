@@ -8,6 +8,7 @@ name = "zopp-operator"
 path = "src/main.rs"
 
 [dependencies]
+axum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "fs"] }
 kube = { workspace = true, features = ["runtime"] }
 k8s-openapi = { workspace = true }
