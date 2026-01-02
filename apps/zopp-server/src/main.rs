@@ -1926,6 +1926,23 @@ async fn cmd_serve(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = addr.parse()?;
 
+    // Validate TLS configuration BEFORE opening database
+    // Validate TLS configuration: both cert and key must be provided together
+    match (&tls_cert, &tls_key) {
+        (Some(_), None) => {
+            return Err("TLS certificate provided without key. Both --tls-cert and --tls-key are required for TLS.".into());
+        }
+        (None, Some(_)) => {
+            return Err("TLS key provided without certificate. Both --tls-cert and --tls-key are required for TLS.".into());
+        }
+        _ => {}
+    }
+
+    // Validate client CA requires TLS to be configured
+    if tls_client_ca.is_some() && tls_cert.is_none() {
+        return Err("--tls-client-ca requires --tls-cert and --tls-key to be configured".into());
+    }
+
     // Determine database URL
     let db_url = if let Some(url) = database_url {
         url
@@ -1953,22 +1970,6 @@ async fn cmd_serve(
         StoreBackend::Sqlite(ref s) => ZoppServer::new_sqlite(s.clone(), events),
         StoreBackend::Postgres(ref s) => ZoppServer::new_postgres(s.clone(), events),
     };
-
-    // Validate TLS configuration: both cert and key must be provided together
-    match (&tls_cert, &tls_key) {
-        (Some(_), None) => {
-            return Err("TLS certificate provided without key. Both --tls-cert and --tls-key are required for TLS.".into());
-        }
-        (None, Some(_)) => {
-            return Err("TLS key provided without certificate. Both --tls-cert and --tls-key are required for TLS.".into());
-        }
-        _ => {}
-    }
-
-    // Validate client CA requires TLS to be configured
-    if tls_client_ca.is_some() && tls_cert.is_none() {
-        return Err("--tls-client-ca requires --tls-cert and --tls-key to be configured".into());
-    }
 
     let mut builder = if let (Some(cert_path), Some(key_path)) = (tls_cert, tls_key) {
         let cert = std::fs::read_to_string(&cert_path)?;
