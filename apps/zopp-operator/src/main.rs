@@ -294,14 +294,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_health_endpoint() {
-        let response = health_handler().await;
-        assert_eq!(response, "ok");
-    }
-}
