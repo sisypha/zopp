@@ -84,31 +84,6 @@ cargo install --path apps/zopp-cli
 
 ---
 
-## Deployment
-
-### Docker Compose (quickstart)
-
-```bash
-# Run server + PostgreSQL
-docker-compose up -d
-```
-
-See [docker-compose.yml](./docker-compose.yml) for configuration.
-
-### Kubernetes
-
-```bash
-# Install with Helm (coming soon)
-helm install zopp ./helm/zopp
-
-# Or use raw manifests
-kubectl apply -f deploy/
-```
-
-See [OPERATOR_DESIGN.md](./OPERATOR_DESIGN.md) for Kubernetes operator details.
-
----
-
 ## Build from source
 
 ```bash
