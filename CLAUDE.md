@@ -17,20 +17,25 @@ Key principles:
 ### Docker Images
 
 ```bash
-# Build server image
+# Build images
 docker build -f server.Dockerfile -t zopp-server:latest .
-
-# Build operator image
 docker build -f operator.Dockerfile -t zopp-operator:latest .
+docker build -f cli.Dockerfile -t zopp-cli:latest .
 
 # Run server
 docker run -p 50051:50051 zopp-server:latest
 
-# Run with PostgreSQL
+# Run server with PostgreSQL
 docker run -e DATABASE_URL=postgres://user:pass@host/db -p 50051:50051 zopp-server:latest
 
-# Run with TLS
+# Run server with TLS
 docker run -v /path/to/certs:/certs -p 50051:50051 zopp-server:latest serve --tls-cert /certs/server.crt --tls-key /certs/server.key
+
+# Use CLI via Docker (mount config directory)
+docker run --rm -v ~/.zopp:/home/zopp/.zopp zopp-cli:latest workspace list
+
+# Use CLI with custom server
+docker run --rm -v ~/.zopp:/home/zopp/.zopp zopp-cli:latest --server https://zopp.example.com workspace list
 ```
 
 ### Build

@@ -16,6 +16,8 @@ jobs:
             dockerfile: server.Dockerfile
           - name: operator
             dockerfile: operator.Dockerfile
+          - name: cli
+            dockerfile: cli.Dockerfile
 
     steps:
       - uses: actions/checkout@v4
