@@ -48,6 +48,10 @@ enum Command {
         #[arg(long, default_value = "0.0.0.0:50051")]
         addr: String,
 
+        /// Health check HTTP server address
+        #[arg(long, default_value = "0.0.0.0:8080")]
+        health_addr: String,
+
         /// Path to TLS certificate file (PEM format)
         #[arg(long, env = "ZOPP_TLS_CERT")]
         tls_cert: Option<String>,
@@ -1920,11 +1924,38 @@ async fn cmd_serve(
     database_url: Option<String>,
     legacy_db_path: Option<String>,
     addr: &str,
+    health_addr: &str,
     tls_cert: Option<String>,
     tls_key: Option<String>,
     tls_client_ca: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = addr.parse()?;
+    cmd_serve_with_ready(
+        database_url,
+        legacy_db_path,
+        addr,
+        health_addr,
+        tls_cert,
+        tls_key,
+        tls_client_ca,
+        None,
+    )
+    .await
+}
+
+async fn cmd_serve_with_ready(
+    database_url: Option<String>,
+    legacy_db_path: Option<String>,
+    addr: &str,
+    health_addr: &str,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    tls_client_ca: Option<String>,
+    ready_tx: Option<tokio::sync::oneshot::Sender<(std::net::SocketAddr, std::net::SocketAddr)>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use axum::{Router, routing::get};
+
+    let addr: std::net::SocketAddr = addr.parse()?;
+    let health_addr: std::net::SocketAddr = health_addr.parse()?;
 
     // Validate TLS configuration BEFORE opening database
     // Validate TLS configuration: both cert and key must be provided together
@@ -1971,7 +2002,45 @@ async fn cmd_serve(
         StoreBackend::Postgres(ref s) => ZoppServer::new_postgres(s.clone(), events),
     };
 
-    let mut builder = if let (Some(cert_path), Some(key_path)) = (tls_cert, tls_key) {
+    // Create gRPC health service
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
+    health_reporter
+        .set_serving::<ZoppServiceServer<ZoppServer>>()
+        .await;
+
+    // Create a channel for readiness checks
+    let (readiness_tx, readiness_rx) = tokio::sync::watch::channel(false);
+    let readiness_check = ReadinessCheck::new(readiness_rx);
+
+    // Health check endpoints - /readyz actually verifies gRPC is working
+    let health_router = Router::new()
+        .route("/healthz", get(health_handler))
+        .route("/readyz", get(readiness_handler))
+        .with_state(readiness_check);
+
+    // Bind listeners to get actual addresses
+    let grpc_listener = tokio::net::TcpListener::bind(addr).await?;
+    let grpc_actual_addr = grpc_listener.local_addr()?;
+
+    let health_listener = tokio::net::TcpListener::bind(health_addr).await?;
+    let health_actual_addr = health_listener.local_addr()?;
+
+    println!("ZoppServer listening on {}", grpc_actual_addr);
+    println!("Health checks listening on {}", health_actual_addr);
+
+    // Signal that gRPC is ready
+    let _ = readiness_tx.send(true);
+
+    // Notify test that servers are ready
+    if let Some(tx) = ready_tx {
+        let _ = tx.send((grpc_actual_addr, health_actual_addr));
+    }
+
+    // Start health check server
+    let health_server = axum::serve(health_listener, health_router);
+
+    // Build gRPC server with optional TLS
+    let mut grpc_builder = if let (Some(cert_path), Some(key_path)) = (tls_cert, tls_key) {
         let cert = std::fs::read_to_string(&cert_path)?;
         let key = std::fs::read_to_string(&key_path)?;
 
@@ -1990,14 +2059,64 @@ async fn cmd_serve(
         Server::builder()
     };
 
-    println!("ZoppServer listening on {}", addr);
-
-    builder
+    // Start gRPC server with graceful shutdown - includes health service
+    let grpc_server = grpc_builder
+        .add_service(health_service)
         .add_service(ZoppServiceServer::new(server))
-        .serve(addr)
-        .await?;
+        .serve_with_incoming_shutdown(
+            tokio_stream::wrappers::TcpListenerStream::new(grpc_listener),
+            shutdown_signal(),
+        );
+
+    // Run both servers concurrently
+    tokio::select! {
+        result = grpc_server => result?,
+        result = health_server => result?,
+    }
 
     Ok(())
+}
+
+#[derive(Clone)]
+struct ReadinessCheck {
+    ready: tokio::sync::watch::Receiver<bool>,
+}
+
+impl ReadinessCheck {
+    fn new(ready: tokio::sync::watch::Receiver<bool>) -> Self {
+        Self { ready }
+    }
+}
+
+async fn health_handler() -> &'static str {
+    "ok"
+}
+
+async fn readiness_handler(
+    axum::extract::State(check): axum::extract::State<ReadinessCheck>,
+) -> Result<&'static str, axum::http::StatusCode> {
+    // Check if gRPC server is ready
+    if *check.ready.borrow() {
+        Ok("ok")
+    } else {
+        Err(axum::http::StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
+async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
+
+    tokio::select! {
+        _ = sigterm.recv() => {
+            println!("Received SIGTERM, shutting down gracefully...");
+        }
+        _ = sigint.recv() => {
+            println!("Received SIGINT, shutting down gracefully...");
+        }
+    }
 }
 
 // ────────────────────────────────────── Main ──────────────────────────────────────
@@ -2009,6 +2128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Serve {
             addr,
+            health_addr,
             tls_cert,
             tls_key,
             tls_client_ca,
@@ -2017,6 +2137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cli.database_url,
                 cli.db,
                 &addr,
+                &health_addr,
                 tls_cert,
                 tls_key,
                 tls_client_ca,
@@ -2301,6 +2422,7 @@ mod tests {
                 None,
                 None,
                 "127.0.0.1:50999",
+                "127.0.0.1:58080",
                 Some(cert_file.path().to_str().unwrap().to_string()),
                 Some(key_file.path().to_str().unwrap().to_string()),
                 None,
@@ -2317,6 +2439,7 @@ mod tests {
             None,
             None,
             "127.0.0.1:50999",
+            "127.0.0.1:58080",
             None,
             Some("/path/to/key.pem".to_string()),
             None,
@@ -2338,6 +2461,7 @@ mod tests {
             None,
             None,
             "127.0.0.1:50999",
+            "127.0.0.1:58080",
             Some("/path/to/cert.pem".to_string()),
             None,
             None,
@@ -2357,6 +2481,7 @@ mod tests {
             None,
             None,
             "127.0.0.1:50999",
+            "127.0.0.1:58080",
             None,
             None,
             Some("/path/to/ca.pem".to_string()),
@@ -2368,5 +2493,40 @@ mod tests {
             err.to_string()
                 .contains("--tls-client-ca requires --tls-cert and --tls-key")
         );
+    }
+
+    #[tokio::test]
+    async fn test_health_and_readiness_endpoints() {
+        let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+
+        // Start server in background
+        tokio::spawn(async move {
+            let _ = cmd_serve_with_ready(
+                Some("sqlite::memory:".to_string()),
+                None,
+                "127.0.0.1:0",
+                "127.0.0.1:0",
+                None,
+                None,
+                None,
+                Some(ready_tx),
+            )
+            .await;
+        });
+
+        // Wait for server to be ready
+        let (_grpc_addr, health_addr) = ready_rx.await.unwrap();
+
+        // Test /healthz
+        let healthz_url = format!("http://{}/healthz", health_addr);
+        let response = reqwest::get(&healthz_url).await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.text().await.unwrap(), "ok");
+
+        // Test /readyz
+        let readyz_url = format!("http://{}/readyz", health_addr);
+        let response = reqwest::get(&readyz_url).await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.text().await.unwrap(), "ok");
     }
 }
