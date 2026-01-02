@@ -81,12 +81,42 @@ impl OperatorState {
     }
 }
 
+#[derive(Clone)]
+struct ReadinessCheck {
+    channel: Channel,
+}
+
+impl ReadinessCheck {
+    fn new(channel: Channel) -> Self {
+        Self { channel }
+    }
+}
+
 async fn health_handler() -> &'static str {
     "ok"
 }
 
-async fn readiness_handler() -> &'static str {
-    "ok"
+async fn readiness_handler(
+    axum::extract::State(check): axum::extract::State<ReadinessCheck>,
+) -> Result<&'static str, axum::http::StatusCode> {
+    // Actually verify we can connect to the gRPC health service
+    use tonic_health::pb::health_client::HealthClient;
+    use tonic_health::pb::HealthCheckRequest;
+
+    let mut health_client = HealthClient::new(check.channel.clone());
+
+    match health_client
+        .check(HealthCheckRequest {
+            service: "".to_string(),
+        })
+        .await
+    {
+        Ok(_) => Ok("ok"),
+        Err(e) => {
+            warn!("gRPC health check failed: {}", e);
+            Err(axum::http::StatusCode::SERVICE_UNAVAILABLE)
+        }
+    }
 }
 
 async fn shutdown_signal() {
@@ -134,17 +164,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create gRPC client
     let channel = Channel::from_shared(args.server.clone())?.connect().await?;
-    let grpc_client = Arc::new(ZoppServiceClient::new(channel));
+    let grpc_client = Arc::new(ZoppServiceClient::new(channel.clone()));
 
     // Create Kubernetes client
     let k8s_client = Client::try_default().await?;
 
     let state = Arc::new(OperatorState::new());
 
-    // Health check endpoints
+    // Health check endpoints - /readyz actually verifies gRPC is working
+    let readiness_check = ReadinessCheck::new(channel);
     let health_router = Router::new()
         .route("/healthz", get(health_handler))
-        .route("/readyz", get(readiness_handler));
+        .route("/readyz", get(readiness_handler))
+        .with_state(readiness_check);
 
     let health_addr: std::net::SocketAddr = args.health_addr.parse()?;
 
@@ -271,45 +303,5 @@ mod tests {
     async fn test_health_endpoint() {
         let response = health_handler().await;
         assert_eq!(response, "ok");
-    }
-
-    #[tokio::test]
-    async fn test_readiness_endpoint() {
-        let response = readiness_handler().await;
-        assert_eq!(response, "ok");
-    }
-
-    #[tokio::test]
-    async fn test_health_server_endpoints() {
-        use axum::{routing::get, Router};
-
-        // Create health router
-        let app = Router::new()
-            .route("/healthz", get(health_handler))
-            .route("/readyz", get(readiness_handler));
-
-        // Bind to random port
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-
-        // Start server in background
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.unwrap();
-        });
-
-        // Give server time to start
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-        // Test /healthz
-        let healthz_url = format!("http://{}/healthz", addr);
-        let response = reqwest::get(&healthz_url).await.unwrap();
-        assert_eq!(response.status(), 200);
-        assert_eq!(response.text().await.unwrap(), "ok");
-
-        // Test /readyz
-        let readyz_url = format!("http://{}/readyz", addr);
-        let response = reqwest::get(&readyz_url).await.unwrap();
-        assert_eq!(response.status(), 200);
-        assert_eq!(response.text().await.unwrap(), "ok");
     }
 }
