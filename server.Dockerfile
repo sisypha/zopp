@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN useradd -r -u 1000 -s /bin/false zopp
+RUN useradd -u 1000 -s /bin/false zopp
 
 # Copy binary from builder
 COPY --from=builder /build/target/release/zopp-server /usr/local/bin/zopp-server

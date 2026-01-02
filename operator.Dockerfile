@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN useradd -r -u 1000 -s /bin/false zopp
+RUN useradd -u 1000 -s /bin/false zopp
 
 # Copy binary from builder
 COPY --from=builder /build/target/release/zopp-operator /usr/local/bin/zopp-operator
@@ -39,4 +39,5 @@ RUN chown zopp:zopp /usr/local/bin/zopp-operator
 
 USER zopp
 
+# Note: No ports exposed - operator only makes outbound connections
 ENTRYPOINT ["/usr/local/bin/zopp-operator"]
