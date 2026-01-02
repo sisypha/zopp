@@ -1942,6 +1942,7 @@ async fn cmd_serve(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn cmd_serve_with_ready(
     database_url: Option<String>,
     legacy_db_path: Option<String>,
@@ -2534,10 +2535,15 @@ mod tests {
     async fn test_health_server_endpoints() {
         use axum::{Router, routing::get};
 
+        // Create readiness check
+        let (_tx, rx) = tokio::sync::watch::channel(true);
+        let readiness_check = ReadinessCheck::new(rx);
+
         // Create health router
         let app = Router::new()
             .route("/healthz", get(health_handler))
-            .route("/readyz", get(readiness_handler));
+            .route("/readyz", get(readiness_handler))
+            .with_state(readiness_check);
 
         // Bind to random port
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
