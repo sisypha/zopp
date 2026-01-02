@@ -343,12 +343,28 @@ async fn operator() -> Result<(), Box<dyn std::error::Error>> {
             config_file.to_str().unwrap(),
             "--namespace",
             "default",
+            "--health-addr",
+            "127.0.0.1:8081",
         ])
         .stdout(Stdio::from(operator_stdout))
         .stderr(Stdio::from(operator_stderr))
         .spawn()?;
 
-    println!("✓ Operator started (PID: {})\n", operator.id());
+    println!("✓ Operator started (PID: {})", operator.id());
+
+    // Verify health endpoints work
+    sleep(Duration::from_millis(500)).await;
+    let healthz = reqwest::get("http://127.0.0.1:8081/healthz").await?;
+    let readyz = reqwest::get("http://127.0.0.1:8081/readyz").await?;
+
+    if !healthz.status().is_success() || !readyz.status().is_success() {
+        eprintln!("❌ Health check endpoints failed");
+        eprintln!("  /healthz: {}", healthz.status());
+        eprintln!("  /readyz: {}", readyz.status());
+        cleanup_all(&mut server, &mut operator, cluster_name)?;
+        return Err("Health endpoints not working".into());
+    }
+    println!("✓ Health endpoints verified (/healthz, /readyz)\n");
 
     // Step 11: Wait for operator to perform initial sync
     println!("⏳ Step 11: Waiting for operator to sync (max 10s)...");
@@ -470,6 +486,8 @@ async fn operator() -> Result<(), Box<dyn std::error::Error>> {
             config_file.to_str().unwrap(),
             "--namespace",
             "default",
+            "--health-addr",
+            "127.0.0.1:8081",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
