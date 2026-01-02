@@ -8,7 +8,23 @@ use zopp_proto::zopp_service_client::ZoppServiceClient;
 pub async fn connect(
     server: &str,
 ) -> Result<ZoppServiceClient<Channel>, Box<dyn std::error::Error>> {
-    let client = ZoppServiceClient::connect(server.to_string()).await?;
+    let endpoint = Channel::from_shared(server.to_string())?;
+
+    let endpoint = if server.starts_with("https://") {
+        // Extract domain for TLS certificate validation
+        let domain = server
+            .strip_prefix("https://")
+            .and_then(|s| s.split(':').next())
+            .ok_or("Invalid HTTPS URL format")?;
+
+        let tls_config = tonic::transport::ClientTlsConfig::new().domain_name(domain);
+        endpoint.tls_config(tls_config)?
+    } else {
+        endpoint
+    };
+
+    let channel = endpoint.connect().await?;
+    let client = ZoppServiceClient::new(channel);
     Ok(client)
 }
 

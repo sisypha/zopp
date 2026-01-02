@@ -82,7 +82,24 @@ cargo build --release
 
 # Run with Postgres
 DATABASE_URL=postgres://user:pass@host/db ./target/release/zopp-server serve
+
+# Run with TLS (production)
+./target/release/zopp-server serve \
+  --tls-cert /path/to/server.crt \
+  --tls-key /path/to/server.key
+
+# Run with mTLS (mutual TLS)
+./target/release/zopp-server serve \
+  --tls-cert /path/to/server.crt \
+  --tls-key /path/to/server.key \
+  --tls-client-ca /path/to/ca.crt
 ```
+
+**TLS Configuration:**
+- `--tls-cert` and `--tls-key`: Enable server-side TLS
+- `--tls-client-ca`: Enable mTLS for client certificate verification
+- Client automatically uses TLS when connecting to `https://` URLs
+- Environment variables: `ZOPP_TLS_CERT`, `ZOPP_TLS_KEY`, `ZOPP_TLS_CLIENT_CA`
 
 ### Database: sqlx Offline Mode
 This project supports both **SQLite** (development/small deployments) and **PostgreSQL** (production). Both use `sqlx` compile-time verification with prepared query metadata in `.sqlx/`.

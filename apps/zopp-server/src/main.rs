@@ -47,6 +47,18 @@ enum Command {
         /// Server address
         #[arg(long, default_value = "0.0.0.0:50051")]
         addr: String,
+
+        /// Path to TLS certificate file (PEM format)
+        #[arg(long, env = "ZOPP_TLS_CERT")]
+        tls_cert: Option<String>,
+
+        /// Path to TLS private key file (PEM format)
+        #[arg(long, env = "ZOPP_TLS_KEY")]
+        tls_key: Option<String>,
+
+        /// Path to CA certificate for client verification (enables mTLS)
+        #[arg(long, env = "ZOPP_TLS_CLIENT_CA")]
+        tls_client_ca: Option<String>,
     },
     /// Invite management commands
     Invite {
@@ -1908,6 +1920,9 @@ async fn cmd_serve(
     database_url: Option<String>,
     legacy_db_path: Option<String>,
     addr: &str,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    tls_client_ca: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr = addr.parse()?;
 
@@ -1939,9 +1954,44 @@ async fn cmd_serve(
         StoreBackend::Postgres(ref s) => ZoppServer::new_postgres(s.clone(), events),
     };
 
+    // Validate TLS configuration: both cert and key must be provided together
+    match (&tls_cert, &tls_key) {
+        (Some(_), None) => {
+            return Err("TLS certificate provided without key. Both --tls-cert and --tls-key are required for TLS.".into());
+        }
+        (None, Some(_)) => {
+            return Err("TLS key provided without certificate. Both --tls-cert and --tls-key are required for TLS.".into());
+        }
+        _ => {}
+    }
+
+    // Validate client CA requires TLS to be configured
+    if tls_client_ca.is_some() && tls_cert.is_none() {
+        return Err("--tls-client-ca requires --tls-cert and --tls-key to be configured".into());
+    }
+
+    let mut builder = if let (Some(cert_path), Some(key_path)) = (tls_cert, tls_key) {
+        let cert = std::fs::read_to_string(&cert_path)?;
+        let key = std::fs::read_to_string(&key_path)?;
+
+        let identity = tonic::transport::Identity::from_pem(cert, key);
+
+        let mut tls_config = tonic::transport::ServerTlsConfig::new().identity(identity);
+
+        if let Some(ca_path) = tls_client_ca {
+            let ca = std::fs::read_to_string(&ca_path)?;
+            let ca_cert = tonic::transport::Certificate::from_pem(ca);
+            tls_config = tls_config.client_ca_root(ca_cert);
+        }
+
+        Server::builder().tls_config(tls_config)?
+    } else {
+        Server::builder()
+    };
+
     println!("ZoppServer listening on {}", addr);
 
-    Server::builder()
+    builder
         .add_service(ZoppServiceServer::new(server))
         .serve(addr)
         .await?;
@@ -1956,8 +2006,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Serve { addr } => {
-            cmd_serve(cli.database_url, cli.db, &addr).await?;
+        Command::Serve {
+            addr,
+            tls_cert,
+            tls_key,
+            tls_client_ca,
+        } => {
+            cmd_serve(
+                cli.database_url,
+                cli.db,
+                &addr,
+                tls_cert,
+                tls_key,
+                tls_client_ca,
+            )
+            .await?;
         }
         Command::Invite { invite_cmd } => {
             let db_url = if let Some(url) = cli.database_url {
@@ -2216,5 +2279,93 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.code(), tonic::Code::Unauthenticated);
         assert!(err.message().contains("Invalid signature"));
+    }
+
+    #[tokio::test]
+    async fn test_tls_config_validation_invalid_pem() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut cert_file = NamedTempFile::new().unwrap();
+        cert_file.write_all(b"invalid cert").unwrap();
+        cert_file.flush().unwrap();
+
+        let mut key_file = NamedTempFile::new().unwrap();
+        key_file.write_all(b"invalid key").unwrap();
+        key_file.flush().unwrap();
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            cmd_serve(
+                None,
+                None,
+                "127.0.0.1:50999",
+                Some(cert_file.path().to_str().unwrap().to_string()),
+                Some(key_file.path().to_str().unwrap().to_string()),
+                None,
+            ),
+        )
+        .await;
+
+        assert!(result.unwrap().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_tls_config_validation_missing_cert() {
+        let result = cmd_serve(
+            None,
+            None,
+            "127.0.0.1:50999",
+            None,
+            Some("/path/to/key.pem".to_string()),
+            None,
+        )
+        .await;
+
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("TLS key provided without certificate"),
+            "Expected error message to contain 'TLS key provided without certificate', got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tls_config_validation_missing_key() {
+        let result = cmd_serve(
+            None,
+            None,
+            "127.0.0.1:50999",
+            Some("/path/to/cert.pem".to_string()),
+            None,
+            None,
+        )
+        .await;
+
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("TLS certificate provided without key")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tls_config_validation_client_ca_without_tls() {
+        let result = cmd_serve(
+            None,
+            None,
+            "127.0.0.1:50999",
+            None,
+            None,
+            Some("/path/to/ca.pem".to_string()),
+        )
+        .await;
+
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("--tls-client-ca requires --tls-cert and --tls-key")
+        );
     }
 }
