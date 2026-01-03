@@ -113,7 +113,7 @@ async fn readiness_handler(
     {
         Ok(_) => Ok("ok"),
         Err(e) => {
-            warn!("gRPC health check failed: {}", e);
+            debug!("gRPC health check failed: {}", e);
             Err(axum::http::StatusCode::SERVICE_UNAVAILABLE)
         }
     }
@@ -198,9 +198,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Watching for annotated Secrets...");
 
-    let watch_loop = async {
-        while let Some(event) = stream.next().await {
-            match event {
+    let watch_loop = async move {
+        let shutdown = shutdown_signal();
+        tokio::pin!(shutdown);
+
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut shutdown => {
+                    info!("Watch loop received shutdown signal");
+                    break;
+                }
+                event_option = stream.next() => {
+                    let Some(event) = event_option else {
+                        info!("Watch stream ended");
+                        break;
+                    };
+
+                    match event {
                 Ok(secret) => {
                     let ns = secret.namespace().unwrap_or_default();
                     let name = secret.name_any();
@@ -273,8 +288,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                Err(e) => {
-                    error!("Watch error: {}", e);
+                        Err(e) => {
+                            error!("Watch error: {}", e);
+                        }
+                    }
                 }
             }
         }

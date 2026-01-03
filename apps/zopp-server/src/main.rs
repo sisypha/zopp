@@ -2031,16 +2031,6 @@ async fn cmd_serve_with_ready(
     println!("ZoppServer listening on {}", grpc_actual_addr);
     println!("Health checks listening on {}", health_actual_addr);
 
-    // Signal that gRPC listener is bound and ready to accept connections
-    // The TcpListener is already bound, so /readyz can return OK even though
-    // the serve loop hasn't started yet. This is correct for K8s readiness probes.
-    let _ = readiness_tx.send(true);
-
-    // Notify test that servers are ready
-    if let Some(tx) = ready_tx {
-        let _ = tx.send((grpc_actual_addr, health_actual_addr));
-    }
-
     // Start health check server with graceful shutdown
     let health_server =
         axum::serve(health_listener, health_router).with_graceful_shutdown(shutdown_signal());
@@ -2064,6 +2054,15 @@ async fn cmd_serve_with_ready(
     } else {
         Server::builder()
     };
+
+    // Signal readiness after TLS config is successfully built
+    // This ensures TLS configuration errors are caught before reporting ready
+    let _ = readiness_tx.send(true);
+
+    // Notify test that servers are ready
+    if let Some(tx) = ready_tx {
+        let _ = tx.send((grpc_actual_addr, health_actual_addr));
+    }
 
     // Start gRPC server with graceful shutdown - includes health service
     let grpc_server = grpc_builder
