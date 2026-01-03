@@ -1,0 +1,52 @@
+# Example: Production deployment with PostgreSQL
+# Usage: helm install zopp ./charts/zopp -f values-examples/production.yaml
+
+server:
+  enabled: true
+  replicaCount: 2
+
+  database:
+    type: postgres
+    postgres:
+      # Use existing secret for security
+      existingSecret: "zopp-db-credentials"
+      existingSecretKey: "DATABASE_URL"
+
+  tls:
+    enabled: true
+    existingSecret: "zopp-server-tls"
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+  service:
+    type: ClusterIP  # Or LoadBalancer for external access
+
+operator:
+  enabled: true
+
+  credentials:
+    existingSecret: "zopp-operator-credentials"
+
+  watchNamespace: ""  # Watch all namespaces
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+rbac:
+  clusterWide: true
+
+# Create secrets first:
+# kubectl create secret generic zopp-db-credentials --from-literal=DATABASE_URL="postgres://..."
+# kubectl create secret generic zopp-server-tls --from-file=tls.crt --from-file=tls.key
+# kubectl create secret generic zopp-operator-credentials --from-file=config.json=$HOME/.zopp/config.json

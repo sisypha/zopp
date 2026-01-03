@@ -1,0 +1,75 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+{{- if .Values.server.enabled }}
+
+🚀 Zopp Server has been deployed!
+
+   Service: {{ include "zopp.fullname" . }}-server
+   gRPC Port: {{ .Values.server.service.grpcPort }}
+   HTTP Port: {{ .Values.server.service.httpPort }}
+
+   To access the server:
+
+   {{- if eq .Values.server.service.type "ClusterIP" }}
+   kubectl port-forward svc/{{ include "zopp.fullname" . }}-server {{ .Values.server.service.grpcPort }}:{{ .Values.server.service.grpcPort }}
+   {{- else }}
+   kubectl get svc {{ include "zopp.fullname" . }}-server
+   {{- end }}
+
+   Health check:
+   kubectl port-forward svc/{{ include "zopp.fullname" . }}-server {{ .Values.server.service.httpPort }}:{{ .Values.server.service.httpPort }}
+   curl http://localhost:{{ .Values.server.service.httpPort }}/healthz
+{{- end }}
+
+{{- if .Values.operator.enabled }}
+
+🤖 Zopp Operator has been deployed!
+
+   {{- if .Values.operator.watchNamespace }}
+   Watching namespace: {{ .Values.operator.watchNamespace }}
+   {{- else }}
+   Watching: All namespaces
+   {{- end }}
+
+   To view operator logs:
+   kubectl logs -l app.kubernetes.io/component=operator -f
+
+   To create a zopp-synced secret:
+
+   kubectl apply -f - <<EOF
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: my-app-secrets
+     annotations:
+       zopp.dev/sync: "true"
+       zopp.dev/workspace: "my-workspace"
+       zopp.dev/project: "my-project"
+       zopp.dev/environment: "production"
+   EOF
+{{- end }}
+
+{{- if not .Values.operator.credentials.existingSecret }}
+{{- if .Values.operator.enabled }}
+
+⚠️  WARNING: You need to provide operator credentials!
+
+   1. Create credentials using zopp CLI:
+      zopp join <invite-token> operator@{{ .Release.Name }}
+
+   2. Create Kubernetes secret:
+      kubectl create secret generic {{ include "zopp.fullname" . }}-operator-credentials \
+        --from-file=config.json=$HOME/.zopp/config.json
+
+   3. Upgrade the release:
+      helm upgrade {{ .Release.Name }} ./charts/zopp \
+        --set operator.credentials.existingSecret={{ include "zopp.fullname" . }}-operator-credentials
+{{- end }}
+{{- end }}
+
+📚 For more information:
+   - Chart README: charts/zopp/README.md
+   - Project docs: https://github.com/faiscadev/zopp
+   - Get help: https://github.com/faiscadev/zopp/issues

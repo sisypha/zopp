@@ -1,0 +1,17 @@
+apiVersion: v2
+name: zopp
+description: A Helm chart for zopp - zero-knowledge secrets manager
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - secrets
+  - secrets-management
+  - zero-knowledge
+  - encryption
+home: https://github.com/faiscadev/zopp
+sources:
+  - https://github.com/faiscadev/zopp
+maintainers:
+  - name: faisca
+    url: https://github.com/faiscadev

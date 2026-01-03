@@ -1,0 +1,90 @@
+{{- if .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zopp.fullname" . }}-operator
+  labels:
+    {{- include "zopp.operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.operator.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "zopp.operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "zopp.operator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "zopp.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: operator
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+        args:
+          - "--server={{ include "zopp.operator.serverAddress" . }}"
+          - "--credentials=/etc/zopp/credentials/config.json"
+          - "--health-addr=0.0.0.0:{{ .Values.operator.healthCheck.port }}"
+          {{- if .Values.operator.watchNamespace }}
+          - "--namespace={{ .Values.operator.watchNamespace }}"
+          {{- end }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.operator.healthCheck.port }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{- toYaml .Values.operator.resources | nindent 12 }}
+        volumeMounts:
+        - name: credentials
+          mountPath: /etc/zopp/credentials
+          readOnly: true
+        {{- if .Values.operator.server.tls.enabled }}
+        - name: server-ca
+          mountPath: /etc/zopp/server-ca
+          readOnly: true
+        {{- end }}
+      volumes:
+      - name: credentials
+        secret:
+          secretName: {{ .Values.operator.credentials.existingSecret | default (printf "%s-operator-credentials" (include "zopp.fullname" .)) }}
+      {{- if .Values.operator.server.tls.enabled }}
+      - name: server-ca
+        secret:
+          secretName: {{ .Values.operator.server.tls.existingSecret }}
+      {{- end }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
