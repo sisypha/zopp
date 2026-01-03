@@ -354,10 +354,10 @@ async fn operator() -> Result<(), Box<dyn std::error::Error>> {
 
     // Verify health endpoints work with retry loop
     let mut health_ready = false;
-    let mut last_healthz_status;
-    let mut last_readyz_status;
+    let mut last_healthz_status = None;
+    let mut last_readyz_status = None;
 
-    for i in 1..=20 {
+    for _ in 1..=20 {
         sleep(Duration::from_millis(100)).await;
         let Ok(healthz) = reqwest::get("http://127.0.0.1:8081/healthz").await else {
             continue;
@@ -366,22 +366,30 @@ async fn operator() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         };
 
-        last_healthz_status = healthz.status();
-        last_readyz_status = readyz.status();
+        let healthz_status = healthz.status();
+        let readyz_status = readyz.status();
 
-        if last_healthz_status.is_success() && last_readyz_status.is_success() {
+        last_healthz_status = Some(healthz_status);
+        last_readyz_status = Some(readyz_status);
+
+        if healthz_status.is_success() && readyz_status.is_success() {
             health_ready = true;
             break;
-        }
-
-        if i == 20 {
-            eprintln!("❌ Health check endpoints failed after {} attempts", i);
-            eprintln!("  /healthz: {}", last_healthz_status);
-            eprintln!("  /readyz: {}", last_readyz_status);
         }
     }
 
     if !health_ready {
+        eprintln!("❌ Health check endpoints failed after 20 attempts");
+        if let Some(status) = last_healthz_status {
+            eprintln!("  Last /healthz status: {}", status);
+        } else {
+            eprintln!("  /healthz: no successful connection");
+        }
+        if let Some(status) = last_readyz_status {
+            eprintln!("  Last /readyz status: {}", status);
+        } else {
+            eprintln!("  /readyz: no successful connection");
+        }
         cleanup_all(&mut server, &mut operator, cluster_name)?;
         return Err("Health endpoints not working".into());
     }
