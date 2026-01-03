@@ -68,9 +68,9 @@ See [DEMO.md](./DEMO.md) for the complete workflow.
 ### Docker (recommended)
 
 ```bash
-# Pull and run CLI
-docker pull ghcr.io/sisypha/zopp-cli:latest
-alias zopp='docker run --rm -v ~/.zopp:/home/zopp/.zopp ghcr.io/sisypha/zopp-cli:latest'
+# Pull pre-built image
+docker pull ghcr.io/faiscadev/zopp-cli:latest
+alias zopp='docker run --rm -v ~/.zopp:/home/zopp/.zopp ghcr.io/faiscadev/zopp-cli:latest'
 
 # Or build locally
 docker build -f cli.Dockerfile -t zopp-cli .
