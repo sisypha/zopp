@@ -2015,7 +2015,7 @@ async fn cmd_serve_with_ready(
 
     // Create HTTP health check server for Kubernetes liveness/readiness probes
     // /healthz - simple liveness check (always returns OK)
-    // /readyz - readiness check (waits for gRPC server to be listening)
+    // /readyz - readiness check (returns OK once gRPC listener is bound and ready)
     let health_router = Router::new()
         .route("/healthz", get(health_handler))
         .route("/readyz", get(readiness_handler))
@@ -2031,7 +2031,9 @@ async fn cmd_serve_with_ready(
     println!("ZoppServer listening on {}", grpc_actual_addr);
     println!("Health checks listening on {}", health_actual_addr);
 
-    // Signal that gRPC is ready
+    // Signal that gRPC listener is bound and ready to accept connections
+    // The TcpListener is already bound, so /readyz can return OK even though
+    // the serve loop hasn't started yet. This is correct for K8s readiness probes.
     let _ = readiness_tx.send(true);
 
     // Notify test that servers are ready

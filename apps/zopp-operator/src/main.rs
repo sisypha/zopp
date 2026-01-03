@@ -83,12 +83,14 @@ impl OperatorState {
 
 #[derive(Clone)]
 struct ReadinessCheck {
-    channel: Channel,
+    health_client: tonic_health::pb::health_client::HealthClient<Channel>,
 }
 
 impl ReadinessCheck {
     fn new(channel: Channel) -> Self {
-        Self { channel }
+        Self {
+            health_client: tonic_health::pb::health_client::HealthClient::new(channel),
+        }
     }
 }
 
@@ -97,15 +99,13 @@ async fn health_handler() -> &'static str {
 }
 
 async fn readiness_handler(
-    axum::extract::State(check): axum::extract::State<ReadinessCheck>,
+    axum::extract::State(mut check): axum::extract::State<ReadinessCheck>,
 ) -> Result<&'static str, axum::http::StatusCode> {
     // Actually verify we can connect to the gRPC health service
-    use tonic_health::pb::health_client::HealthClient;
     use tonic_health::pb::HealthCheckRequest;
 
-    let mut health_client = HealthClient::new(check.channel.clone());
-
-    match health_client
+    match check
+        .health_client
         .check(HealthCheckRequest {
             service: "".to_string(),
         })

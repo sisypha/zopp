@@ -354,6 +354,9 @@ async fn operator() -> Result<(), Box<dyn std::error::Error>> {
 
     // Verify health endpoints work with retry loop
     let mut health_ready = false;
+    let mut last_healthz_status;
+    let mut last_readyz_status;
+
     for i in 1..=20 {
         sleep(Duration::from_millis(100)).await;
         let Ok(healthz) = reqwest::get("http://127.0.0.1:8081/healthz").await else {
@@ -363,15 +366,18 @@ async fn operator() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         };
 
-        if healthz.status().is_success() && readyz.status().is_success() {
+        last_healthz_status = healthz.status();
+        last_readyz_status = readyz.status();
+
+        if last_healthz_status.is_success() && last_readyz_status.is_success() {
             health_ready = true;
             break;
         }
 
         if i == 20 {
             eprintln!("❌ Health check endpoints failed after {} attempts", i);
-            eprintln!("  /healthz: {}", healthz.status());
-            eprintln!("  /readyz: {}", readyz.status());
+            eprintln!("  /healthz: {}", last_healthz_status);
+            eprintln!("  /readyz: {}", last_readyz_status);
         }
     }
 
