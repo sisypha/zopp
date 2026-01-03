@@ -21,15 +21,15 @@ ENV SQLX_OFFLINE=true
 RUN cargo build --release --bin zopp
 
 # Runtime stage
-FROM debian:sid-slim
+FROM debian:bookworm-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd -r -u 1000 -s /bin/false zopp
+# Create non-root user with home directory
+RUN useradd -u 1000 -m -s /bin/false zopp
 
 # Copy binary from builder
 COPY --from=builder /build/target/release/zopp /usr/local/bin/zopp
