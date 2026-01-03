@@ -2039,8 +2039,9 @@ async fn cmd_serve_with_ready(
         let _ = tx.send((grpc_actual_addr, health_actual_addr));
     }
 
-    // Start health check server
-    let health_server = axum::serve(health_listener, health_router);
+    // Start health check server with graceful shutdown
+    let health_server = axum::serve(health_listener, health_router)
+        .with_graceful_shutdown(shutdown_signal());
 
     // Build gRPC server with optional TLS
     let mut grpc_builder = if let (Some(cert_path), Some(key_path)) = (tls_cert, tls_key) {
@@ -2071,7 +2072,7 @@ async fn cmd_serve_with_ready(
             shutdown_signal(),
         );
 
-    // Run both servers concurrently
+    // Run both servers concurrently - both will shut down gracefully on signal
     tokio::select! {
         result = grpc_server => result?,
         result = health_server => result?,
