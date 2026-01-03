@@ -2031,10 +2031,6 @@ async fn cmd_serve_with_ready(
     println!("ZoppServer listening on {}", grpc_actual_addr);
     println!("Health checks listening on {}", health_actual_addr);
 
-    // Start health check server with graceful shutdown
-    let health_server =
-        axum::serve(health_listener, health_router).with_graceful_shutdown(shutdown_signal());
-
     // Build gRPC server with optional TLS
     let mut grpc_builder = if let (Some(cert_path), Some(key_path)) = (tls_cert, tls_key) {
         let cert = std::fs::read_to_string(&cert_path)?;
@@ -2064,13 +2060,33 @@ async fn cmd_serve_with_ready(
         let _ = tx.send((grpc_actual_addr, health_actual_addr));
     }
 
+    // Create a broadcast channel for shutdown signaling
+    let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+    let shutdown_tx_clone = shutdown_tx.clone();
+
+    // Spawn a task to wait for shutdown signal and mark not-ready
+    tokio::spawn(async move {
+        shutdown_signal(Some(readiness_tx)).await;
+        let _ = shutdown_tx_clone.send(());
+    });
+
+    // Start health check server with graceful shutdown
+    let mut shutdown_rx1 = shutdown_tx.subscribe();
+    let health_server =
+        axum::serve(health_listener, health_router).with_graceful_shutdown(async move {
+            let _ = shutdown_rx1.recv().await;
+        });
+
     // Start gRPC server with graceful shutdown - includes health service
+    let mut shutdown_rx2 = shutdown_tx.subscribe();
     let grpc_server = grpc_builder
         .add_service(health_service)
         .add_service(ZoppServiceServer::new(server))
         .serve_with_incoming_shutdown(
             tokio_stream::wrappers::TcpListenerStream::new(grpc_listener),
-            shutdown_signal(),
+            async move {
+                let _ = shutdown_rx2.recv().await;
+            },
         );
 
     // Run both servers concurrently - ensure both complete their shutdown sequences
@@ -2108,7 +2124,7 @@ async fn readiness_handler(
     }
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(readiness_tx: Option<tokio::sync::watch::Sender<bool>>) {
     use tokio::signal::unix::{SignalKind, signal};
 
     let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
@@ -2121,6 +2137,11 @@ async fn shutdown_signal() {
         _ = sigint.recv() => {
             println!("Received SIGINT, shutting down gracefully...");
         }
+    }
+
+    // Mark not ready on shutdown for clean traffic drain in Kubernetes
+    if let Some(tx) = readiness_tx {
+        let _ = tx.send(false);
     }
 }
 
