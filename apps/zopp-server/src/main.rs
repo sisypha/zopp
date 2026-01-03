@@ -1953,7 +1953,7 @@ async fn cmd_serve_with_ready(
     tls_client_ca: Option<String>,
     ready_tx: Option<tokio::sync::oneshot::Sender<(std::net::SocketAddr, std::net::SocketAddr)>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use axum::{Router, routing::get};
+    use axum::{routing::get, Router};
 
     let addr: std::net::SocketAddr = addr.parse()?;
     let health_addr: std::net::SocketAddr = health_addr.parse()?;
@@ -2125,7 +2125,7 @@ async fn readiness_handler(
 }
 
 async fn shutdown_signal(readiness_tx: Option<tokio::sync::watch::Sender<bool>>) {
-    use tokio::signal::unix::{SignalKind, signal};
+    use tokio::signal::unix::{signal, SignalKind};
 
     let mut sigterm = signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
     let mut sigint = signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
@@ -2556,7 +2556,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_server_endpoints() {
-        use axum::{Router, routing::get};
+        use axum::{routing::get, Router};
 
         // Create readiness check
         let (_tx, rx) = tokio::sync::watch::channel(true);
