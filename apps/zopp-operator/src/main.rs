@@ -316,11 +316,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Run both health server and watch loop concurrently
-    // Both will exit gracefully on shutdown signal
-    // If watch loop exits due to stream ending, it triggers shutdown for health server
-    let (health_result, _) = tokio::join!(health_server, watch_loop);
-
-    health_result?;
+    // Exit when either completes (error, stream end, or shutdown signal)
+    tokio::select! {
+        result = health_server => {
+            // Health server exited (error or shutdown) - trigger shutdown for watch loop
+            let _ = shutdown_tx.send(());
+            result?;
+        }
+        _ = watch_loop => {
+            // Watch loop exited (stream end or shutdown) - shutdown already triggered for health server
+            info!("Watch loop completed");
+        }
+    }
 
     Ok(())
 }
