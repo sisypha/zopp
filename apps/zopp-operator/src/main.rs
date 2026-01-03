@@ -186,10 +186,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start health check server with graceful shutdown support
     let health_listener = tokio::net::TcpListener::bind(health_addr).await?;
     let mut shutdown_rx_health = shutdown_tx.subscribe();
-    let health_server =
-        axum::serve(health_listener, health_router).with_graceful_shutdown(async move {
-            let _ = shutdown_rx_health.recv().await;
-        });
+    let health_server = async move {
+        axum::serve(health_listener, health_router)
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx_health.recv().await;
+            })
+            .await
+    };
 
     // Spawn a task to wait for shutdown signal and broadcast to all listeners
     let shutdown_tx_clone = shutdown_tx.clone();
@@ -315,17 +318,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    tokio::pin!(health_server);
+    tokio::pin!(watch_loop);
+
     // Run both health server and watch loop concurrently
-    // Exit when either completes (error, stream end, or shutdown signal)
+    // Exit when either completes, then wait for the other to gracefully shutdown
     tokio::select! {
-        result = health_server => {
+        result = &mut health_server => {
             // Health server exited (error or shutdown) - trigger shutdown for watch loop
             let _ = shutdown_tx.send(());
             result?;
+            // Wait for watch loop to complete
+            watch_loop.await;
         }
-        _ = watch_loop => {
+        _ = &mut watch_loop => {
             // Watch loop exited (stream end or shutdown) - shutdown already triggered for health server
-            info!("Watch loop completed");
+            info!("Watch loop completed, waiting for health server to shutdown gracefully");
+            // Wait for health server to complete graceful shutdown
+            health_server.await?;
         }
     }
 
