@@ -2074,11 +2074,11 @@ async fn cmd_serve_with_ready(
             shutdown_signal(),
         );
 
-    // Run both servers concurrently - both will shut down gracefully on signal
-    tokio::select! {
-        result = grpc_server => result?,
-        result = health_server => result?,
-    }
+    // Run both servers concurrently - ensure both complete their shutdown sequences
+    let (grpc_result, health_result) = tokio::join!(grpc_server, health_server);
+
+    grpc_result?;
+    health_result?;
 
     Ok(())
 }

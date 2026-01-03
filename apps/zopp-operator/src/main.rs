@@ -280,15 +280,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Run both health server and watch loop concurrently
-    tokio::select! {
-        result = health_server => {
-            result?;
-        }
-        _ = watch_loop => {
-            info!("Watch loop completed");
-        }
-    }
+    // Run both health server and watch loop concurrently - ensure both complete their shutdown sequences
+    let (health_result, _) = tokio::join!(health_server, watch_loop);
+
+    health_result?;
 
     Ok(())
 }
