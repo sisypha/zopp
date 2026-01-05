@@ -65,7 +65,34 @@ See [DEMO.md](./DEMO.md) for the complete workflow.
 
 ## Installation
 
-### Docker (recommended)
+### Kubernetes (Helm)
+
+Deploy zopp server and operator to your Kubernetes cluster:
+
+```bash
+# Clone the repository
+git clone https://github.com/faiscadev/zopp.git
+cd zopp
+
+# Install with default settings (server + operator)
+helm install zopp ./charts/zopp
+
+# Or customize with your own values
+helm install zopp ./charts/zopp \
+  --set server.database.type=postgres \
+  --set server.database.postgres.url="postgres://user:pass@host/db"
+
+# Operator-only mode (connect to external server)
+helm install zopp ./charts/zopp \
+  --set server.enabled=false \
+  --set operator.server.address="zopp.example.com:50051"
+```
+
+See [charts/zopp/README.md](./charts/zopp/README.md) for complete Helm chart documentation.
+
+### CLI Installation
+
+#### Docker (recommended)
 
 ```bash
 # Pull latest stable release
@@ -80,7 +107,7 @@ alias zopp='docker run --rm -v ~/.zopp:/home/zopp/.zopp ghcr.io/faiscadev/zopp-c
 docker build -f cli.Dockerfile -t zopp-cli .
 ```
 
-### From source
+#### From source
 
 ```bash
 cargo install --path apps/zopp-cli
