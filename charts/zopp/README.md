@@ -2,6 +2,14 @@
 
 This Helm chart deploys zopp, a zero-knowledge secrets manager, to Kubernetes.
 
+## Versioning
+
+This chart uses **coupled versioning** - the chart version matches the zopp application version:
+- Chart v0.2.0 = zopp v0.2.0
+- When you upgrade to chart v0.3.0, you get zopp v0.3.0
+
+This means every zopp release includes a corresponding chart release, making upgrades simple and predictable.
+
 ## Components
 
 - **Server** (optional): gRPC server that stores encrypted secrets

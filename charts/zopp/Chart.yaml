@@ -2,6 +2,7 @@ apiVersion: v2
 name: zopp
 description: A Helm chart for zopp - zero-knowledge secrets manager
 type: application
+# Chart version is coupled with app version (both use same version number)
 version: 0.1.0
 appVersion: "0.1.0"
 keywords:
