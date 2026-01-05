@@ -1,0 +1,47 @@
+# Example: Development/testing deployment with SQLite
+# Usage: helm install zopp ./charts/zopp -f values-examples/development.yaml
+
+server:
+  enabled: true
+  replicaCount: 1
+
+  database:
+    type: sqlite
+    sqlite:
+      path: /data/zopp.db
+      persistence:
+        enabled: false  # Use emptyDir for faster iteration
+
+  tls:
+    enabled: false
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+operator:
+  enabled: true
+
+  credentials:
+    existingSecret: "zopp-operator-credentials"
+
+  # Watch only default namespace for testing
+  watchNamespace: "default"
+
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+rbac:
+  clusterWide: false  # Namespace-scoped RBAC
+
+# Create operator credentials:
+# kubectl create secret generic zopp-operator-credentials --from-file=config.json=$HOME/.zopp/config.json

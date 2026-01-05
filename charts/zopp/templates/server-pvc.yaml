@@ -1,0 +1,17 @@
+{{- if and .Values.server.enabled (eq .Values.server.database.type "sqlite") .Values.server.database.sqlite.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "zopp.fullname" . }}-server-data
+  labels:
+    {{- include "zopp.server.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.server.database.sqlite.persistence.accessMode }}
+  {{- if .Values.server.database.sqlite.persistence.storageClass }}
+  storageClassName: {{ .Values.server.database.sqlite.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.server.database.sqlite.persistence.size }}
+{{- end }}

@@ -1,0 +1,151 @@
+# Default values for zopp
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Server configuration
+server:
+  # Set to false to disable server deployment (operator-only mode)
+  enabled: true
+
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/faiscadev/zopp-server
+    pullPolicy: IfNotPresent
+    tag: "" # Overrides the image tag whose default is the chart appVersion
+
+  service:
+    type: ClusterIP
+    grpcPort: 50051
+    httpPort: 8080
+
+  # Database configuration
+  database:
+    # Type: sqlite or postgres
+    type: sqlite
+
+    # For SQLite (file-based)
+    sqlite:
+      # Path where SQLite database will be stored
+      path: /data/zopp.db
+      # Persistent volume claim for SQLite data
+      persistence:
+        enabled: true
+        storageClass: ""
+        accessMode: ReadWriteOnce
+        size: 1Gi
+
+    # For PostgreSQL
+    postgres:
+      # External PostgreSQL connection string
+      # Example: postgres://user:password@host:5432/database
+      url: ""
+      # OR use existing secret
+      existingSecret: ""
+      existingSecretKey: "DATABASE_URL"
+
+  # TLS configuration (optional)
+  tls:
+    enabled: false
+    # Existing secret containing tls.crt, tls.key, and optionally ca.crt
+    existingSecret: ""
+    # OR provide inline
+    cert: ""
+    key: ""
+    clientCA: ""
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Operator configuration
+operator:
+  # Set to false to disable operator deployment (server-only mode)
+  enabled: true
+
+  replicaCount: 1
+
+  image:
+    repository: ghcr.io/faiscadev/zopp-operator
+    pullPolicy: IfNotPresent
+    tag: "" # Overrides the image tag whose default is the chart appVersion
+
+  # Server connection
+  server:
+    # gRPC server address
+    # If server.enabled=true, this will be auto-generated as zopp-server:50051
+    # If server.enabled=false, you MUST provide the external server address
+    address: ""
+
+    # TLS configuration for connecting to server
+    tls:
+      enabled: false
+      # Existing secret containing ca.crt for server verification
+      existingSecret: ""
+
+  # Operator credentials
+  credentials:
+    # Existing secret containing zopp credentials (from zopp join)
+    # Must contain a key "config.json" with the CLI config
+    existingSecret: ""
+    # OR create from inline principal data
+    principal:
+      id: ""
+      name: ""
+      publicKey: ""
+      x25519PublicKey: ""
+      privateKey: ""
+
+  # Kubernetes namespace to watch
+  # Empty string means all namespaces (requires cluster-wide RBAC)
+  watchNamespace: ""
+
+  # Health check configuration
+  healthCheck:
+    port: 8080
+
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+
+  # For cluster-wide operator (watchNamespace: "")
+  clusterWide: false
+
+# ServiceAccount configuration
+serviceAccount:
+  # Create service account
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
