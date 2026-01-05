@@ -52,6 +52,7 @@ jobs:
 
       - name: Install cross-compilation tools
         if: matrix.target == 'aarch64-unknown-linux-gnu'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
@@ -98,11 +99,13 @@ jobs:
           path: artifacts
 
       - name: Move artifacts to root
+        shell: bash
         run: |
           find artifacts -name "*.tar.gz" -exec mv {} . \;
 
       - name: Extract version from tag
         id: version
+        shell: bash
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
           if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
