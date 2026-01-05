@@ -1,0 +1,89 @@
+name: Helm
+
+on:
+  push:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yaml'
+  pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yaml'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Lint Helm chart
+        run: helm lint charts/zopp
+
+      - name: Template Helm chart (default values)
+        run: helm template zopp charts/zopp > /dev/null
+
+      - name: Template Helm chart (operator-only)
+        run: helm template zopp charts/zopp -f charts/zopp/values-examples/operator-only.yaml > /dev/null
+
+      - name: Template Helm chart (production)
+        run: helm template zopp charts/zopp -f charts/zopp/values-examples/production.yaml > /dev/null
+
+      - name: Template Helm chart (development)
+        run: helm template zopp charts/zopp -f charts/zopp/values-examples/development.yaml > /dev/null
+
+      - name: Validate server disabled, operator enabled
+        run: |
+          OUTPUT=$(helm template zopp charts/zopp --set server.enabled=false --set operator.server.address="test.example.com:50051" --set operator.credentials.existingSecret="test-creds")
+          echo "$OUTPUT" | grep -q "kind: Deployment" || (echo "Expected Deployment not found" && exit 1)
+          echo "$OUTPUT" | grep -q "zopp-operator" || (echo "Expected operator deployment not found" && exit 1)
+          ! echo "$OUTPUT" | grep -q "zopp-server" || (echo "Unexpected server resources found" && exit 1)
+          echo "✓ Server disabled correctly"
+
+      - name: Validate operator disabled, server enabled
+        run: |
+          OUTPUT=$(helm template zopp charts/zopp --set operator.enabled=false)
+          echo "$OUTPUT" | grep -q "kind: Deployment" || (echo "Expected Deployment not found" && exit 1)
+          echo "$OUTPUT" | grep -q "zopp-server" || (echo "Expected server deployment not found" && exit 1)
+          ! echo "$OUTPUT" | grep -q "zopp-operator" || (echo "Unexpected operator resources found" && exit 1)
+          echo "✓ Operator disabled correctly"
+
+      - name: Validate RBAC modes
+        run: |
+          # Test namespace-scoped RBAC
+          OUTPUT=$(helm template zopp charts/zopp --set rbac.clusterWide=false)
+          echo "$OUTPUT" | grep -q "kind: Role$" || (echo "Expected Role not found" && exit 1)
+          echo "$OUTPUT" | grep -q "kind: RoleBinding" || (echo "Expected RoleBinding not found" && exit 1)
+          ! echo "$OUTPUT" | grep -q "kind: ClusterRole" || (echo "Unexpected ClusterRole found" && exit 1)
+          echo "✓ Namespace-scoped RBAC correct"
+
+          # Test cluster-wide RBAC
+          OUTPUT=$(helm template zopp charts/zopp --set rbac.clusterWide=true)
+          echo "$OUTPUT" | grep -q "kind: ClusterRole" || (echo "Expected ClusterRole not found" && exit 1)
+          echo "$OUTPUT" | grep -q "kind: ClusterRoleBinding" || (echo "Expected ClusterRoleBinding not found" && exit 1)
+          echo "✓ Cluster-wide RBAC correct"
+
+  package:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Package Helm chart
+        run: helm package charts/zopp
+
+      - name: Upload packaged chart
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: zopp-*.tgz
+          retention-days: 7
