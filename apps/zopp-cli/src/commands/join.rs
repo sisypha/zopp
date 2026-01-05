@@ -5,6 +5,7 @@ use zopp_proto::JoinRequest;
 
 pub async fn cmd_join(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     invite_code: &str,
     email: &str,
     principal_name: Option<&str>,
@@ -22,7 +23,7 @@ pub async fn cmd_join(
     let x25519_keypair = zopp_crypto::Keypair::generate();
     let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
 
-    let mut client = connect(server).await?;
+    let mut client = connect(server, tls_ca_cert).await?;
 
     let is_workspace_invite = invite_code.starts_with("inv_");
 

@@ -1,8 +1,11 @@
 use crate::grpc::{add_auth_metadata, setup_client};
 use zopp_proto::{CreateWorkspaceRequest, Empty};
 
-pub async fn cmd_workspace_list(server: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+pub async fn cmd_workspace_list(
+    server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(Empty {});
     add_auth_metadata(&mut request, &principal)?;
@@ -23,9 +26,10 @@ pub async fn cmd_workspace_list(server: &str) -> Result<(), Box<dyn std::error::
 
 pub async fn cmd_workspace_create(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     use uuid::Uuid;
     let workspace_id = Uuid::now_v7();

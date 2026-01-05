@@ -3,10 +3,11 @@ use crate::grpc::{add_auth_metadata, setup_client};
 
 pub async fn cmd_environment_list(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListEnvironmentsRequest {
         workspace_name: workspace_name.to_string(),
@@ -30,11 +31,12 @@ pub async fn cmd_environment_list(
 
 pub async fn cmd_environment_create(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let kek = unwrap_workspace_kek(&mut client, &principal, workspace_name).await?;
     let dek = zopp_crypto::generate_dek();
@@ -64,11 +66,12 @@ pub async fn cmd_environment_create(
 
 pub async fn cmd_environment_get(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
@@ -102,11 +105,12 @@ pub async fn cmd_environment_get(
 
 pub async fn cmd_environment_delete(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteEnvironmentRequest {
         workspace_name: workspace_name.to_string(),

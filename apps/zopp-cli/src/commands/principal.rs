@@ -32,6 +32,7 @@ pub async fn cmd_principal_current() -> Result<(), Box<dyn std::error::Error>> {
 
 pub async fn cmd_principal_create(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     name: &str,
     is_service: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -48,7 +49,7 @@ pub async fn cmd_principal_create(
     let x25519_keypair = zopp_crypto::Keypair::generate();
     let x25519_public_bytes = x25519_keypair.public_key_bytes().to_vec();
 
-    let mut client = connect(server).await?;
+    let mut client = connect(server, tls_ca_cert).await?;
     let principal = get_current_principal(&config)?;
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
@@ -102,6 +103,7 @@ pub async fn cmd_principal_use(name: &str) -> Result<(), Box<dyn std::error::Err
 
 pub async fn cmd_principal_rename(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     name: &str,
     new_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -120,7 +122,7 @@ pub async fn cmd_principal_rename(
     let principal_id = principal.id.clone();
     let (timestamp, signature) = sign_request(&principal.private_key)?;
 
-    let mut client = connect(server).await?;
+    let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(RenamePrincipalRequest {
         principal_id: principal_id.clone(),
         new_name: new_name.to_string(),

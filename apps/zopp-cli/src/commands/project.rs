@@ -2,9 +2,10 @@ use crate::grpc::{add_auth_metadata, setup_client};
 
 pub async fn cmd_project_list(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListProjectsRequest {
         workspace_name: workspace_name.to_string(),
@@ -27,10 +28,11 @@ pub async fn cmd_project_list(
 
 pub async fn cmd_project_create(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::CreateProjectRequest {
         workspace_name: workspace_name.to_string(),
@@ -50,10 +52,11 @@ pub async fn cmd_project_create(
 
 pub async fn cmd_project_get(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetProjectRequest {
         workspace_name: workspace_name.to_string(),
@@ -84,10 +87,11 @@ pub async fn cmd_project_get(
 
 pub async fn cmd_project_delete(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteProjectRequest {
         workspace_name: workspace_name.to_string(),

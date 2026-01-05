@@ -1,22 +1,31 @@
 use crate::config::{get_current_principal, load_config, PrincipalConfig};
 use chrono::Utc;
 use ed25519_dalek::{Signer, SigningKey};
+use std::path::Path;
 use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
 use zopp_proto::zopp_service_client::ZoppServiceClient;
 
 pub async fn connect(
     server: &str,
+    tls_ca_cert: Option<&Path>,
 ) -> Result<ZoppServiceClient<Channel>, Box<dyn std::error::Error>> {
     let endpoint = Channel::from_shared(server.to_string())?;
 
     let endpoint = if server.starts_with("https://") {
-        // Parse URL and extract host for TLS certificate validation
-        let url = url::Url::parse(server)?;
-        let domain = url.host_str().ok_or("HTTPS URL must have a valid host")?;
-
-        let tls_config = tonic::transport::ClientTlsConfig::new().domain_name(domain);
-        endpoint.tls_config(tls_config)?
+        if let Some(ca_cert_path) = tls_ca_cert {
+            // Custom CA for self-signed certificates
+            let ca_cert = std::fs::read(ca_cert_path)?;
+            let tls_config = tonic::transport::ClientTlsConfig::new()
+                .ca_certificate(tonic::transport::Certificate::from_pem(ca_cert));
+            endpoint.tls_config(tls_config)?
+        } else {
+            // System CA store for trusted certificates
+            let url = url::Url::parse(server)?;
+            let domain = url.host_str().ok_or("HTTPS URL must have a valid host")?;
+            let tls_config = tonic::transport::ClientTlsConfig::new().domain_name(domain);
+            endpoint.tls_config(tls_config)?
+        }
     } else {
         endpoint
     };
@@ -42,10 +51,11 @@ pub fn sign_request(private_key_hex: &str) -> Result<(i64, Vec<u8>), Box<dyn std
 /// Setup authenticated client: load config, get principal, connect to server
 pub async fn setup_client(
     server: &str,
+    tls_ca_cert: Option<&Path>,
 ) -> Result<(ZoppServiceClient<Channel>, PrincipalConfig), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
-    let client = connect(server).await?;
+    let client = connect(server, tls_ca_cert).await?;
     Ok((client, principal.clone()))
 }
 

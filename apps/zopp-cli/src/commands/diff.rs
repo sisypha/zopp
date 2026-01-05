@@ -7,6 +7,7 @@ use kube::{Api, Client};
 #[allow(clippy::too_many_arguments)]
 pub async fn cmd_diff_k8s(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
@@ -15,7 +16,7 @@ pub async fn cmd_diff_k8s(
     kubeconfig_path: Option<&std::path::Path>,
     context: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let zopp_secrets = fetch_and_decrypt_secrets(
         &mut client,

@@ -69,13 +69,14 @@ async fn create_secret_context(
 
 pub async fn cmd_secret_set(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
     key: &str,
     value: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let ctx = create_secret_context(
         &mut client,
@@ -107,12 +108,13 @@ pub async fn cmd_secret_set(
 
 pub async fn cmd_secret_get(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetSecretRequest {
         workspace_name: workspace_name.to_string(),
@@ -142,11 +144,12 @@ pub async fn cmd_secret_get(
 
 pub async fn cmd_secret_list(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
         workspace_name: workspace_name.to_string(),
@@ -171,12 +174,13 @@ pub async fn cmd_secret_list(
 
 pub async fn cmd_secret_delete(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteSecretRequest {
         workspace_name: workspace_name.to_string(),
@@ -195,12 +199,13 @@ pub async fn cmd_secret_delete(
 
 pub async fn cmd_secret_export(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
     output: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     // Fetch and decrypt all secrets
     let secret_data = fetch_and_decrypt_secrets(
@@ -236,6 +241,7 @@ pub async fn cmd_secret_export(
 
 pub async fn cmd_secret_import(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
@@ -267,7 +273,7 @@ pub async fn cmd_secret_import(
         return Err("No secrets found in input".into());
     }
 
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     // Create SecretContext once
     let ctx = create_secret_context(
@@ -302,6 +308,7 @@ pub async fn cmd_secret_import(
 
 pub async fn cmd_secret_run(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
@@ -311,7 +318,7 @@ pub async fn cmd_secret_run(
         return Err("No command specified".into());
     }
 
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     // Fetch and decrypt all secrets
     let env_vars = fetch_and_decrypt_secrets(

@@ -3,11 +3,12 @@ use crate::grpc::{add_auth_metadata, setup_client};
 
 pub async fn cmd_invite_create(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     expires_hours: i64,
     plain: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let kek = unwrap_workspace_kek(&mut client, &principal, workspace_name).await?;
 
@@ -60,8 +61,11 @@ pub async fn cmd_invite_create(
     Ok(())
 }
 
-pub async fn cmd_invite_list(server: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+pub async fn cmd_invite_list(
+    server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::Empty {});
     add_auth_metadata(&mut request, &principal)?;
@@ -88,6 +92,7 @@ pub async fn cmd_invite_list(server: &str) -> Result<(), Box<dyn std::error::Err
 
 pub async fn cmd_invite_revoke(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     invite_code: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let secret_hex = invite_code
@@ -100,7 +105,7 @@ pub async fn cmd_invite_revoke(
     let secret_hash = zopp_crypto::hash_sha256(&invite_secret);
     let token = hex::encode(secret_hash);
 
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RevokeInviteRequest { token });
     add_auth_metadata(&mut request, &principal)?;
