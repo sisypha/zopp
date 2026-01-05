@@ -8,13 +8,11 @@ operator:
   enabled: true
 
   # REQUIRED: External server address
+  # Note: TLS is not currently supported by the operator
   server:
-    address: "zopp.example.com:50051"
-    tls:
-      enabled: false  # Set to true if server uses TLS
+    address: "http://zopp.example.com:50051"
 
   # REQUIRED: Operator credentials
-  # Create with: kubectl create secret generic zopp-operator-creds --from-file=config.json=$HOME/.zopp/config.json
   credentials:
     existingSecret: "zopp-operator-creds"
 
@@ -23,3 +21,6 @@ operator:
 
 rbac:
   clusterWide: true  # Required for watching all namespaces
+
+# Create operator credentials:
+# kubectl create secret generic zopp-operator-creds --from-file=config.json=$HOME/.zopp/config.json

@@ -1,4 +1,7 @@
 {{- if .Values.server.enabled }}
+{{- if and (eq .Values.server.database.type "sqlite") (gt (int .Values.server.replicaCount) 1) }}
+{{- fail "SQLite database type is incompatible with multiple replicas. Set server.replicaCount=1 or use server.database.type=postgres" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

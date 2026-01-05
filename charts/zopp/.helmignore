@@ -5,3 +5,13 @@
 *.orig
 *~
 .DS_Store
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.iml

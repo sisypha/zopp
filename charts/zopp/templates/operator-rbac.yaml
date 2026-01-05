@@ -1,4 +1,7 @@
 {{- if and .Values.operator.enabled .Values.rbac.create }}
+{{- if and (not .Values.operator.watchNamespace) (not .Values.rbac.clusterWide) }}
+{{- fail "When operator.watchNamespace is empty (watch all namespaces), rbac.clusterWide must be true" }}
+{{- end }}
 ---
 {{- if .Values.rbac.clusterWide }}
 apiVersion: rbac.authorization.k8s.io/v1
