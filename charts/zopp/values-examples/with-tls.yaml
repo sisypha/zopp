@@ -1,0 +1,54 @@
+# Example: TLS/mTLS enabled
+# Usage: helm install zopp ./charts/zopp -f values-examples/with-tls.yaml
+
+server:
+  enabled: true
+  replicaCount: 2
+
+  database:
+    type: postgres
+    postgres:
+      existingSecret: "zopp-db-credentials"
+      existingSecretKey: "DATABASE_URL"
+
+  tls:
+    enabled: true
+    existingSecret: "zopp-server-tls"
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+operator:
+  enabled: true
+
+  server:
+    tls:
+      enabled: true
+      existingSecret: "zopp-server-ca"
+
+  credentials:
+    existingSecret: "zopp-operator-credentials"
+
+  watchNamespace: ""
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+rbac:
+  clusterWide: true
+
+# Create secrets first:
+# kubectl create secret generic zopp-db-credentials --from-literal=DATABASE_URL="postgres://user:pass@host/db"
+# kubectl create secret generic zopp-server-tls --from-file=tls.crt=server.crt --from-file=tls.key=server.key --from-file=ca.crt=ca.crt
+# kubectl create secret generic zopp-server-ca --from-file=ca.crt=ca.crt
+# kubectl create secret generic zopp-operator-credentials --from-file=config.json=$HOME/.zopp/config.json

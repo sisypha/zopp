@@ -30,11 +30,14 @@ jobs:
       - name: Template Helm chart (operator-only)
         run: helm template zopp charts/zopp -f charts/zopp/values-examples/operator-only.yaml > /dev/null
 
-      - name: Template Helm chart (production)
-        run: helm template zopp charts/zopp -f charts/zopp/values-examples/production.yaml > /dev/null
+      - name: Template Helm chart (sqlite)
+        run: helm template zopp charts/zopp -f charts/zopp/values-examples/sqlite.yaml > /dev/null
 
-      - name: Template Helm chart (development)
-        run: helm template zopp charts/zopp -f charts/zopp/values-examples/development.yaml > /dev/null
+      - name: Template Helm chart (postgres)
+        run: helm template zopp charts/zopp -f charts/zopp/values-examples/postgres.yaml > /dev/null
+
+      - name: Template Helm chart (with-tls)
+        run: helm template zopp charts/zopp -f charts/zopp/values-examples/with-tls.yaml > /dev/null
 
       - name: Validate server disabled, operator enabled
         run: |
