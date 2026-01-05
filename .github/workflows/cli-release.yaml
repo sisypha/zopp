@@ -27,6 +27,7 @@ jobs:
 
     steps:
       - name: Log mode
+        shell: bash
         run: |
           if [[ "${{ github.ref }}" =~ ^refs/tags/ ]]; then
             echo "🚀 RELEASE MODE: Building for ${{ matrix.target }}"
