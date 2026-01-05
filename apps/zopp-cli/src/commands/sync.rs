@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 #[allow(clippy::too_many_arguments)]
 pub async fn cmd_sync_k8s(
     server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
@@ -19,7 +20,7 @@ pub async fn cmd_sync_k8s(
     force: bool,
     dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server).await?;
+    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let secret_data = fetch_and_decrypt_secrets(
         &mut client,

@@ -24,14 +24,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             email,
             principal,
         } => {
-            cmd_join(&cli.server, &token, &email, principal.as_deref()).await?;
+            cmd_join(
+                &cli.server,
+                cli.tls_ca_cert.as_deref(),
+                &token,
+                &email,
+                principal.as_deref(),
+            )
+            .await?;
         }
         Command::Workspace { workspace_cmd } => match workspace_cmd {
             WorkspaceCommand::List => {
-                cmd_workspace_list(&cli.server).await?;
+                cmd_workspace_list(&cli.server, cli.tls_ca_cert.as_deref()).await?;
             }
             WorkspaceCommand::Create { name } => {
-                cmd_workspace_create(&cli.server, &name).await?;
+                cmd_workspace_create(&cli.server, cli.tls_ca_cert.as_deref(), &name).await?;
             }
         },
         Command::Principal { principal_cmd } => match principal_cmd {
@@ -42,13 +49,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cmd_principal_current().await?;
             }
             PrincipalCommand::Create { name, service } => {
-                cmd_principal_create(&cli.server, &name, service).await?;
+                cmd_principal_create(&cli.server, cli.tls_ca_cert.as_deref(), &name, service)
+                    .await?;
             }
             PrincipalCommand::Use { name } => {
                 cmd_principal_use(&name).await?;
             }
             PrincipalCommand::Rename { name, new_name } => {
-                cmd_principal_rename(&cli.server, &name, &new_name).await?;
+                cmd_principal_rename(&cli.server, cli.tls_ca_cert.as_deref(), &name, &new_name)
+                    .await?;
             }
             PrincipalCommand::Delete { name } => {
                 cmd_principal_delete(&name).await?;
@@ -56,23 +65,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         Command::Project { project_cmd } => match project_cmd {
             ProjectCommand::List { workspace } => {
-                cmd_project_list(&cli.server, &workspace).await?;
+                cmd_project_list(&cli.server, cli.tls_ca_cert.as_deref(), &workspace).await?;
             }
             ProjectCommand::Create { workspace, name } => {
-                cmd_project_create(&cli.server, &workspace, &name).await?;
+                cmd_project_create(&cli.server, cli.tls_ca_cert.as_deref(), &workspace, &name)
+                    .await?;
             }
             ProjectCommand::Get { name, workspace } => {
-                cmd_project_get(&cli.server, &workspace, &name).await?;
+                cmd_project_get(&cli.server, cli.tls_ca_cert.as_deref(), &workspace, &name).await?;
             }
             ProjectCommand::Delete { name, workspace } => {
-                cmd_project_delete(&cli.server, &workspace, &name).await?;
+                cmd_project_delete(&cli.server, cli.tls_ca_cert.as_deref(), &workspace, &name)
+                    .await?;
             }
         },
         Command::Environment { environment_cmd } => match environment_cmd {
             EnvironmentCommand::List { workspace, project } => {
                 let (workspace, project) =
                     resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
-                cmd_environment_list(&cli.server, &workspace, &project).await?;
+                cmd_environment_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                )
+                .await?;
             }
             EnvironmentCommand::Create {
                 workspace,
@@ -81,7 +98,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let (workspace, project) =
                     resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
-                cmd_environment_create(&cli.server, &workspace, &project, &name).await?;
+                cmd_environment_create(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &name,
+                )
+                .await?;
             }
             EnvironmentCommand::Get {
                 name,
@@ -90,7 +114,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let (workspace, project) =
                     resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
-                cmd_environment_get(&cli.server, &workspace, &project, &name).await?;
+                cmd_environment_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &name,
+                )
+                .await?;
             }
             EnvironmentCommand::Delete {
                 name,
@@ -99,7 +130,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let (workspace, project) =
                     resolve_workspace_project(workspace.as_ref(), project.as_ref())?;
-                cmd_environment_delete(&cli.server, &workspace, &project, &name).await?;
+                cmd_environment_delete(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &name,
+                )
+                .await?;
             }
         },
         Command::Secret { secret_cmd } => match secret_cmd {
@@ -114,6 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_set(
                     &cli.server,
+                    cli.tls_ca_cert.as_deref(),
                     &workspace,
                     &project,
                     &environment,
@@ -130,7 +169,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let (workspace, project, environment) =
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
-                cmd_secret_get(&cli.server, &workspace, &project, &environment, &key).await?;
+                cmd_secret_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &key,
+                )
+                .await?;
             }
             SecretCommand::List {
                 workspace,
@@ -139,7 +186,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let (workspace, project, environment) =
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
-                cmd_secret_list(&cli.server, &workspace, &project, &environment).await?;
+                cmd_secret_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                )
+                .await?;
             }
             SecretCommand::Delete {
                 workspace,
@@ -149,7 +203,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } => {
                 let (workspace, project, environment) =
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
-                cmd_secret_delete(&cli.server, &workspace, &project, &environment, &key).await?;
+                cmd_secret_delete(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &key,
+                )
+                .await?;
             }
             SecretCommand::Export {
                 workspace,
@@ -161,6 +223,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_export(
                     &cli.server,
+                    cli.tls_ca_cert.as_deref(),
                     &workspace,
                     &project,
                     &environment,
@@ -178,6 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_secret_import(
                     &cli.server,
+                    cli.tls_ca_cert.as_deref(),
                     &workspace,
                     &project,
                     &environment,
@@ -193,13 +257,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 plain,
             } => {
                 let workspace = resolve_workspace(workspace.as_ref())?;
-                cmd_invite_create(&cli.server, &workspace, expires_hours, plain).await?;
+                cmd_invite_create(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    expires_hours,
+                    plain,
+                )
+                .await?;
             }
             InviteCommand::List => {
-                cmd_invite_list(&cli.server).await?;
+                cmd_invite_list(&cli.server, cli.tls_ca_cert.as_deref()).await?;
             }
             InviteCommand::Revoke { invite_code } => {
-                cmd_invite_revoke(&cli.server, &invite_code).await?;
+                cmd_invite_revoke(&cli.server, cli.tls_ca_cert.as_deref(), &invite_code).await?;
             }
         },
         Command::Sync { sync_cmd } => match sync_cmd {
@@ -218,6 +289,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_sync_k8s(
                     &cli.server,
+                    cli.tls_ca_cert.as_deref(),
                     &workspace,
                     &project,
                     &environment,
@@ -245,6 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
                 cmd_diff_k8s(
                     &cli.server,
+                    cli.tls_ca_cert.as_deref(),
                     &workspace,
                     &project,
                     &environment,
@@ -264,7 +337,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             let (workspace, project, environment) =
                 resolve_context(workspace.as_ref(), project.as_ref(), environment.as_ref())?;
-            cmd_secret_run(&cli.server, &workspace, &project, &environment, &command).await?;
+            cmd_secret_run(
+                &cli.server,
+                cli.tls_ca_cert.as_deref(),
+                &workspace,
+                &project,
+                &environment,
+                &command,
+            )
+            .await?;
         }
     }
 

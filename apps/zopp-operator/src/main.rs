@@ -170,7 +170,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let uses_tls = args.server.starts_with("https://");
     let channel = if uses_tls {
         if let Some(ca_cert_path) = &args.tls_ca_cert {
-            info!("Connecting with TLS using custom CA cert: {:?}", ca_cert_path);
+            info!(
+                "Connecting with TLS using custom CA cert: {:?}",
+                ca_cert_path
+            );
             let ca_cert = std::fs::read(ca_cert_path)?;
             let tls = tonic::transport::ClientTlsConfig::new()
                 .ca_certificate(tonic::transport::Certificate::from_pem(ca_cert));

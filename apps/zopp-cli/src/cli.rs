@@ -9,6 +9,10 @@ pub struct Cli {
     #[arg(long, env = "ZOPP_SERVER", default_value = "http://127.0.0.1:50051")]
     pub server: String,
 
+    /// Path to TLS CA certificate for server connection (optional, for self-signed certs)
+    #[arg(long, env = "ZOPP_TLS_CA_CERT")]
+    pub tls_ca_cert: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Command,
 }
