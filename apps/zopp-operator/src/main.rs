@@ -65,6 +65,10 @@ struct Args {
     /// Health check HTTP server address
     #[arg(long, env = "ZOPP_HEALTH_ADDR", default_value = "0.0.0.0:8080")]
     health_addr: String,
+
+    /// Path to TLS CA certificate for server connection
+    #[arg(long, env = "ZOPP_TLS_CA_CERT")]
+    tls_ca_cert: Option<PathBuf>,
 }
 
 /// Operator state tracking active sync tasks
@@ -163,7 +167,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Create gRPC client
-    let channel = Channel::from_shared(args.server.clone())?.connect().await?;
+    let channel = if let Some(ca_cert_path) = &args.tls_ca_cert {
+        info!("Connecting to server with TLS using CA cert: {:?}", ca_cert_path);
+        let ca_cert = std::fs::read(ca_cert_path)?;
+        let tls = tonic::transport::ClientTlsConfig::new()
+            .ca_certificate(tonic::transport::Certificate::from_pem(ca_cert));
+        Channel::from_shared(args.server.clone())?
+            .tls_config(tls)?
+            .connect()
+            .await?
+    } else {
+        info!("Connecting to server without TLS");
+        Channel::from_shared(args.server.clone())?.connect().await?
+    };
     let grpc_client = Arc::new(ZoppServiceClient::new(channel.clone()));
 
     // Create Kubernetes client
