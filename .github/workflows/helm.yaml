@@ -57,15 +57,15 @@ jobs:
 
       - name: Validate RBAC modes
         run: |
-          # Test namespace-scoped RBAC
-          OUTPUT=$(helm template zopp charts/zopp --set rbac.clusterWide=false)
+          # Test namespace-scoped RBAC (requires watchNamespace to be set)
+          OUTPUT=$(helm template zopp charts/zopp --set rbac.clusterWide=false --set operator.watchNamespace=default)
           echo "$OUTPUT" | grep -q "kind: Role$" || (echo "Expected Role not found" && exit 1)
           echo "$OUTPUT" | grep -q "kind: RoleBinding" || (echo "Expected RoleBinding not found" && exit 1)
           ! echo "$OUTPUT" | grep -q "kind: ClusterRole" || (echo "Unexpected ClusterRole found" && exit 1)
           echo "✓ Namespace-scoped RBAC correct"
 
-          # Test cluster-wide RBAC
-          OUTPUT=$(helm template zopp charts/zopp --set rbac.clusterWide=true)
+          # Test cluster-wide RBAC (default)
+          OUTPUT=$(helm template zopp charts/zopp --set rbac.clusterWide=true --set operator.watchNamespace="")
           echo "$OUTPUT" | grep -q "kind: ClusterRole" || (echo "Expected ClusterRole not found" && exit 1)
           echo "$OUTPUT" | grep -q "kind: ClusterRoleBinding" || (echo "Expected ClusterRoleBinding not found" && exit 1)
           echo "✓ Cluster-wide RBAC correct"
