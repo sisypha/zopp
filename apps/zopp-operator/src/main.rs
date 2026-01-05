@@ -166,8 +166,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         principal.name, principal.id
     );
 
-    // Create gRPC client
+    // Validate TLS configuration
     let uses_tls = args.server.starts_with("https://");
+    if !uses_tls && args.tls_ca_cert.is_some() {
+        return Err(
+            "Error: --tls-ca-cert provided but server URL does not use https://. \
+             Either use https:// in the server URL or remove --tls-ca-cert flag."
+                .into(),
+        );
+    }
+
+    // Create gRPC client
     let channel = if uses_tls {
         if let Some(ca_cert_path) = &args.tls_ca_cert {
             info!(

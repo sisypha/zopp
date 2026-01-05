@@ -15,7 +15,7 @@ pub async fn connect(
     let endpoint = if server.starts_with("https://") {
         if let Some(ca_cert_path) = tls_ca_cert {
             // Custom CA for self-signed certificates
-            let ca_cert = std::fs::read(ca_cert_path)?;
+            let ca_cert = tokio::fs::read(ca_cert_path).await?;
             let tls_config = tonic::transport::ClientTlsConfig::new()
                 .ca_certificate(tonic::transport::Certificate::from_pem(ca_cert));
             endpoint.tls_config(tls_config)?

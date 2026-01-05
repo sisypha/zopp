@@ -107,7 +107,7 @@ operator:
   # Kubernetes namespace to watch
   # Empty string means all namespaces (requires cluster-wide RBAC)
   # Set to a specific namespace (e.g., "default") for namespace-scoped operator
-  watchNamespace: "default"
+  watchNamespace: ""
 
   # Health check configuration
   healthCheck:
@@ -131,7 +131,8 @@ rbac:
   create: true
 
   # For cluster-wide operator (watchNamespace: "")
-  clusterWide: false
+  # Set to false for namespace-scoped operator (when watchNamespace is set)
+  clusterWide: true
 
 # ServiceAccount configuration
 serviceAccount:

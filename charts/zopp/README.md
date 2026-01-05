@@ -252,7 +252,7 @@ operator:
 | `operator.image.repository` | Operator image | `ghcr.io/faiscadev/zopp-operator` |
 | `operator.image.tag` | Operator image tag | Chart appVersion |
 | `operator.server.address` | Server gRPC address | Auto-generated if server enabled |
-| `operator.watchNamespace` | Namespace to watch (empty = all) | `""` |
+| `operator.watchNamespace` | Namespace to watch (empty = all) | `""` (all namespaces) |
 | `operator.credentials.existingSecret` | Secret containing zopp config | Required |
 | `operator.healthCheck.port` | Health check port | `8080` |
 
@@ -261,7 +261,7 @@ operator:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `rbac.create` | Create RBAC resources | `true` |
-| `rbac.clusterWide` | Use ClusterRole for all namespaces | `false` |
+| `rbac.clusterWide` | Use ClusterRole for all namespaces | `true` |
 
 ## Examples
 
