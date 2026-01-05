@@ -39,7 +39,7 @@ spec:
           {{- if .Values.operator.watchNamespace }}
           - "--namespace={{ .Values.operator.watchNamespace }}"
           {{- end }}
-          {{- if .Values.operator.server.tls.enabled }}
+          {{- if .Values.operator.server.tls.existingSecret }}
           - "--tls-ca-cert=/etc/zopp/server-ca/ca.crt"
           {{- end }}
         ports:
@@ -64,7 +64,7 @@ spec:
         - name: credentials
           mountPath: /etc/zopp/credentials
           readOnly: true
-        {{- if .Values.operator.server.tls.enabled }}
+        {{- if .Values.operator.server.tls.existingSecret }}
         - name: server-ca
           mountPath: /etc/zopp/server-ca
           readOnly: true
@@ -73,7 +73,7 @@ spec:
       - name: credentials
         secret:
           secretName: {{ .Values.operator.credentials.existingSecret | default (printf "%s-operator-credentials" (include "zopp.fullname" .)) }}
-      {{- if .Values.operator.server.tls.enabled }}
+      {{- if .Values.operator.server.tls.existingSecret }}
       - name: server-ca
         secret:
           secretName: {{ .Values.operator.server.tls.existingSecret }}

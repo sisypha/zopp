@@ -28,7 +28,6 @@ operator:
 
   server:
     tls:
-      enabled: true
       existingSecret: "zopp-server-ca"
 
   credentials:

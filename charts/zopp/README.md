@@ -216,7 +216,6 @@ operator:
   server:
     address: "https://zopp.example.com:50051"
     tls:
-      enabled: true
       existingSecret: "zopp-server-ca"  # Contains ca.crt
 ```
 
