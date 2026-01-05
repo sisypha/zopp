@@ -441,7 +441,7 @@ fn generate_self_signed_certs(
     certs_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Generate CA private key
-    Command::new("openssl")
+    let status = Command::new("openssl")
         .args([
             "genrsa",
             "-out",
@@ -450,9 +450,12 @@ fn generate_self_signed_certs(
         ])
         .stdout(Stdio::null())
         .status()?;
+    if !status.success() {
+        return Err("Failed to generate CA private key".into());
+    }
 
     // Generate CA certificate
-    Command::new("openssl")
+    let status = Command::new("openssl")
         .args([
             "req",
             "-x509",
@@ -470,9 +473,12 @@ fn generate_self_signed_certs(
         ])
         .stdout(Stdio::null())
         .status()?;
+    if !status.success() {
+        return Err("Failed to generate CA certificate".into());
+    }
 
     // Generate server private key
-    Command::new("openssl")
+    let status = Command::new("openssl")
         .args([
             "genrsa",
             "-out",
@@ -481,9 +487,12 @@ fn generate_self_signed_certs(
         ])
         .stdout(Stdio::null())
         .status()?;
+    if !status.success() {
+        return Err("Failed to generate server private key".into());
+    }
 
     // Generate server CSR
-    Command::new("openssl")
+    let status = Command::new("openssl")
         .args([
             "req",
             "-new",
@@ -496,6 +505,9 @@ fn generate_self_signed_certs(
         ])
         .stdout(Stdio::null())
         .status()?;
+    if !status.success() {
+        return Err("Failed to generate server CSR".into());
+    }
 
     // Create SAN config
     let san_config = certs_dir.join("san.cnf");
@@ -505,7 +517,7 @@ fn generate_self_signed_certs(
     )?;
 
     // Sign server certificate with CA
-    Command::new("openssl")
+    let status = Command::new("openssl")
         .args([
             "x509",
             "-req",
@@ -526,6 +538,9 @@ fn generate_self_signed_certs(
         ])
         .stdout(Stdio::null())
         .status()?;
+    if !status.success() {
+        return Err("Failed to sign server certificate".into());
+    }
 
     Ok(())
 }
@@ -557,7 +572,7 @@ async fn create_k8s_secret_from_file(
     file_path: &std::path::Path,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    Command::new("kubectl")
+    let status = Command::new("kubectl")
         .args([
             "create",
             "secret",
@@ -570,6 +585,9 @@ async fn create_k8s_secret_from_file(
         ])
         .stdout(Stdio::null())
         .status()?;
+    if !status.success() {
+        return Err(format!("Failed to create Kubernetes secret '{}'", name).into());
+    }
     Ok(())
 }
 
