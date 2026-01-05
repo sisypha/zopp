@@ -195,13 +195,26 @@ rbac:
 
 #### Connecting to External Server
 
+TLS is automatically enabled when using `https://` in the server address.
+
+**With system-trusted CA (e.g., Let's Encrypt):**
 ```yaml
 server:
-  enabled: false  # Don't deploy server
+  enabled: false
 
 operator:
   server:
-    address: "zopp.example.com:50051"
+    address: "https://zopp.example.com:50051"
+```
+
+**With self-signed certificate:**
+```yaml
+server:
+  enabled: false
+
+operator:
+  server:
+    address: "https://zopp.example.com:50051"
     tls:
       enabled: true
       existingSecret: "zopp-server-ca"  # Contains ca.crt

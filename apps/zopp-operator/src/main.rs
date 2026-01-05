@@ -167,17 +167,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Create gRPC client
-    let channel = if let Some(ca_cert_path) = &args.tls_ca_cert {
-        info!("Connecting to server with TLS using CA cert: {:?}", ca_cert_path);
-        let ca_cert = std::fs::read(ca_cert_path)?;
-        let tls = tonic::transport::ClientTlsConfig::new()
-            .ca_certificate(tonic::transport::Certificate::from_pem(ca_cert));
-        Channel::from_shared(args.server.clone())?
-            .tls_config(tls)?
-            .connect()
-            .await?
+    let uses_tls = args.server.starts_with("https://");
+    let channel = if uses_tls {
+        if let Some(ca_cert_path) = &args.tls_ca_cert {
+            info!("Connecting with TLS using custom CA cert: {:?}", ca_cert_path);
+            let ca_cert = std::fs::read(ca_cert_path)?;
+            let tls = tonic::transport::ClientTlsConfig::new()
+                .ca_certificate(tonic::transport::Certificate::from_pem(ca_cert));
+            Channel::from_shared(args.server.clone())?
+                .tls_config(tls)?
+                .connect()
+                .await?
+        } else {
+            info!("Connecting with TLS using system CA store");
+            let tls = tonic::transport::ClientTlsConfig::new();
+            Channel::from_shared(args.server.clone())?
+                .tls_config(tls)?
+                .connect()
+                .await?
+        }
     } else {
-        info!("Connecting to server without TLS");
+        info!("Connecting without TLS");
         Channel::from_shared(args.server.clone())?.connect().await?
     };
     let grpc_client = Arc::new(ZoppServiceClient::new(channel.clone()));
