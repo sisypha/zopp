@@ -24,11 +24,11 @@ jobs:
             dockerfile: operator.Dockerfile
           - name: cli
             dockerfile: cli.Dockerfile
-        runner: [ubuntu-latest, macos-14]
+        runner: [ubuntu-latest, macos-latest]
         include:
           - runner: ubuntu-latest
             platform: linux/amd64
-          - runner: macos-14
+          - runner: macos-latest
             platform: linux/arm64
 
     steps:
