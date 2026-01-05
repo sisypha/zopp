@@ -20,7 +20,10 @@ This means every zopp release includes a corresponding chart release, making upg
 ### From OCI Registry (Recommended)
 
 ```bash
-# Install latest version
+# Install latest version (omit --version to get latest)
+helm install zopp oci://ghcr.io/faiscadev/charts/zopp
+
+# Install specific version
 helm install zopp oci://ghcr.io/faiscadev/charts/zopp --version 0.1.0
 
 # Or from GitHub release

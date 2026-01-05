@@ -25,8 +25,14 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Remove 'v' prefix from tag (v0.1.0 -> 0.1.0)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          # Extract version from tag (requires v prefix, e.g., v1.0.0)
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Error: Tag must start with 'v' and follow semver format (e.g., v1.0.0)"
+            echo "Got: $TAG_NAME"
+            exit 1
+          fi
+          VERSION=${TAG_NAME#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Releasing version: $VERSION"
 
@@ -50,7 +56,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} zopp-${{ steps.version.outputs.version }}.tgz
+          gh release upload ${{ github.ref_name }} zopp-${{ steps.version.outputs.version }}.tgz --clobber
 
       - name: Generate installation instructions
         run: |
@@ -85,4 +91,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} INSTALL.md
+          gh release upload ${{ github.ref_name }} INSTALL.md --clobber
