@@ -1565,6 +1565,15 @@ impl TestEnv {
             .expect("Failed to execute principal rename")
     }
 
+    /// Switch to a different principal for the user
+    fn principal_use(&self, user: &User, name: &str) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args(["principal", "use", name])
+            .output()
+            .expect("Failed to execute principal use")
+    }
+
     fn group_set_permission_check(
         &self,
         user: &User,
@@ -1683,7 +1692,11 @@ fn assert_denied(output: &Output, context: &str) {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("permission") || stderr.contains("denied") || stderr.contains("Permission"),
+        stderr.contains("permission")
+            || stderr.contains("denied")
+            || stderr.contains("Permission")
+            || stderr.contains("cannot")
+            || stderr.contains("Cannot"),
         "{} should fail with permission error, got: {}",
         context,
         stderr
@@ -5483,5 +5496,127 @@ async fn test_invite_revocation_requires_admin() -> Result<(), Box<dyn std::erro
     println!("✓ Alice (ADMIN) can revoke invite");
 
     println!("\n✅ test_invite_revocation_requires_admin PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: Service Account Cannot Rename Principals
+// Service accounts should not be able to rename any principal
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_service_account_cannot_rename_principal() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("svc_no_rename", port).await?;
+
+    let alice = env.create_user("alice");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+
+    // Get Alice's human principal ID before creating service principal
+    let alice_principal_id = env.get_principal_id(&alice)?;
+    let alice_principal_name = alice.principal.clone();
+
+    // Create a service principal
+    let svc_name = "ci-pipeline";
+    let svc_id = env.create_service_principal(&alice, svc_name)?;
+    println!(
+        "Setup complete: Alice principal {}, service principal {}",
+        alice_principal_id, svc_id
+    );
+
+    // Switch to the service principal
+    let output = env.principal_use(&alice, svc_name);
+    assert!(
+        output.status.success(),
+        "Failed to switch to service principal"
+    );
+    println!("✓ Switched to service principal '{}'", svc_name);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: Service account cannot rename itself
+    // ─────────────────────────────────────────────────────────────────────────
+    // Note: principal rename takes NAME not ID, and the CLI signs with the
+    // target principal's key. So this test verifies that when a service
+    // principal tries to rename itself, the server blocks it.
+    let output = env.principal_rename_check(&alice, svc_name, "new-svc-name");
+    assert_denied(&output, "Service account cannot rename itself");
+    println!("✓ Service account cannot rename itself");
+
+    // Switch back to human principal
+    let output = env.principal_use(&alice, &alice_principal_name);
+    assert!(
+        output.status.success(),
+        "Failed to switch back to human principal"
+    );
+
+    println!("\n✅ test_service_account_cannot_rename_principal PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: Service Account Cannot Revoke Invites
+// Service accounts should not be able to revoke invites, even with admin perms
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_service_account_cannot_revoke_invite() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("svc_no_revoke", port).await?;
+
+    let alice = env.create_user("alice");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+
+    // Create a service principal with ADMIN permission
+    let svc_name = "admin-bot";
+    let svc_id = env.create_service_principal(&alice, svc_name)?;
+
+    // Give the service principal ADMIN permission at workspace level
+    env.set_principal_permission(&alice, "acme", &svc_id, "admin")?;
+
+    // Get Alice's human principal name for switching back
+    let alice_principal_name = alice.principal.clone();
+
+    // Create an invite to be revoked
+    let target_invite = env.create_workspace_invite(&alice, "acme")?;
+    let target_token = target_invite.lines().next().unwrap_or(&target_invite);
+
+    println!(
+        "Setup complete: Service principal {} with ADMIN, pending invite",
+        svc_id
+    );
+
+    // Switch to the service principal
+    let output = env.principal_use(&alice, svc_name);
+    assert!(
+        output.status.success(),
+        "Failed to switch to service principal"
+    );
+    println!("✓ Switched to service principal '{}'", svc_name);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test: Service account with ADMIN cannot revoke invite
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.invite_revoke_check(&alice, target_token);
+    assert_denied(&output, "Service account cannot revoke invite");
+    println!("✓ Service account with ADMIN cannot revoke invite");
+
+    // Switch back and verify human can revoke
+    let output = env.principal_use(&alice, &alice_principal_name);
+    assert!(
+        output.status.success(),
+        "Failed to switch back to human principal"
+    );
+
+    let output = env.invite_revoke_check(&alice, target_token);
+    assert_success(&output, "Human admin can revoke invite");
+    println!("✓ Human admin can revoke invite");
+
+    println!("\n✅ test_service_account_cannot_revoke_invite PASSED");
     Ok(())
 }
