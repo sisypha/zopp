@@ -67,7 +67,14 @@ async fn run_demo_test(
     println!("📡 Step 0: Starting server...");
 
     let server_addr = format!("0.0.0.0:{port}");
-    let health_addr = format!("0.0.0.0:{}", port + 1000); // Use port + 1000 for health checks
+    // Use wrapping arithmetic to avoid overflow when port is high
+    let health_port = port.wrapping_add(1000) % 65535;
+    let health_port = if health_port < 1024 {
+        health_port + 10000
+    } else {
+        health_port
+    };
+    let health_addr = format!("0.0.0.0:{}", health_port);
     let mut server = Command::new(&zopp_server_bin)
         .env("DATABASE_URL", db_url)
         .args([

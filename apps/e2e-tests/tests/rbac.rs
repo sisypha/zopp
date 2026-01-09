@@ -1491,6 +1491,163 @@ impl TestEnv {
             .output()
             .expect("Failed to execute invite create")
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Additional Authorization Check Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    fn invite_revoke_check(&self, user: &User, token: &str) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args(["--server", &self.server_url, "invite", "revoke", token])
+            .output()
+            .expect("Failed to execute invite revoke")
+    }
+
+    fn user_permission_remove_check(
+        &self,
+        user: &User,
+        workspace: &str,
+        target_email: &str,
+    ) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "permission",
+                "user-remove",
+                "-w",
+                workspace,
+                "--email",
+                target_email,
+            ])
+            .output()
+            .expect("Failed to execute permission user-remove")
+    }
+
+    fn group_update_check(
+        &self,
+        user: &User,
+        workspace: &str,
+        group: &str,
+        new_name: &str,
+    ) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "group",
+                "update",
+                group,
+                "-w",
+                workspace,
+                "--name",
+                new_name,
+            ])
+            .output()
+            .expect("Failed to execute group update")
+    }
+
+    fn principal_rename_check(&self, user: &User, principal_id: &str, new_name: &str) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "principal",
+                "rename",
+                principal_id,
+                new_name,
+            ])
+            .output()
+            .expect("Failed to execute principal rename")
+    }
+
+    fn group_set_permission_check(
+        &self,
+        user: &User,
+        workspace: &str,
+        group_name: &str,
+        role: &str,
+    ) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "group",
+                "set-permission",
+                "--group",
+                group_name,
+                "-w",
+                workspace,
+                "--role",
+                role,
+            ])
+            .output()
+            .expect("Failed to execute group set-permission")
+    }
+
+    fn group_set_project_permission_check(
+        &self,
+        user: &User,
+        workspace: &str,
+        project: &str,
+        group_name: &str,
+        role: &str,
+    ) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "group",
+                "set-project-permission",
+                "--group",
+                group_name,
+                "-w",
+                workspace,
+                "-p",
+                project,
+                "--role",
+                role,
+            ])
+            .output()
+            .expect("Failed to execute group set-project-permission")
+    }
+
+    fn group_set_env_permission_check(
+        &self,
+        user: &User,
+        workspace: &str,
+        project: &str,
+        environment: &str,
+        group_name: &str,
+        role: &str,
+    ) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "group",
+                "set-env-permission",
+                "--group",
+                group_name,
+                "-w",
+                workspace,
+                "-p",
+                project,
+                "-e",
+                environment,
+                "--role",
+                role,
+            ])
+            .output()
+            .expect("Failed to execute group set-env-permission")
+    }
 }
 
 impl Drop for TestEnv {
@@ -4961,5 +5118,370 @@ async fn test_service_principal_permission_removal() -> Result<(), Box<dyn std::
     println!("✓ Bob (WRITE) cannot remove ADMIN at environment level");
 
     println!("\n✅ test_service_principal_permission_removal PASSED");
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Authorization Bypass Prevention Tests
+// These tests verify that the security fixes for authorization bypasses work
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: User Permission Delegated Authority
+// Users can only grant permissions <= their own role
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_user_permission_delegated_authority() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("user_perm_delegated", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+    let charlie = env.create_user("charlie");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+    env.create_project(&alice, "acme", "api")?;
+    env.create_environment(&alice, "acme", "api", "dev")?;
+
+    // Bob joins with WRITE permission
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+
+    // Charlie joins (will receive permissions from Bob's attempts)
+    let ws_invite2 = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&charlie, &ws_invite2)?;
+
+    println!("Setup complete: Alice (owner), Bob (write), Charlie (no permission)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Bob (WRITE) CAN grant WRITE permission (equal to his role)
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.user_permission_set_check(&bob, "acme", &charlie.email, "write");
+    assert_success(&output, "Bob (write) can grant write permission");
+    println!("✓ Bob (WRITE) can grant WRITE to Charlie");
+
+    // Remove for next test
+    env.remove_user_permission(&alice, "acme", &charlie.email)?;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: Bob (WRITE) CAN grant READ permission (lower than his role)
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.user_permission_set_check(&bob, "acme", &charlie.email, "read");
+    assert_success(&output, "Bob (write) can grant read permission");
+    println!("✓ Bob (WRITE) can grant READ to Charlie");
+
+    // Remove for next test
+    env.remove_user_permission(&alice, "acme", &charlie.email)?;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 3: Bob (WRITE) CANNOT grant ADMIN permission (higher than his role)
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.user_permission_set_check(&bob, "acme", &charlie.email, "admin");
+    assert_denied(&output, "Bob (write) cannot grant admin permission");
+    println!("✓ Bob (WRITE) cannot grant ADMIN to Charlie (delegated authority enforced)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 4: Alice (owner/admin) CAN grant ADMIN permission
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.user_permission_set_check(&alice, "acme", &charlie.email, "admin");
+    assert_success(&output, "Alice (admin) can grant admin permission");
+    println!("✓ Alice (ADMIN) can grant ADMIN to Charlie");
+
+    println!("\n✅ test_user_permission_delegated_authority PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: User Permission Removal Delegated Authority
+// Users can only remove permissions <= their own role
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_user_permission_removal_delegated_authority() -> Result<(), Box<dyn std::error::Error>>
+{
+    let port = find_available_port()?;
+    let env = TestEnv::setup("user_perm_remove_delegated", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+    let charlie = env.create_user("charlie");
+    let dave = env.create_user("dave");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+
+    // Bob joins with WRITE permission
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+
+    // Charlie joins with READ permission (lower than Bob)
+    let ws_invite2 = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&charlie, &ws_invite2)?;
+    env.set_user_permission(&alice, "acme", &charlie.email, "read")?;
+
+    // Dave joins with ADMIN permission (higher than Bob)
+    let ws_invite3 = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&dave, &ws_invite3)?;
+    env.set_user_permission(&alice, "acme", &dave.email, "admin")?;
+
+    println!("Setup complete: Alice (owner), Bob (write), Charlie (read), Dave (admin)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Bob (WRITE) CAN remove Charlie's READ permission (lower role)
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.user_permission_remove_check(&bob, "acme", &charlie.email);
+    assert_success(&output, "Bob (write) can remove read permission");
+    println!("✓ Bob (WRITE) can remove Charlie's READ permission");
+
+    // Restore for next test
+    env.set_user_permission(&alice, "acme", &charlie.email, "read")?;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: Bob (WRITE) CANNOT remove Dave's ADMIN permission (higher role)
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.user_permission_remove_check(&bob, "acme", &dave.email);
+    assert_denied(&output, "Bob (write) cannot remove admin permission");
+    println!("✓ Bob (WRITE) cannot remove Dave's ADMIN permission (delegated authority enforced)");
+
+    println!("\n✅ test_user_permission_removal_delegated_authority PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: Group Modification Requires Admin
+// Non-admins cannot update groups
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_group_modification_requires_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("group_mod_admin", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+
+    // Alice creates a group
+    env.create_group(&alice, "acme", "developers")?;
+
+    // Bob joins with WRITE permission (not admin)
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+
+    println!("Setup complete: Alice (owner), Bob (write), group 'developers' exists");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Bob (WRITE) CANNOT update/rename the group
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.group_update_check(&bob, "acme", "developers", "engineers");
+    assert_denied(&output, "Bob (write) cannot update group");
+    println!("✓ Bob (WRITE) cannot update group (admin required)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: Alice (admin) CAN update the group
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.group_update_check(&alice, "acme", "developers", "engineers");
+    assert_success(&output, "Alice (admin) can update group");
+    println!("✓ Alice (ADMIN) can update group");
+
+    println!("\n✅ test_group_modification_requires_admin PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: Group Permission Setting Requires Admin
+// Non-admins cannot set/modify group permissions
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_group_permission_setting_requires_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("group_perm_admin", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+    env.create_project(&alice, "acme", "api")?;
+    env.create_environment(&alice, "acme", "api", "dev")?;
+
+    // Alice creates a group
+    env.create_group(&alice, "acme", "developers")?;
+
+    // Bob joins with WRITE permission (not admin)
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+
+    println!("Setup complete: Alice (owner), Bob (write), group 'developers' exists");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Bob (WRITE) CANNOT set group workspace permission
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.group_set_permission_check(&bob, "acme", "developers", "write");
+    assert_denied(&output, "Bob (write) cannot set group workspace permission");
+    println!("✓ Bob (WRITE) cannot set group workspace permission (admin required)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: Bob (WRITE) CANNOT set group project permission
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.group_set_project_permission_check(&bob, "acme", "api", "developers", "write");
+    assert_denied(&output, "Bob (write) cannot set group project permission");
+    println!("✓ Bob (WRITE) cannot set group project permission (admin required)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 3: Bob (WRITE) CANNOT set group environment permission
+    // ─────────────────────────────────────────────────────────────────────────
+    let output =
+        env.group_set_env_permission_check(&bob, "acme", "api", "dev", "developers", "write");
+    assert_denied(
+        &output,
+        "Bob (write) cannot set group environment permission",
+    );
+    println!("✓ Bob (WRITE) cannot set group environment permission (admin required)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 4: Alice (admin) CAN set group permissions at all levels
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.group_set_permission_check(&alice, "acme", "developers", "write");
+    assert_success(&output, "Alice (admin) can set group workspace permission");
+    println!("✓ Alice (ADMIN) can set group workspace permission");
+
+    let output =
+        env.group_set_project_permission_check(&alice, "acme", "api", "developers", "write");
+    assert_success(&output, "Alice (admin) can set group project permission");
+    println!("✓ Alice (ADMIN) can set group project permission");
+
+    let output =
+        env.group_set_env_permission_check(&alice, "acme", "api", "dev", "developers", "write");
+    assert_success(
+        &output,
+        "Alice (admin) can set group environment permission",
+    );
+    println!("✓ Alice (ADMIN) can set group environment permission");
+
+    println!("\n✅ test_group_permission_setting_requires_admin PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: Principal Rename Ownership
+// Users can only rename their own principals
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_principal_rename_ownership() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("principal_rename", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+
+    // Bob joins
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+
+    // Get principal IDs
+    let alice_principal_id = env.get_principal_id(&alice)?;
+    let bob_principal_id = env.get_principal_id(&bob)?;
+
+    println!(
+        "Setup complete: Alice principal {}, Bob principal {}",
+        alice_principal_id, bob_principal_id
+    );
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Alice CAN rename her own principal
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.principal_rename_check(&alice, &alice_principal_id, "alice-macbook");
+    assert_success(&output, "Alice can rename her own principal");
+    println!("✓ Alice can rename her own principal");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: Alice CANNOT rename Bob's principal
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.principal_rename_check(&alice, &bob_principal_id, "bob-hacked");
+    assert_denied(&output, "Alice cannot rename Bob's principal");
+    println!("✓ Alice cannot rename Bob's principal (ownership enforced)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 3: Bob CAN rename his own principal
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.principal_rename_check(&bob, &bob_principal_id, "bob-laptop");
+    assert_success(&output, "Bob can rename his own principal");
+    println!("✓ Bob can rename his own principal");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 4: Bob CANNOT rename Alice's principal
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.principal_rename_check(&bob, &alice_principal_id, "alice-hacked");
+    assert_denied(&output, "Bob cannot rename Alice's principal");
+    println!("✓ Bob cannot rename Alice's principal (ownership enforced)");
+
+    println!("\n✅ test_principal_rename_ownership PASSED");
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test: Invite Revocation Requires Admin
+// Non-admins cannot revoke workspace invites
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_invite_revocation_requires_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("invite_revoke_admin", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+
+    // Bob joins with WRITE permission (not admin)
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+
+    // Alice creates a new invite to be revoked
+    let target_invite = env.create_workspace_invite(&alice, "acme")?;
+    // Extract just the token part (first line before any newlines)
+    let target_token = target_invite.lines().next().unwrap_or(&target_invite);
+
+    println!("Setup complete: Alice (owner), Bob (write), pending invite exists");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Bob (WRITE) CANNOT revoke the invite
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.invite_revoke_check(&bob, target_token);
+    assert_denied(&output, "Bob (write) cannot revoke invite");
+    println!("✓ Bob (WRITE) cannot revoke invite (admin required)");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: Alice (admin) CAN revoke the invite
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.invite_revoke_check(&alice, target_token);
+    assert_success(&output, "Alice (admin) can revoke invite");
+    println!("✓ Alice (ADMIN) can revoke invite");
+
+    println!("\n✅ test_invite_revocation_requires_admin PASSED");
     Ok(())
 }
