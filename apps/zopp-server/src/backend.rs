@@ -4,6 +4,7 @@ use zopp_store_postgres::PostgresStore;
 use zopp_store_sqlite::SqliteStore;
 
 /// StoreBackend abstracts over SQLite and PostgreSQL implementations
+#[derive(Clone)]
 pub enum StoreBackend {
     Sqlite(Arc<SqliteStore>),
     Postgres(Arc<PostgresStore>),
