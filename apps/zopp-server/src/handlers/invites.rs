@@ -151,9 +151,12 @@ pub async fn revoke_invite(
     request: Request<RevokeInviteRequest>,
 ) -> Result<Response<Empty>, Status> {
     let (principal_id, timestamp, signature) = extract_signature(&request)?;
-    server
+    let principal = server
         .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
         .await?;
+    principal
+        .user_id
+        .ok_or_else(|| Status::unauthenticated("Service accounts cannot revoke invites"))?;
     let req = request.into_inner();
 
     // Look up invite by token (which is the hash)

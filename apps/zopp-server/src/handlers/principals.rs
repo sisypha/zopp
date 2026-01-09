@@ -54,6 +54,11 @@ pub async fn rename_principal(
         .map(PrincipalId)
         .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
 
+    // Service accounts cannot rename principals
+    let requester_user_id = requester_principal
+        .user_id
+        .ok_or_else(|| Status::permission_denied("Service accounts cannot rename principals"))?;
+
     // Get target principal to verify ownership
     let target_principal = server
         .store
@@ -66,7 +71,7 @@ pub async fn rename_principal(
 
     // Users can only rename their own principals
     // Compare user_ids: requester must own the target principal
-    if requester_principal.user_id != target_principal.user_id {
+    if Some(requester_user_id) != target_principal.user_id {
         return Err(Status::permission_denied(
             "Can only rename your own principals",
         ));

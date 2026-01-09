@@ -79,15 +79,21 @@ pub async fn join(
                     ))
                 })?;
 
-            // Add user to workspace memberships
+            // Add user to workspace memberships (ignore if already a member)
             for workspace_id in &invite.workspace_ids {
-                server
+                if let Err(e) = server
                     .store
                     .add_user_to_workspace(workspace_id, &existing_user.id)
                     .await
-                    .map_err(|e| {
-                        Status::internal(format!("Failed to add user to workspace: {}", e))
-                    })?;
+                {
+                    // Ignore AlreadyExists errors - user is already a member
+                    if !matches!(e, zopp_storage::StoreError::AlreadyExists) {
+                        return Err(Status::internal(format!(
+                            "Failed to add user to workspace: {}",
+                            e
+                        )));
+                    }
+                }
             }
 
             (existing_user.id, new_principal_id)
