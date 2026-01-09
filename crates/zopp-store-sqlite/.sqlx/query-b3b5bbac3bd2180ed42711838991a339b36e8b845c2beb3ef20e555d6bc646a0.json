@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT environment_id, principal_id, role,\n               created_at as \"created_at: DateTime<Utc>\"\n               FROM environment_permissions WHERE principal_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "environment_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "principal_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b3b5bbac3bd2180ed42711838991a339b36e8b845c2beb3ef20e555d6bc646a0"
+}

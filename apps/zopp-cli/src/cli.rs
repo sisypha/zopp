@@ -71,6 +71,16 @@ pub enum Command {
         #[command(subcommand)]
         diff_cmd: DiffCommand,
     },
+    /// Permission commands (RBAC)
+    Permission {
+        #[command(subcommand)]
+        permission_cmd: PermissionCommand,
+    },
+    /// Group commands (user groups)
+    Group {
+        #[command(subcommand)]
+        group_cmd: GroupCommand,
+    },
     /// Run a command with secrets injected as environment variables
     Run {
         /// Workspace name (defaults from zopp.toml)
@@ -129,6 +139,30 @@ pub enum PrincipalCommand {
     Delete {
         /// Principal name
         name: String,
+    },
+    /// List service principals in a workspace
+    ServiceList {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+    },
+    /// Remove a principal from a workspace (revokes all permissions too)
+    WorkspaceRemove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// Revoke all permissions for a principal in a workspace
+    RevokeAll {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
     },
 }
 
@@ -398,5 +432,509 @@ pub enum DiffCommand {
         /// Kubernetes context to use
         #[arg(long)]
         context: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum PermissionCommand {
+    /// Set workspace permission for a principal
+    Set {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Get workspace permission for a principal
+    Get {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// List all permissions on a workspace
+    List {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+    },
+    /// Remove workspace permission for a principal
+    Remove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// Set project permission for a principal
+    ProjectSet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Get project permission for a principal
+    ProjectGet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// List all principal permissions on a project
+    ProjectList {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+    },
+    /// Remove project permission for a principal
+    ProjectRemove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// Set environment permission for a principal
+    EnvSet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Get environment permission for a principal
+    EnvGet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// List all principal permissions on an environment
+    EnvList {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+    },
+    /// Remove environment permission for a principal
+    EnvRemove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+    /// Set workspace permission for a user (by email)
+    UserSet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Get workspace permission for a user (by email)
+    UserGet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+    },
+    /// List all user permissions on a workspace
+    UserList {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+    },
+    /// Remove workspace permission for a user (by email)
+    UserRemove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+    },
+    /// Set project permission for a user (by email)
+    UserProjectSet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Remove project permission for a user (by email)
+    UserProjectRemove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+    },
+    /// Get project permission for a user (by email)
+    UserProjectGet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+    },
+    /// Set environment permission for a user (by email)
+    UserEnvSet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Remove environment permission for a user (by email)
+    UserEnvRemove {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+    },
+    /// Get environment permission for a user (by email)
+    UserEnvGet {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// User email
+        #[arg(long)]
+        email: String,
+    },
+    /// List all user permissions on a project
+    UserProjectList {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+    },
+    /// List all user permissions on an environment
+    UserEnvList {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+    },
+    /// Show effective permissions for a principal (aggregated view)
+    Effective {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+        /// Principal ID (UUID)
+        #[arg(long)]
+        principal: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum GroupCommand {
+    /// Create a new group
+    Create {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        name: String,
+        /// Group description
+        #[arg(long, short = 'd')]
+        description: Option<String>,
+    },
+    /// List groups in a workspace
+    List {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+    },
+    /// Delete a group
+    Delete {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        name: String,
+    },
+    /// Add a user to a group
+    AddMember {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+        /// User email
+        email: String,
+    },
+    /// Remove a user from a group
+    RemoveMember {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+        /// User email
+        email: String,
+    },
+    /// List members of a group
+    ListMembers {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        group: String,
+    },
+    /// Set workspace permission for a group
+    SetPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Remove workspace permission for a group
+    RemovePermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+    },
+    /// Get workspace permission for a group
+    GetPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+    },
+    /// List all group permissions on a workspace
+    ListPermissions {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+    },
+    /// Set project permission for a group
+    SetProjectPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Remove project permission for a group
+    RemoveProjectPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+    },
+    /// Get project permission for a group
+    GetProjectPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+    },
+    /// List all group permissions on a project
+    ListProjectPermissions {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+    },
+    /// Set environment permission for a group
+    SetEnvPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+        /// Role: admin, write, or read
+        #[arg(long)]
+        role: String,
+    },
+    /// Remove environment permission for a group
+    RemoveEnvPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+    },
+    /// Get environment permission for a group
+    GetEnvPermission {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
+        /// Group name
+        #[arg(long, short = 'g')]
+        group: String,
+    },
+    /// List all group permissions on an environment
+    ListEnvPermissions {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Project name
+        #[arg(long, short = 'p')]
+        project: String,
+        /// Environment name
+        #[arg(long, short = 'e')]
+        environment: String,
     },
 }

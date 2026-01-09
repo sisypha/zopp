@@ -45,6 +45,153 @@ pub struct EnvironmentId(pub Uuid);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EnvName(pub String);
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GroupId(pub Uuid);
+
+/// Role for RBAC permissions
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Role {
+    Admin,
+    Write,
+    Read,
+}
+
+impl Role {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Role::Admin => "admin",
+            Role::Write => "write",
+            Role::Read => "read",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "admin" => Some(Role::Admin),
+            "write" => Some(Role::Write),
+            "read" => Some(Role::Read),
+            _ => None,
+        }
+    }
+
+    /// Check if this role has at least the permissions of another role
+    pub fn includes(&self, other: &Role) -> bool {
+        match self {
+            Role::Admin => true, // Admin includes all permissions
+            Role::Write => matches!(other, Role::Write | Role::Read),
+            Role::Read => matches!(other, Role::Read),
+        }
+    }
+}
+
+/// Workspace-level permission
+#[derive(Clone, Debug)]
+pub struct WorkspacePermission {
+    pub workspace_id: WorkspaceId,
+    pub principal_id: PrincipalId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Project-level permission
+#[derive(Clone, Debug)]
+pub struct ProjectPermission {
+    pub project_id: ProjectId,
+    pub principal_id: PrincipalId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Environment-level permission (principal)
+#[derive(Clone, Debug)]
+pub struct EnvironmentPermission {
+    pub environment_id: EnvironmentId,
+    pub principal_id: PrincipalId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// User workspace-level permission
+#[derive(Clone, Debug)]
+pub struct UserWorkspacePermission {
+    pub workspace_id: WorkspaceId,
+    pub user_id: UserId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// User project-level permission
+#[derive(Clone, Debug)]
+pub struct UserProjectPermission {
+    pub project_id: ProjectId,
+    pub user_id: UserId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// User environment-level permission
+#[derive(Clone, Debug)]
+pub struct UserEnvironmentPermission {
+    pub environment_id: EnvironmentId,
+    pub user_id: UserId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Group record
+#[derive(Clone, Debug)]
+pub struct Group {
+    pub id: GroupId,
+    pub workspace_id: WorkspaceId,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Group membership record
+#[derive(Clone, Debug)]
+pub struct GroupMember {
+    pub group_id: GroupId,
+    pub user_id: UserId,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Group workspace-level permission
+#[derive(Clone, Debug)]
+pub struct GroupWorkspacePermission {
+    pub workspace_id: WorkspaceId,
+    pub group_id: GroupId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Group project-level permission
+#[derive(Clone, Debug)]
+pub struct GroupProjectPermission {
+    pub project_id: ProjectId,
+    pub group_id: GroupId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Group environment-level permission
+#[derive(Clone, Debug)]
+pub struct GroupEnvironmentPermission {
+    pub environment_id: EnvironmentId,
+    pub group_id: GroupId,
+    pub role: Role,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Parameters for creating a group
+#[derive(Clone, Debug)]
+pub struct CreateGroupParams {
+    pub workspace_id: WorkspaceId,
+    pub name: String,
+    pub description: Option<String>,
+}
+
 /// Encrypted secret row (nonce + ciphertext); no plaintext in storage.
 #[derive(Clone, Debug)]
 pub struct SecretRow {
@@ -314,6 +461,29 @@ pub trait Store {
         workspace_id: &WorkspaceId,
     ) -> Result<Vec<WorkspacePrincipal>, StoreError>;
 
+    /// Remove a principal from a workspace.
+    async fn remove_workspace_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError>;
+
+    /// Remove all project permissions for a principal in a workspace.
+    /// Returns the number of permissions removed.
+    async fn remove_all_project_permissions_for_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<u32, StoreError>;
+
+    /// Remove all environment permissions for a principal in a workspace.
+    /// Returns the number of permissions removed.
+    async fn remove_all_environment_permissions_for_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<u32, StoreError>;
+
     /// Add a user to a workspace (user-level membership).
     async fn add_user_to_workspace(
         &self,
@@ -395,6 +565,329 @@ pub trait Store {
         project: &ProjectName,
         env: &EnvName,
     ) -> Result<(Vec<u8>, Vec<u8>), StoreError>;
+
+    // ────────────────────────────────────── RBAC Permissions ──────────────────────────────────
+
+    /// Set workspace-level permission for a principal
+    async fn set_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get workspace-level permission for a principal
+    async fn get_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all workspace permissions for a principal
+    async fn list_workspace_permissions_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<WorkspacePermission>, StoreError>;
+
+    /// List all principals with permissions on a workspace
+    async fn list_workspace_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<WorkspacePermission>, StoreError>;
+
+    /// Remove workspace-level permission for a principal
+    async fn remove_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError>;
+
+    /// Set project-level permission for a principal
+    async fn set_project_permission(
+        &self,
+        project_id: &ProjectId,
+        principal_id: &PrincipalId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get project-level permission for a principal
+    async fn get_project_permission(
+        &self,
+        project_id: &ProjectId,
+        principal_id: &PrincipalId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all project permissions for a principal
+    async fn list_project_permissions_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<ProjectPermission>, StoreError>;
+
+    /// List all principals with permissions on a project
+    async fn list_project_permissions(
+        &self,
+        project_id: &ProjectId,
+    ) -> Result<Vec<ProjectPermission>, StoreError>;
+
+    /// Remove project-level permission for a principal
+    async fn remove_project_permission(
+        &self,
+        project_id: &ProjectId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError>;
+
+    /// Set environment-level permission for a principal
+    async fn set_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        principal_id: &PrincipalId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get environment-level permission for a principal
+    async fn get_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        principal_id: &PrincipalId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all environment permissions for a principal
+    async fn list_environment_permissions_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<EnvironmentPermission>, StoreError>;
+
+    /// List all principals with permissions on an environment
+    async fn list_environment_permissions(
+        &self,
+        environment_id: &EnvironmentId,
+    ) -> Result<Vec<EnvironmentPermission>, StoreError>;
+
+    /// Remove environment-level permission for a principal
+    async fn remove_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError>;
+
+    // ────────────────────────────────────── User Permissions ────────────────────────────────────────
+
+    /// Set workspace-level permission for a user
+    async fn set_user_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &UserId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get workspace-level permission for a user
+    async fn get_user_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &UserId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all user permissions on a workspace
+    async fn list_user_workspace_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<UserWorkspacePermission>, StoreError>;
+
+    /// Remove workspace-level permission for a user
+    async fn remove_user_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError>;
+
+    /// Set project-level permission for a user
+    async fn set_user_project_permission(
+        &self,
+        project_id: &ProjectId,
+        user_id: &UserId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get project-level permission for a user
+    async fn get_user_project_permission(
+        &self,
+        project_id: &ProjectId,
+        user_id: &UserId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all user permissions on a project
+    async fn list_user_project_permissions(
+        &self,
+        project_id: &ProjectId,
+    ) -> Result<Vec<UserProjectPermission>, StoreError>;
+
+    /// Remove project-level permission for a user
+    async fn remove_user_project_permission(
+        &self,
+        project_id: &ProjectId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError>;
+
+    /// Set environment-level permission for a user
+    async fn set_user_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        user_id: &UserId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get environment-level permission for a user
+    async fn get_user_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        user_id: &UserId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all user permissions on an environment
+    async fn list_user_environment_permissions(
+        &self,
+        environment_id: &EnvironmentId,
+    ) -> Result<Vec<UserEnvironmentPermission>, StoreError>;
+
+    /// Remove environment-level permission for a user
+    async fn remove_user_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError>;
+
+    // ────────────────────────────────────── Groups ────────────────────────────────────────
+
+    /// Create a new group within a workspace
+    async fn create_group(&self, params: &CreateGroupParams) -> Result<GroupId, StoreError>;
+
+    /// Get group by ID
+    async fn get_group(&self, group_id: &GroupId) -> Result<Group, StoreError>;
+
+    /// Get group by name within a workspace
+    async fn get_group_by_name(
+        &self,
+        workspace_id: &WorkspaceId,
+        name: &str,
+    ) -> Result<Group, StoreError>;
+
+    /// List all groups in a workspace
+    async fn list_groups(&self, workspace_id: &WorkspaceId) -> Result<Vec<Group>, StoreError>;
+
+    /// Update group description
+    async fn update_group(
+        &self,
+        group_id: &GroupId,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<(), StoreError>;
+
+    /// Delete a group (and all its memberships and permissions)
+    async fn delete_group(&self, group_id: &GroupId) -> Result<(), StoreError>;
+
+    /// Add a user to a group
+    async fn add_group_member(
+        &self,
+        group_id: &GroupId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError>;
+
+    /// Remove a user from a group
+    async fn remove_group_member(
+        &self,
+        group_id: &GroupId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError>;
+
+    /// List all members of a group
+    async fn list_group_members(&self, group_id: &GroupId) -> Result<Vec<GroupMember>, StoreError>;
+
+    /// List all groups a user belongs to
+    async fn list_user_groups(&self, user_id: &UserId) -> Result<Vec<Group>, StoreError>;
+
+    /// Set workspace-level permission for a group
+    async fn set_group_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        group_id: &GroupId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get workspace-level permission for a group
+    async fn get_group_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        group_id: &GroupId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all workspace permissions for a group
+    async fn list_group_workspace_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<GroupWorkspacePermission>, StoreError>;
+
+    /// Remove workspace-level permission for a group
+    async fn remove_group_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        group_id: &GroupId,
+    ) -> Result<(), StoreError>;
+
+    /// Set project-level permission for a group
+    async fn set_group_project_permission(
+        &self,
+        project_id: &ProjectId,
+        group_id: &GroupId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get project-level permission for a group
+    async fn get_group_project_permission(
+        &self,
+        project_id: &ProjectId,
+        group_id: &GroupId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all project permissions for a group
+    async fn list_group_project_permissions(
+        &self,
+        project_id: &ProjectId,
+    ) -> Result<Vec<GroupProjectPermission>, StoreError>;
+
+    /// Remove project-level permission for a group
+    async fn remove_group_project_permission(
+        &self,
+        project_id: &ProjectId,
+        group_id: &GroupId,
+    ) -> Result<(), StoreError>;
+
+    /// Set environment-level permission for a group
+    async fn set_group_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        group_id: &GroupId,
+        role: Role,
+    ) -> Result<(), StoreError>;
+
+    /// Get environment-level permission for a group
+    async fn get_group_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        group_id: &GroupId,
+    ) -> Result<Role, StoreError>;
+
+    /// List all environment permissions for a group
+    async fn list_group_environment_permissions(
+        &self,
+        environment_id: &EnvironmentId,
+    ) -> Result<Vec<GroupEnvironmentPermission>, StoreError>;
+
+    /// Remove environment-level permission for a group
+    async fn remove_group_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        group_id: &GroupId,
+    ) -> Result<(), StoreError>;
 }
 
 #[cfg(test)]
@@ -530,6 +1023,30 @@ mod tests {
             Ok(vec![])
         }
 
+        async fn remove_workspace_principal(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _principal_id: &PrincipalId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn remove_all_project_permissions_for_principal(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _principal_id: &PrincipalId,
+        ) -> Result<u32, StoreError> {
+            Ok(0)
+        }
+
+        async fn remove_all_environment_permissions_for_principal(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _principal_id: &PrincipalId,
+        ) -> Result<u32, StoreError> {
+            Ok(0)
+        }
+
         async fn add_user_to_workspace(
             &self,
             _workspace_id: &WorkspaceId,
@@ -638,6 +1155,376 @@ mod tests {
             _key: &str,
         ) -> Result<i64, StoreError> {
             Ok(1)
+        }
+
+        async fn set_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _principal_id: &PrincipalId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _principal_id: &PrincipalId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_workspace_permissions_for_principal(
+            &self,
+            _principal_id: &PrincipalId,
+        ) -> Result<Vec<WorkspacePermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn list_workspace_permissions(
+            &self,
+            _workspace_id: &WorkspaceId,
+        ) -> Result<Vec<WorkspacePermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _principal_id: &PrincipalId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _principal_id: &PrincipalId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _principal_id: &PrincipalId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_project_permissions_for_principal(
+            &self,
+            _principal_id: &PrincipalId,
+        ) -> Result<Vec<ProjectPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn list_project_permissions(
+            &self,
+            _project_id: &ProjectId,
+        ) -> Result<Vec<ProjectPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _principal_id: &PrincipalId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _principal_id: &PrincipalId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _principal_id: &PrincipalId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_environment_permissions_for_principal(
+            &self,
+            _principal_id: &PrincipalId,
+        ) -> Result<Vec<EnvironmentPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn list_environment_permissions(
+            &self,
+            _environment_id: &EnvironmentId,
+        ) -> Result<Vec<EnvironmentPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _principal_id: &PrincipalId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        // User permissions
+        async fn set_user_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _user_id: &UserId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_user_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _user_id: &UserId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_user_workspace_permissions(
+            &self,
+            _workspace_id: &WorkspaceId,
+        ) -> Result<Vec<UserWorkspacePermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_user_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _user_id: &UserId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_user_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _user_id: &UserId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_user_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _user_id: &UserId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_user_project_permissions(
+            &self,
+            _project_id: &ProjectId,
+        ) -> Result<Vec<UserProjectPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_user_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _user_id: &UserId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_user_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _user_id: &UserId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_user_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _user_id: &UserId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_user_environment_permissions(
+            &self,
+            _environment_id: &EnvironmentId,
+        ) -> Result<Vec<UserEnvironmentPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_user_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _user_id: &UserId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn create_group(&self, _params: &CreateGroupParams) -> Result<GroupId, StoreError> {
+            Ok(GroupId(Uuid::new_v4()))
+        }
+
+        async fn get_group(&self, _group_id: &GroupId) -> Result<Group, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn get_group_by_name(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _name: &str,
+        ) -> Result<Group, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_groups(&self, _workspace_id: &WorkspaceId) -> Result<Vec<Group>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn update_group(
+            &self,
+            _group_id: &GroupId,
+            _name: &str,
+            _description: Option<&str>,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn delete_group(&self, _group_id: &GroupId) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn add_group_member(
+            &self,
+            _group_id: &GroupId,
+            _user_id: &UserId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn remove_group_member(
+            &self,
+            _group_id: &GroupId,
+            _user_id: &UserId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn list_group_members(
+            &self,
+            _group_id: &GroupId,
+        ) -> Result<Vec<GroupMember>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn list_user_groups(&self, _user_id: &UserId) -> Result<Vec<Group>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn set_group_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _group_id: &GroupId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_group_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _group_id: &GroupId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_group_workspace_permissions(
+            &self,
+            _workspace_id: &WorkspaceId,
+        ) -> Result<Vec<GroupWorkspacePermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_group_workspace_permission(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _group_id: &GroupId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_group_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _group_id: &GroupId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_group_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _group_id: &GroupId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_group_project_permissions(
+            &self,
+            _project_id: &ProjectId,
+        ) -> Result<Vec<GroupProjectPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_group_project_permission(
+            &self,
+            _project_id: &ProjectId,
+            _group_id: &GroupId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_group_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _group_id: &GroupId,
+            _role: Role,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_group_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _group_id: &GroupId,
+        ) -> Result<Role, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_group_environment_permissions(
+            &self,
+            _environment_id: &EnvironmentId,
+        ) -> Result<Vec<GroupEnvironmentPermission>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn remove_group_environment_permission(
+            &self,
+            _environment_id: &EnvironmentId,
+            _group_id: &GroupId,
+        ) -> Result<(), StoreError> {
+            Ok(())
         }
     }
 

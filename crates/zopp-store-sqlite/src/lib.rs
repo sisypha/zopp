@@ -4,8 +4,10 @@ use uuid::Uuid;
 use zopp_storage::{
     AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalParams,
     CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName, Environment,
-    EnvironmentId, Invite, InviteId, Principal, PrincipalId, ProjectName, SecretRow, Store,
-    StoreError, User, UserId, Workspace, WorkspaceId, WorkspacePrincipal,
+    EnvironmentId, EnvironmentPermission, Invite, InviteId, Principal, PrincipalId, ProjectName,
+    ProjectPermission, Role, SecretRow, Store, StoreError, User, UserEnvironmentPermission, UserId,
+    UserProjectPermission, UserWorkspacePermission, Workspace, WorkspaceId, WorkspacePermission,
+    WorkspacePrincipal,
 };
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -837,6 +839,76 @@ impl Store for SqliteStore {
         Ok(principals)
     }
 
+    async fn remove_workspace_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        sqlx::query!(
+            "DELETE FROM workspace_principals WHERE workspace_id = ? AND principal_id = ?",
+            ws_id,
+            p_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn remove_all_project_permissions_for_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<u32, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        // Delete all project permissions for this principal in projects belonging to this workspace
+        let result = sqlx::query!(
+            r#"DELETE FROM project_permissions
+               WHERE principal_id = ?
+               AND project_id IN (SELECT id FROM projects WHERE workspace_id = ?)"#,
+            p_id,
+            ws_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(result.rows_affected() as u32)
+    }
+
+    async fn remove_all_environment_permissions_for_principal(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<u32, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        // Delete all environment permissions for this principal in environments belonging to projects in this workspace
+        let result = sqlx::query!(
+            r#"DELETE FROM environment_permissions
+               WHERE principal_id = ?
+               AND environment_id IN (
+                   SELECT e.id FROM environments e
+                   JOIN projects p ON e.project_id = p.id
+                   WHERE p.workspace_id = ?
+               )"#,
+            p_id,
+            ws_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(result.rows_affected() as u32)
+    }
+
     async fn add_user_to_workspace(
         &self,
         workspace_id: &WorkspaceId,
@@ -1340,6 +1412,1284 @@ impl Store for SqliteStore {
 
         Ok(version_result.version)
     }
+
+    // ────────────────────────────── RBAC Permissions ───────────────────────────────
+
+    async fn set_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO workspace_permissions(workspace_id, principal_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(workspace_id, principal_id) DO UPDATE SET role = excluded.role",
+            ws_id,
+            p_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<Role, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM workspace_permissions WHERE workspace_id = ? AND principal_id = ?",
+            ws_id,
+            p_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role)
+            .ok_or_else(|| StoreError::Backend(format!("invalid role in database: {}", row.role)))
+    }
+
+    async fn list_workspace_permissions_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<WorkspacePermission>, StoreError> {
+        let p_id = principal_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT workspace_id, principal_id, role,
+               created_at as "created_at: DateTime<Utc>"
+               FROM workspace_permissions WHERE principal_id = ?"#,
+            p_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let workspace_id = Uuid::try_parse(&row.workspace_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+
+            perms.push(WorkspacePermission {
+                workspace_id: WorkspaceId(workspace_id),
+                principal_id: PrincipalId(principal_id),
+                role,
+                created_at: row.created_at,
+            });
+        }
+        Ok(perms)
+    }
+
+    async fn list_workspace_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<WorkspacePermission>, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT workspace_id, principal_id, role,
+               created_at as "created_at: DateTime<Utc>"
+               FROM workspace_permissions WHERE workspace_id = ?"#,
+            ws_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let workspace_id = Uuid::try_parse(&row.workspace_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+
+            perms.push(WorkspacePermission {
+                workspace_id: WorkspaceId(workspace_id),
+                principal_id: PrincipalId(principal_id),
+                role,
+                created_at: row.created_at,
+            });
+        }
+        Ok(perms)
+    }
+
+    async fn remove_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM workspace_permissions WHERE workspace_id = ? AND principal_id = ?",
+            ws_id,
+            p_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn set_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        principal_id: &PrincipalId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let proj_id = project_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO project_permissions(project_id, principal_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(project_id, principal_id) DO UPDATE SET role = excluded.role",
+            proj_id,
+            p_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        principal_id: &PrincipalId,
+    ) -> Result<Role, StoreError> {
+        let proj_id = project_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM project_permissions WHERE project_id = ? AND principal_id = ?",
+            proj_id,
+            p_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role)
+            .ok_or_else(|| StoreError::Backend(format!("invalid role in database: {}", row.role)))
+    }
+
+    async fn list_project_permissions_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<ProjectPermission>, StoreError> {
+        let p_id = principal_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT project_id, principal_id, role,
+               created_at as "created_at: DateTime<Utc>"
+               FROM project_permissions WHERE principal_id = ?"#,
+            p_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let project_id =
+                Uuid::try_parse(&row.project_id).map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+
+            perms.push(ProjectPermission {
+                project_id: zopp_storage::ProjectId(project_id),
+                principal_id: PrincipalId(principal_id),
+                role,
+                created_at: row.created_at,
+            });
+        }
+        Ok(perms)
+    }
+
+    async fn list_project_permissions(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+    ) -> Result<Vec<ProjectPermission>, StoreError> {
+        let proj_id = project_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT project_id, principal_id, role,
+               created_at as "created_at: DateTime<Utc>"
+               FROM project_permissions WHERE project_id = ?"#,
+            proj_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let project_id =
+                Uuid::try_parse(&row.project_id).map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+
+            perms.push(ProjectPermission {
+                project_id: zopp_storage::ProjectId(project_id),
+                principal_id: PrincipalId(principal_id),
+                role,
+                created_at: row.created_at,
+            });
+        }
+        Ok(perms)
+    }
+
+    async fn remove_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError> {
+        let proj_id = project_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM project_permissions WHERE project_id = ? AND principal_id = ?",
+            proj_id,
+            p_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn set_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        principal_id: &PrincipalId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let env_id = environment_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO environment_permissions(environment_id, principal_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(environment_id, principal_id) DO UPDATE SET role = excluded.role",
+            env_id,
+            p_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        principal_id: &PrincipalId,
+    ) -> Result<Role, StoreError> {
+        let env_id = environment_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM environment_permissions WHERE environment_id = ? AND principal_id = ?",
+            env_id,
+            p_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role)
+            .ok_or_else(|| StoreError::Backend(format!("invalid role in database: {}", row.role)))
+    }
+
+    async fn list_environment_permissions_for_principal(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<EnvironmentPermission>, StoreError> {
+        let p_id = principal_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT environment_id, principal_id, role,
+               created_at as "created_at: DateTime<Utc>"
+               FROM environment_permissions WHERE principal_id = ?"#,
+            p_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let environment_id = Uuid::try_parse(&row.environment_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+
+            perms.push(EnvironmentPermission {
+                environment_id: EnvironmentId(environment_id),
+                principal_id: PrincipalId(principal_id),
+                role,
+                created_at: row.created_at,
+            });
+        }
+        Ok(perms)
+    }
+
+    async fn list_environment_permissions(
+        &self,
+        environment_id: &EnvironmentId,
+    ) -> Result<Vec<EnvironmentPermission>, StoreError> {
+        let env_id = environment_id.0.to_string();
+
+        let rows = sqlx::query!(
+            r#"SELECT environment_id, principal_id, role,
+               created_at as "created_at: DateTime<Utc>"
+               FROM environment_permissions WHERE environment_id = ?"#,
+            env_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let environment_id = Uuid::try_parse(&row.environment_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let principal_id = Uuid::try_parse(&row.principal_id)
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+
+            perms.push(EnvironmentPermission {
+                environment_id: EnvironmentId(environment_id),
+                principal_id: PrincipalId(principal_id),
+                role,
+                created_at: row.created_at,
+            });
+        }
+        Ok(perms)
+    }
+
+    async fn remove_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        principal_id: &PrincipalId,
+    ) -> Result<(), StoreError> {
+        let env_id = environment_id.0.to_string();
+        let p_id = principal_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM environment_permissions WHERE environment_id = ? AND principal_id = ?",
+            env_id,
+            p_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    // ────────────────────────────────────── Groups ────────────────────────────────────────
+
+    async fn create_group(
+        &self,
+        params: &zopp_storage::CreateGroupParams,
+    ) -> Result<zopp_storage::GroupId, StoreError> {
+        let group_id = Uuid::now_v7();
+        let group_id_str = group_id.to_string();
+        let ws_id = params.workspace_id.0.to_string();
+
+        sqlx::query!(
+            "INSERT INTO groups(id, workspace_id, name, description) VALUES(?, ?, ?, ?)",
+            group_id_str,
+            ws_id,
+            params.name,
+            params.description
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("UNIQUE") {
+                StoreError::AlreadyExists
+            } else {
+                StoreError::Backend(e.to_string())
+            }
+        })?;
+
+        Ok(zopp_storage::GroupId(group_id))
+    }
+
+    async fn get_group(
+        &self,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<zopp_storage::Group, StoreError> {
+        let g_id = group_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT id as \"id!\", workspace_id as \"workspace_id!\", name as \"name!\", description, created_at as \"created_at!\", updated_at as \"updated_at!\" FROM groups WHERE id = ?",
+            g_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(zopp_storage::Group {
+            id: zopp_storage::GroupId(Uuid::parse_str(&row.id).unwrap()),
+            workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
+            name: row.name,
+            description: row.description,
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
+    }
+
+    async fn get_group_by_name(
+        &self,
+        workspace_id: &WorkspaceId,
+        name: &str,
+    ) -> Result<zopp_storage::Group, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT id as \"id!\", workspace_id as \"workspace_id!\", name as \"name!\", description, created_at as \"created_at!\", updated_at as \"updated_at!\" FROM groups WHERE workspace_id = ? AND name = ?",
+            ws_id,
+            name
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(zopp_storage::Group {
+            id: zopp_storage::GroupId(Uuid::parse_str(&row.id).unwrap()),
+            workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
+            name: row.name,
+            description: row.description,
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
+    }
+
+    async fn list_groups(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<zopp_storage::Group>, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT id as \"id!\", workspace_id as \"workspace_id!\", name as \"name!\", description, created_at as \"created_at!\", updated_at as \"updated_at!\" FROM groups WHERE workspace_id = ? ORDER BY name",
+            ws_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| zopp_storage::Group {
+                id: zopp_storage::GroupId(Uuid::parse_str(&row.id).unwrap()),
+                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
+                name: row.name,
+                description: row.description,
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn update_group(
+        &self,
+        group_id: &zopp_storage::GroupId,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<(), StoreError> {
+        let g_id = group_id.0.to_string();
+
+        let result = sqlx::query!(
+            "UPDATE groups SET name = ?, description = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?",
+            name,
+            description,
+            g_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn delete_group(&self, group_id: &zopp_storage::GroupId) -> Result<(), StoreError> {
+        let g_id = group_id.0.to_string();
+
+        let result = sqlx::query!("DELETE FROM groups WHERE id = ?", g_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn add_group_member(
+        &self,
+        group_id: &zopp_storage::GroupId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        let g_id = group_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        sqlx::query!(
+            "INSERT INTO group_members(group_id, user_id) VALUES(?, ?)",
+            g_id,
+            u_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("UNIQUE") {
+                StoreError::AlreadyExists
+            } else {
+                StoreError::Backend(e.to_string())
+            }
+        })?;
+
+        Ok(())
+    }
+
+    async fn remove_group_member(
+        &self,
+        group_id: &zopp_storage::GroupId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        let g_id = group_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM group_members WHERE group_id = ? AND user_id = ?",
+            g_id,
+            u_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn list_group_members(
+        &self,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<Vec<zopp_storage::GroupMember>, StoreError> {
+        let g_id = group_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT group_id, user_id, created_at FROM group_members WHERE group_id = ?",
+            g_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| zopp_storage::GroupMember {
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
+                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn list_user_groups(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<zopp_storage::Group>, StoreError> {
+        let u_id = user_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT g.id as \"id!\", g.workspace_id as \"workspace_id!\", g.name as \"name!\", g.description, g.created_at as \"created_at!\", g.updated_at as \"updated_at!\"
+             FROM groups g
+             INNER JOIN group_members gm ON g.id = gm.group_id
+             WHERE gm.user_id = ?
+             ORDER BY g.name",
+            u_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| zopp_storage::Group {
+                id: zopp_storage::GroupId(Uuid::parse_str(&row.id).unwrap()),
+                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
+                name: row.name,
+                description: row.description,
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn set_group_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        group_id: &zopp_storage::GroupId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let g_id = group_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO group_workspace_permissions(workspace_id, group_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(workspace_id, group_id) DO UPDATE SET role = excluded.role",
+            ws_id,
+            g_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_group_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<Role, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let g_id = group_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM group_workspace_permissions WHERE workspace_id = ? AND group_id = ?",
+            ws_id,
+            g_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role).ok_or(StoreError::Backend("Invalid role".to_string()))
+    }
+
+    async fn list_group_workspace_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<zopp_storage::GroupWorkspacePermission>, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT workspace_id, group_id, role, created_at FROM group_workspace_permissions WHERE workspace_id = ?",
+            ws_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| zopp_storage::GroupWorkspacePermission {
+                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
+                role: Role::from_str(&row.role).unwrap(),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn remove_group_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let g_id = group_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM group_workspace_permissions WHERE workspace_id = ? AND group_id = ?",
+            ws_id,
+            g_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn set_group_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        group_id: &zopp_storage::GroupId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let proj_id = project_id.0.to_string();
+        let g_id = group_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO group_project_permissions(project_id, group_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(project_id, group_id) DO UPDATE SET role = excluded.role",
+            proj_id,
+            g_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_group_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<Role, StoreError> {
+        let proj_id = project_id.0.to_string();
+        let g_id = group_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM group_project_permissions WHERE project_id = ? AND group_id = ?",
+            proj_id,
+            g_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role).ok_or(StoreError::Backend("Invalid role".to_string()))
+    }
+
+    async fn list_group_project_permissions(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+    ) -> Result<Vec<zopp_storage::GroupProjectPermission>, StoreError> {
+        let proj_id = project_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT project_id, group_id, role, created_at FROM group_project_permissions WHERE project_id = ?",
+            proj_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| zopp_storage::GroupProjectPermission {
+                project_id: zopp_storage::ProjectId(Uuid::parse_str(&row.project_id).unwrap()),
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
+                role: Role::from_str(&row.role).unwrap(),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn remove_group_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<(), StoreError> {
+        let proj_id = project_id.0.to_string();
+        let g_id = group_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM group_project_permissions WHERE project_id = ? AND group_id = ?",
+            proj_id,
+            g_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn set_group_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        group_id: &zopp_storage::GroupId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let env_id = environment_id.0.to_string();
+        let g_id = group_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO group_environment_permissions(environment_id, group_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(environment_id, group_id) DO UPDATE SET role = excluded.role",
+            env_id,
+            g_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_group_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<Role, StoreError> {
+        let env_id = environment_id.0.to_string();
+        let g_id = group_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM group_environment_permissions WHERE environment_id = ? AND group_id = ?",
+            env_id,
+            g_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role).ok_or(StoreError::Backend("Invalid role".to_string()))
+    }
+
+    async fn list_group_environment_permissions(
+        &self,
+        environment_id: &EnvironmentId,
+    ) -> Result<Vec<zopp_storage::GroupEnvironmentPermission>, StoreError> {
+        let env_id = environment_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT environment_id, group_id, role, created_at FROM group_environment_permissions WHERE environment_id = ?",
+            env_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| zopp_storage::GroupEnvironmentPermission {
+                environment_id: EnvironmentId(Uuid::parse_str(&row.environment_id).unwrap()),
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
+                role: Role::from_str(&row.role).unwrap(),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn remove_group_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        group_id: &zopp_storage::GroupId,
+    ) -> Result<(), StoreError> {
+        let env_id = environment_id.0.to_string();
+        let g_id = group_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM group_environment_permissions WHERE environment_id = ? AND group_id = ?",
+            env_id,
+            g_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    // ────────────────────────────────────── User Permissions ──────────────────────────────────────
+
+    async fn set_user_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &UserId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let u_id = user_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO user_workspace_permissions(workspace_id, user_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+            ws_id,
+            u_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_user_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &UserId,
+    ) -> Result<Role, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM user_workspace_permissions WHERE workspace_id = ? AND user_id = ?",
+            ws_id,
+            u_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role).ok_or(StoreError::Backend("Invalid role".to_string()))
+    }
+
+    async fn list_user_workspace_permissions(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> Result<Vec<UserWorkspacePermission>, StoreError> {
+        let ws_id = workspace_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT workspace_id, user_id, role, created_at FROM user_workspace_permissions WHERE workspace_id = ?",
+            ws_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| UserWorkspacePermission {
+                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
+                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
+                role: Role::from_str(&row.role).unwrap(),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn remove_user_workspace_permission(
+        &self,
+        workspace_id: &WorkspaceId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        let ws_id = workspace_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM user_workspace_permissions WHERE workspace_id = ? AND user_id = ?",
+            ws_id,
+            u_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn set_user_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        user_id: &UserId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let proj_id = project_id.0.to_string();
+        let u_id = user_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO user_project_permissions(project_id, user_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+            proj_id,
+            u_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_user_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        user_id: &UserId,
+    ) -> Result<Role, StoreError> {
+        let proj_id = project_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM user_project_permissions WHERE project_id = ? AND user_id = ?",
+            proj_id,
+            u_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role).ok_or(StoreError::Backend("Invalid role".to_string()))
+    }
+
+    async fn list_user_project_permissions(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+    ) -> Result<Vec<UserProjectPermission>, StoreError> {
+        let proj_id = project_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT project_id, user_id, role, created_at FROM user_project_permissions WHERE project_id = ?",
+            proj_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| UserProjectPermission {
+                project_id: zopp_storage::ProjectId(Uuid::parse_str(&row.project_id).unwrap()),
+                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
+                role: Role::from_str(&row.role).unwrap(),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn remove_user_project_permission(
+        &self,
+        project_id: &zopp_storage::ProjectId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        let proj_id = project_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM user_project_permissions WHERE project_id = ? AND user_id = ?",
+            proj_id,
+            u_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
+
+    async fn set_user_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        user_id: &UserId,
+        role: Role,
+    ) -> Result<(), StoreError> {
+        let env_id = environment_id.0.to_string();
+        let u_id = user_id.0.to_string();
+        let role_str = role.as_str();
+
+        sqlx::query!(
+            "INSERT INTO user_environment_permissions(environment_id, user_id, role) VALUES(?, ?, ?)
+             ON CONFLICT(environment_id, user_id) DO UPDATE SET role = excluded.role, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+            env_id,
+            u_id,
+            role_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn get_user_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        user_id: &UserId,
+    ) -> Result<Role, StoreError> {
+        let env_id = environment_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let row = sqlx::query!(
+            "SELECT role FROM user_environment_permissions WHERE environment_id = ? AND user_id = ?",
+            env_id,
+            u_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Role::from_str(&row.role).ok_or(StoreError::Backend("Invalid role".to_string()))
+    }
+
+    async fn list_user_environment_permissions(
+        &self,
+        environment_id: &EnvironmentId,
+    ) -> Result<Vec<UserEnvironmentPermission>, StoreError> {
+        let env_id = environment_id.0.to_string();
+
+        let rows = sqlx::query!(
+            "SELECT environment_id, user_id, role, created_at FROM user_environment_permissions WHERE environment_id = ?",
+            env_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| UserEnvironmentPermission {
+                environment_id: EnvironmentId(Uuid::parse_str(&row.environment_id).unwrap()),
+                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
+                role: Role::from_str(&row.role).unwrap(),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
+    }
+
+    async fn remove_user_environment_permission(
+        &self,
+        environment_id: &EnvironmentId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        let env_id = environment_id.0.to_string();
+        let u_id = user_id.0.to_string();
+
+        let result = sqlx::query!(
+            "DELETE FROM user_environment_permissions WHERE environment_id = ? AND user_id = ?",
+            env_id,
+            u_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1812,5 +3162,121 @@ mod tests {
 
         let keys = s.list_secret_keys(&env_id).await.unwrap();
         assert_eq!(keys, vec![k]);
+    }
+
+    #[tokio::test]
+    async fn rbac_permissions_roundtrip() {
+        use zopp_storage::Role;
+
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, principal_id) = s
+            .create_user(&CreateUserParams {
+                email: "test@example.com".to_string(),
+                principal: Some(zopp_storage::CreatePrincipalData {
+                    name: "test-principal".to_string(),
+                    public_key: vec![1, 2, 3],
+                    x25519_public_key: None,
+                    is_service: false,
+                }),
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+        let principal_id = principal_id.unwrap();
+
+        let ws = s
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
+            .await
+            .unwrap();
+
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: "test-project".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id: project_id.clone(),
+                name: "test-env".to_string(),
+                dek_wrapped: vec![1],
+                dek_nonce: vec![9; 24],
+            })
+            .await
+            .unwrap();
+
+        // Test workspace permissions
+        s.set_workspace_permission(&ws, &principal_id, Role::Admin)
+            .await
+            .unwrap();
+        let role = s
+            .get_workspace_permission(&ws, &principal_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Admin);
+
+        // Update workspace permission
+        s.set_workspace_permission(&ws, &principal_id, Role::Read)
+            .await
+            .unwrap();
+        let role = s
+            .get_workspace_permission(&ws, &principal_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Read);
+
+        // Test project permissions
+        s.set_project_permission(&project_id, &principal_id, Role::Write)
+            .await
+            .unwrap();
+        let role = s
+            .get_project_permission(&project_id, &principal_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Write);
+
+        // Test environment permissions
+        s.set_environment_permission(&env_id, &principal_id, Role::Read)
+            .await
+            .unwrap();
+        let role = s
+            .get_environment_permission(&env_id, &principal_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Read);
+
+        // Test listing permissions
+        let ws_perms = s
+            .list_workspace_permissions_for_principal(&principal_id)
+            .await
+            .unwrap();
+        assert_eq!(ws_perms.len(), 1);
+        assert_eq!(ws_perms[0].role, Role::Read);
+
+        let proj_perms = s
+            .list_project_permissions_for_principal(&principal_id)
+            .await
+            .unwrap();
+        assert_eq!(proj_perms.len(), 1);
+        assert_eq!(proj_perms[0].role, Role::Write);
+
+        let env_perms = s
+            .list_environment_permissions_for_principal(&principal_id)
+            .await
+            .unwrap();
+        assert_eq!(env_perms.len(), 1);
+        assert_eq!(env_perms[0].role, Role::Read);
+
+        // Test remove permissions
+        s.remove_workspace_permission(&ws, &principal_id)
+            .await
+            .unwrap();
+        let err = s
+            .get_workspace_permission(&ws, &principal_id)
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
     }
 }

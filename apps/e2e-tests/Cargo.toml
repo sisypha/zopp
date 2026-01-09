@@ -30,3 +30,7 @@ path = "tests/operator_sync.rs"
 name = "self_signed_tls"
 path = "tests/self_signed_tls.rs"
 harness = false
+
+[[test]]
+name = "rbac"
+path = "tests/rbac.rs"

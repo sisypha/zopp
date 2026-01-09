@@ -8,8 +8,8 @@ mod grpc;
 mod k8s;
 
 use cli::{
-    Cli, Command, DiffCommand, EnvironmentCommand, InviteCommand, PrincipalCommand, ProjectCommand,
-    SecretCommand, SyncCommand, WorkspaceCommand,
+    Cli, Command, DiffCommand, EnvironmentCommand, GroupCommand, InviteCommand, PermissionCommand,
+    PrincipalCommand, ProjectCommand, SecretCommand, SyncCommand, WorkspaceCommand,
 };
 use commands::*;
 use config::{resolve_context, resolve_workspace, resolve_workspace_project};
@@ -61,6 +61,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             PrincipalCommand::Delete { name } => {
                 cmd_principal_delete(&name).await?;
+            }
+            PrincipalCommand::ServiceList { workspace } => {
+                cmd_principal_service_list(&cli.server, cli.tls_ca_cert.as_deref(), &workspace)
+                    .await?;
+            }
+            PrincipalCommand::WorkspaceRemove {
+                workspace,
+                principal,
+            } => {
+                cmd_principal_workspace_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &principal,
+                )
+                .await?;
+            }
+            PrincipalCommand::RevokeAll {
+                workspace,
+                principal,
+            } => {
+                cmd_principal_revoke_all(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &principal,
+                )
+                .await?;
             }
         },
         Command::Project { project_cmd } => match project_cmd {
@@ -299,6 +327,558 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     context.as_deref(),
                     force,
                     dry_run,
+                )
+                .await?;
+            }
+        },
+        Command::Permission { permission_cmd } => match permission_cmd {
+            PermissionCommand::Set {
+                workspace,
+                principal,
+                role,
+            } => {
+                cmd_permission_set(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &principal,
+                    &role,
+                )
+                .await?;
+            }
+            PermissionCommand::Get {
+                workspace,
+                principal,
+            } => {
+                cmd_permission_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &principal,
+                )
+                .await?;
+            }
+            PermissionCommand::List { workspace } => {
+                cmd_permission_list(&cli.server, cli.tls_ca_cert.as_deref(), &workspace).await?;
+            }
+            PermissionCommand::Remove {
+                workspace,
+                principal,
+            } => {
+                cmd_permission_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &principal,
+                )
+                .await?;
+            }
+            PermissionCommand::ProjectSet {
+                workspace,
+                project,
+                principal,
+                role,
+            } => {
+                commands::permission::cmd_principal_project_permission_set(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &principal,
+                    &role,
+                )
+                .await?;
+            }
+            PermissionCommand::ProjectGet {
+                workspace,
+                project,
+                principal,
+            } => {
+                commands::permission::cmd_principal_project_permission_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &principal,
+                )
+                .await?;
+            }
+            PermissionCommand::ProjectList { workspace, project } => {
+                commands::permission::cmd_principal_project_permission_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                )
+                .await?;
+            }
+            PermissionCommand::ProjectRemove {
+                workspace,
+                project,
+                principal,
+            } => {
+                commands::permission::cmd_principal_project_permission_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &principal,
+                )
+                .await?;
+            }
+            PermissionCommand::EnvSet {
+                workspace,
+                project,
+                environment,
+                principal,
+                role,
+            } => {
+                commands::permission::cmd_principal_environment_permission_set(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &principal,
+                    &role,
+                )
+                .await?;
+            }
+            PermissionCommand::EnvGet {
+                workspace,
+                project,
+                environment,
+                principal,
+            } => {
+                commands::permission::cmd_principal_environment_permission_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &principal,
+                )
+                .await?;
+            }
+            PermissionCommand::EnvList {
+                workspace,
+                project,
+                environment,
+            } => {
+                commands::permission::cmd_principal_environment_permission_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                )
+                .await?;
+            }
+            PermissionCommand::EnvRemove {
+                workspace,
+                project,
+                environment,
+                principal,
+            } => {
+                commands::permission::cmd_principal_environment_permission_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &principal,
+                )
+                .await?;
+            }
+            PermissionCommand::UserSet {
+                workspace,
+                email,
+                role,
+            } => {
+                cmd_user_permission_set(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &email,
+                    &role,
+                )
+                .await?;
+            }
+            PermissionCommand::UserGet { workspace, email } => {
+                cmd_user_permission_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &email,
+                )
+                .await?;
+            }
+            PermissionCommand::UserList { workspace } => {
+                cmd_user_permission_list(&cli.server, cli.tls_ca_cert.as_deref(), &workspace)
+                    .await?;
+            }
+            PermissionCommand::UserRemove { workspace, email } => {
+                cmd_user_permission_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &email,
+                )
+                .await?;
+            }
+            PermissionCommand::UserProjectSet {
+                workspace,
+                project,
+                email,
+                role,
+            } => {
+                commands::permission::cmd_user_project_permission_set(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &email,
+                    &role,
+                )
+                .await?;
+            }
+            PermissionCommand::UserProjectRemove {
+                workspace,
+                project,
+                email,
+            } => {
+                commands::permission::cmd_user_project_permission_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &email,
+                )
+                .await?;
+            }
+            PermissionCommand::UserProjectGet {
+                workspace,
+                project,
+                email,
+            } => {
+                commands::permission::cmd_user_project_permission_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &email,
+                )
+                .await?;
+            }
+            PermissionCommand::UserEnvSet {
+                workspace,
+                project,
+                environment,
+                email,
+                role,
+            } => {
+                commands::permission::cmd_user_environment_permission_set(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &email,
+                    &role,
+                )
+                .await?;
+            }
+            PermissionCommand::UserEnvRemove {
+                workspace,
+                project,
+                environment,
+                email,
+            } => {
+                commands::permission::cmd_user_environment_permission_remove(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &email,
+                )
+                .await?;
+            }
+            PermissionCommand::UserEnvGet {
+                workspace,
+                project,
+                environment,
+                email,
+            } => {
+                commands::permission::cmd_user_environment_permission_get(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                    &email,
+                )
+                .await?;
+            }
+            PermissionCommand::UserProjectList { workspace, project } => {
+                commands::permission::cmd_user_project_permission_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                )
+                .await?;
+            }
+            PermissionCommand::UserEnvList {
+                workspace,
+                project,
+                environment,
+            } => {
+                commands::permission::cmd_user_environment_permission_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &project,
+                    &environment,
+                )
+                .await?;
+            }
+            PermissionCommand::Effective {
+                workspace,
+                principal,
+            } => {
+                commands::cmd_permission_effective(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    &principal,
+                )
+                .await?;
+            }
+        },
+        Command::Group { group_cmd } => match group_cmd {
+            GroupCommand::Create {
+                workspace,
+                name,
+                description,
+            } => {
+                commands::cmd_group_create(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    name.clone(),
+                    description.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::List { workspace } => {
+                commands::cmd_group_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                )
+                .await?;
+            }
+            GroupCommand::Delete { workspace, name } => {
+                commands::cmd_group_delete(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    name.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::AddMember {
+                workspace,
+                group,
+                email,
+            } => {
+                commands::cmd_group_add_member(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    group.clone(),
+                    email.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::RemoveMember {
+                workspace,
+                group,
+                email,
+            } => {
+                commands::cmd_group_remove_member(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    group.clone(),
+                    email.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::ListMembers { workspace, group } => {
+                commands::cmd_group_list_members(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::SetPermission {
+                workspace,
+                group,
+                role,
+            } => {
+                commands::cmd_group_set_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    group.clone(),
+                    role.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::RemovePermission { workspace, group } => {
+                commands::cmd_group_remove_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::GetPermission { workspace, group } => {
+                commands::cmd_group_get_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::ListPermissions { workspace } => {
+                commands::cmd_group_list_permissions(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                )
+                .await?;
+            }
+            GroupCommand::SetProjectPermission {
+                workspace,
+                project,
+                group,
+                role,
+            } => {
+                commands::cmd_group_set_project_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    group.clone(),
+                    role.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::RemoveProjectPermission {
+                workspace,
+                project,
+                group,
+            } => {
+                commands::cmd_group_remove_project_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::GetProjectPermission {
+                workspace,
+                project,
+                group,
+            } => {
+                commands::cmd_group_get_project_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::ListProjectPermissions { workspace, project } => {
+                commands::cmd_group_list_project_permissions(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                )
+                .await?;
+            }
+            GroupCommand::SetEnvPermission {
+                workspace,
+                project,
+                environment,
+                group,
+                role,
+            } => {
+                commands::cmd_group_set_environment_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    &environment,
+                    group.clone(),
+                    role.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::RemoveEnvPermission {
+                workspace,
+                project,
+                environment,
+                group,
+            } => {
+                commands::cmd_group_remove_environment_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    &environment,
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::GetEnvPermission {
+                workspace,
+                project,
+                environment,
+                group,
+            } => {
+                commands::cmd_group_get_environment_permission(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    &environment,
+                    group.clone(),
+                )
+                .await?;
+            }
+            GroupCommand::ListEnvPermissions {
+                workspace,
+                project,
+                environment,
+            } => {
+                commands::cmd_group_list_environment_permissions(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    &project,
+                    &environment,
                 )
                 .await?;
             }

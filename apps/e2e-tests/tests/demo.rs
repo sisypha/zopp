@@ -263,6 +263,32 @@ async fn run_demo_test(
     }
     println!("✓ Bob joined workspace 'acme'\n");
 
+    println!("🔑 Step 7b: Alice grants Bob write permission...");
+    let output = Command::new(&zopp_bin)
+        .env("HOME", &alice_home)
+        .args([
+            "--server",
+            &server_url,
+            "permission",
+            "user-set",
+            "-w",
+            "acme",
+            "--email",
+            "bob@example.com",
+            "--role",
+            "write",
+        ])
+        .output()?;
+
+    if !output.status.success() {
+        eprintln!(
+            "Permission set failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return Err("Failed to grant Bob write permission".into());
+    }
+    println!("✓ Bob granted write permission on workspace 'acme'\n");
+
     println!("🔐 Step 8: Bob writes secret 'FLUXMAIL_API_TOKEN'...");
     let secret_value = "fxt_8k2m9p4x7n1q5w3e6r8t0y2u4i6o8p0a";
     let output = Command::new(&zopp_bin)

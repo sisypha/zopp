@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO user_project_permissions(project_id, user_id, role) VALUES(?, ?, ?)\n             ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "2a7b6cec46504dd27565e20081906adad1a6622817543be3ba040ab1d965314b"
+}

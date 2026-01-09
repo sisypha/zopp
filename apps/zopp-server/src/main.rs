@@ -1,3 +1,6 @@
+mod backend;
+mod server;
+
 use chrono::Utc;
 use clap::{Parser, Subcommand};
 #[allow(unused_imports)]
@@ -10,6 +13,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 use uuid::Uuid;
 
+use backend::StoreBackend;
+use server::{extract_signature, ZoppServer};
 use zopp_events::{EventBus, EventType, SecretChangeEvent};
 use zopp_events_memory::MemoryEventBus;
 use zopp_proto::zopp_service_server::{ZoppService, ZoppServiceServer};
@@ -18,7 +23,7 @@ use zopp_proto::{
     InviteList, InviteToken, JoinRequest, JoinResponse, LoginRequest, LoginResponse, PrincipalList,
     RegisterRequest, RegisterResponse, RenamePrincipalRequest, RevokeInviteRequest, WorkspaceList,
 };
-use zopp_storage::{AddWorkspacePrincipalParams, CreatePrincipalData, Principal, Store, *};
+use zopp_storage::{AddWorkspacePrincipalParams, CreatePrincipalData, Store, *};
 use zopp_store_postgres::PostgresStore;
 use zopp_store_sqlite::SqliteStore;
 
@@ -91,398 +96,7 @@ enum InviteCommand {
     },
 }
 
-// ────────────────────────────────────── Backend Enum ──────────────────────────────────────
-
-enum StoreBackend {
-    Sqlite(Arc<SqliteStore>),
-    Postgres(Arc<PostgresStore>),
-}
-
-#[async_trait::async_trait]
-impl Store for StoreBackend {
-    async fn create_user(
-        &self,
-        params: &CreateUserParams,
-    ) -> Result<(UserId, Option<PrincipalId>), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.create_user(params).await,
-            StoreBackend::Postgres(s) => s.create_user(params).await,
-        }
-    }
-
-    async fn get_user_by_email(&self, email: &str) -> Result<User, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_user_by_email(email).await,
-            StoreBackend::Postgres(s) => s.get_user_by_email(email).await,
-        }
-    }
-
-    async fn get_user_by_id(&self, user_id: &UserId) -> Result<User, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_user_by_id(user_id).await,
-            StoreBackend::Postgres(s) => s.get_user_by_id(user_id).await,
-        }
-    }
-
-    async fn create_principal(
-        &self,
-        params: &CreatePrincipalParams,
-    ) -> Result<PrincipalId, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.create_principal(params).await,
-            StoreBackend::Postgres(s) => s.create_principal(params).await,
-        }
-    }
-
-    async fn get_principal(&self, principal_id: &PrincipalId) -> Result<Principal, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_principal(principal_id).await,
-            StoreBackend::Postgres(s) => s.get_principal(principal_id).await,
-        }
-    }
-
-    async fn rename_principal(
-        &self,
-        principal_id: &PrincipalId,
-        new_name: &str,
-    ) -> Result<(), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.rename_principal(principal_id, new_name).await,
-            StoreBackend::Postgres(s) => s.rename_principal(principal_id, new_name).await,
-        }
-    }
-
-    async fn list_principals(&self, user_id: &UserId) -> Result<Vec<Principal>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_principals(user_id).await,
-            StoreBackend::Postgres(s) => s.list_principals(user_id).await,
-        }
-    }
-
-    async fn create_invite(&self, params: &CreateInviteParams) -> Result<Invite, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.create_invite(params).await,
-            StoreBackend::Postgres(s) => s.create_invite(params).await,
-        }
-    }
-
-    async fn get_invite_by_token(&self, token: &str) -> Result<Invite, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_invite_by_token(token).await,
-            StoreBackend::Postgres(s) => s.get_invite_by_token(token).await,
-        }
-    }
-
-    async fn list_invites(&self, user_id: Option<&UserId>) -> Result<Vec<Invite>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_invites(user_id).await,
-            StoreBackend::Postgres(s) => s.list_invites(user_id).await,
-        }
-    }
-
-    async fn revoke_invite(&self, invite_id: &InviteId) -> Result<(), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.revoke_invite(invite_id).await,
-            StoreBackend::Postgres(s) => s.revoke_invite(invite_id).await,
-        }
-    }
-
-    async fn create_workspace(
-        &self,
-        params: &CreateWorkspaceParams,
-    ) -> Result<WorkspaceId, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.create_workspace(params).await,
-            StoreBackend::Postgres(s) => s.create_workspace(params).await,
-        }
-    }
-
-    async fn list_workspaces(&self, user_id: &UserId) -> Result<Vec<Workspace>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_workspaces(user_id).await,
-            StoreBackend::Postgres(s) => s.list_workspaces(user_id).await,
-        }
-    }
-
-    async fn get_workspace(&self, ws: &WorkspaceId) -> Result<Workspace, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_workspace(ws).await,
-            StoreBackend::Postgres(s) => s.get_workspace(ws).await,
-        }
-    }
-
-    async fn get_workspace_by_name(
-        &self,
-        user_id: &UserId,
-        name: &str,
-    ) -> Result<Workspace, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_workspace_by_name(user_id, name).await,
-            StoreBackend::Postgres(s) => s.get_workspace_by_name(user_id, name).await,
-        }
-    }
-
-    async fn get_workspace_by_name_for_principal(
-        &self,
-        principal_id: &PrincipalId,
-        name: &str,
-    ) -> Result<Workspace, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => {
-                s.get_workspace_by_name_for_principal(principal_id, name)
-                    .await
-            }
-            StoreBackend::Postgres(s) => {
-                s.get_workspace_by_name_for_principal(principal_id, name)
-                    .await
-            }
-        }
-    }
-
-    async fn add_workspace_principal(
-        &self,
-        params: &AddWorkspacePrincipalParams,
-    ) -> Result<(), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.add_workspace_principal(params).await,
-            StoreBackend::Postgres(s) => s.add_workspace_principal(params).await,
-        }
-    }
-
-    async fn get_workspace_principal(
-        &self,
-        workspace_id: &WorkspaceId,
-        principal_id: &PrincipalId,
-    ) -> Result<WorkspacePrincipal, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_workspace_principal(workspace_id, principal_id).await,
-            StoreBackend::Postgres(s) => {
-                s.get_workspace_principal(workspace_id, principal_id).await
-            }
-        }
-    }
-
-    async fn list_workspace_principals(
-        &self,
-        workspace_id: &WorkspaceId,
-    ) -> Result<Vec<WorkspacePrincipal>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_workspace_principals(workspace_id).await,
-            StoreBackend::Postgres(s) => s.list_workspace_principals(workspace_id).await,
-        }
-    }
-
-    async fn add_user_to_workspace(
-        &self,
-        workspace_id: &WorkspaceId,
-        user_id: &UserId,
-    ) -> Result<(), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.add_user_to_workspace(workspace_id, user_id).await,
-            StoreBackend::Postgres(s) => s.add_user_to_workspace(workspace_id, user_id).await,
-        }
-    }
-
-    async fn create_project(&self, params: &CreateProjectParams) -> Result<ProjectId, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.create_project(params).await,
-            StoreBackend::Postgres(s) => s.create_project(params).await,
-        }
-    }
-
-    async fn list_projects(&self, workspace_id: &WorkspaceId) -> Result<Vec<Project>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_projects(workspace_id).await,
-            StoreBackend::Postgres(s) => s.list_projects(workspace_id).await,
-        }
-    }
-
-    async fn get_project(&self, project_id: &ProjectId) -> Result<Project, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_project(project_id).await,
-            StoreBackend::Postgres(s) => s.get_project(project_id).await,
-        }
-    }
-
-    async fn get_project_by_name(
-        &self,
-        workspace_id: &WorkspaceId,
-        name: &str,
-    ) -> Result<Project, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_project_by_name(workspace_id, name).await,
-            StoreBackend::Postgres(s) => s.get_project_by_name(workspace_id, name).await,
-        }
-    }
-
-    async fn delete_project(&self, project_id: &ProjectId) -> Result<(), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.delete_project(project_id).await,
-            StoreBackend::Postgres(s) => s.delete_project(project_id).await,
-        }
-    }
-
-    async fn create_env(&self, params: &CreateEnvParams) -> Result<EnvironmentId, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.create_env(params).await,
-            StoreBackend::Postgres(s) => s.create_env(params).await,
-        }
-    }
-
-    async fn list_environments(
-        &self,
-        project_id: &ProjectId,
-    ) -> Result<Vec<Environment>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_environments(project_id).await,
-            StoreBackend::Postgres(s) => s.list_environments(project_id).await,
-        }
-    }
-
-    async fn get_environment(&self, env_id: &EnvironmentId) -> Result<Environment, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_environment(env_id).await,
-            StoreBackend::Postgres(s) => s.get_environment(env_id).await,
-        }
-    }
-
-    async fn get_environment_by_name(
-        &self,
-        project_id: &ProjectId,
-        name: &str,
-    ) -> Result<Environment, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_environment_by_name(project_id, name).await,
-            StoreBackend::Postgres(s) => s.get_environment_by_name(project_id, name).await,
-        }
-    }
-
-    async fn delete_environment(&self, env_id: &EnvironmentId) -> Result<(), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.delete_environment(env_id).await,
-            StoreBackend::Postgres(s) => s.delete_environment(env_id).await,
-        }
-    }
-
-    async fn get_env_wrap(
-        &self,
-        ws: &WorkspaceId,
-        project: &ProjectName,
-        env: &EnvName,
-    ) -> Result<(Vec<u8>, Vec<u8>), StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_env_wrap(ws, project, env).await,
-            StoreBackend::Postgres(s) => s.get_env_wrap(ws, project, env).await,
-        }
-    }
-
-    async fn upsert_secret(
-        &self,
-        env_id: &EnvironmentId,
-        key: &str,
-        nonce: &[u8],
-        ciphertext: &[u8],
-    ) -> Result<i64, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.upsert_secret(env_id, key, nonce, ciphertext).await,
-            StoreBackend::Postgres(s) => s.upsert_secret(env_id, key, nonce, ciphertext).await,
-        }
-    }
-
-    async fn get_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<SecretRow, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.get_secret(env_id, key).await,
-            StoreBackend::Postgres(s) => s.get_secret(env_id, key).await,
-        }
-    }
-
-    async fn list_secret_keys(&self, env_id: &EnvironmentId) -> Result<Vec<String>, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.list_secret_keys(env_id).await,
-            StoreBackend::Postgres(s) => s.list_secret_keys(env_id).await,
-        }
-    }
-
-    async fn delete_secret(&self, env_id: &EnvironmentId, key: &str) -> Result<i64, StoreError> {
-        match self {
-            StoreBackend::Sqlite(s) => s.delete_secret(env_id, key).await,
-            StoreBackend::Postgres(s) => s.delete_secret(env_id, key).await,
-        }
-    }
-}
-
 // ────────────────────────────────────── gRPC Server ──────────────────────────────────────
-
-pub struct ZoppServer {
-    store: StoreBackend,
-    events: Arc<dyn EventBus>,
-}
-
-impl ZoppServer {
-    pub fn new_sqlite(store: Arc<SqliteStore>, events: Arc<dyn EventBus>) -> Self {
-        Self {
-            store: StoreBackend::Sqlite(store),
-            events,
-        }
-    }
-
-    pub fn new_postgres(store: Arc<PostgresStore>, events: Arc<dyn EventBus>) -> Self {
-        Self {
-            store: StoreBackend::Postgres(store),
-            events,
-        }
-    }
-
-    async fn verify_signature_and_get_principal(
-        &self,
-        principal_id: &PrincipalId,
-        timestamp: i64,
-        signature: &[u8],
-    ) -> Result<Principal, Status> {
-        // Check timestamp freshness (replay protection)
-        let now = Utc::now().timestamp();
-        let age = now - timestamp;
-
-        if age > 60 {
-            return Err(Status::unauthenticated(
-                "Request timestamp too old (>60s), possible replay attack",
-            ));
-        }
-        if age < -30 {
-            return Err(Status::unauthenticated(
-                "Request timestamp too far in future (>30s), check clock sync",
-            ));
-        }
-
-        let principal = self
-            .store
-            .get_principal(principal_id)
-            .await
-            .map_err(|_| Status::unauthenticated("Invalid principal"))?;
-
-        let verifying_key = VerifyingKey::from_bytes(
-            principal
-                .public_key
-                .as_slice()
-                .try_into()
-                .map_err(|_| Status::unauthenticated("Invalid public key length"))?,
-        )
-        .map_err(|_| Status::unauthenticated("Invalid public key"))?;
-
-        let sig = Signature::from_bytes(
-            signature
-                .try_into()
-                .map_err(|_| Status::unauthenticated("Invalid signature length"))?,
-        );
-
-        let message = timestamp.to_le_bytes();
-        verifying_key
-            .verify(&message, &sig)
-            .map_err(|_| Status::unauthenticated("Invalid signature"))?;
-
-        Ok(principal)
-    }
-}
 
 #[tonic::async_trait]
 impl ZoppService for ZoppServer {
@@ -526,12 +140,45 @@ impl ZoppService for ZoppServer {
         let (user_id, principal_id) = match result {
             Ok((uid, pid)) => (uid, pid.expect("principal_id should be present")),
             Err(StoreError::AlreadyExists) if !invite.workspace_ids.is_empty() => {
-                // User exists - this must be a workspace invite for an existing user
-                // For now, return error - this needs proper implementation
-                return Err(Status::unimplemented(
-                    "Workspace invites for existing users not yet fully implemented. \
-                     Use the same principal name you used when first joining.",
-                ));
+                // User exists - this is a workspace invite for an existing user
+                // Get the existing user and create a new principal for them
+                let existing_user = self
+                    .store
+                    .get_user_by_email(&req.email)
+                    .await
+                    .map_err(|e| Status::internal(format!("Failed to get existing user: {}", e)))?;
+
+                // Create a new principal for this existing user
+                let new_principal_id = self
+                    .store
+                    .create_principal(&zopp_storage::CreatePrincipalParams {
+                        user_id: Some(existing_user.id.clone()),
+                        name: req.principal_name.clone(),
+                        public_key: req.public_key.clone(),
+                        x25519_public_key: if req.x25519_public_key.is_empty() {
+                            None
+                        } else {
+                            Some(req.x25519_public_key.clone())
+                        },
+                    })
+                    .await
+                    .map_err(|e| {
+                        Status::internal(format!(
+                            "Failed to create principal for existing user: {}",
+                            e
+                        ))
+                    })?;
+
+                // Add user to workspace memberships
+                for workspace_id in &invite.workspace_ids {
+                    // Ignore AlreadyExists - user may already be a member
+                    let _ = self
+                        .store
+                        .add_user_to_workspace(workspace_id, &existing_user.id)
+                        .await;
+                }
+
+                (existing_user.id, new_principal_id)
             }
             Err(e) => return Err(Status::internal(format!("Failed to create user: {}", e))),
         };
@@ -793,10 +440,18 @@ impl ZoppService for ZoppServer {
             .user_id
             .ok_or_else(|| Status::unauthenticated("Service accounts cannot create invites"))?;
 
+        let workspace_ids = workspace_ids?;
+
+        // Check ADMIN permission for each workspace in the invite
+        for ws_id in &workspace_ids {
+            self.check_workspace_permission(&principal_id, ws_id, zopp_storage::Role::Admin)
+                .await?;
+        }
+
         let invite = self
             .store
             .create_invite(&CreateInviteParams {
-                workspace_ids: workspace_ids?,
+                workspace_ids: workspace_ids.clone(),
                 token: req.token,
                 kek_encrypted: if req.kek_encrypted.is_empty() {
                     None
@@ -998,6 +653,377 @@ impl ZoppService for ZoppServer {
         Ok(Response::new(PrincipalList { principals }))
     }
 
+    async fn list_workspace_service_principals(
+        &self,
+        request: Request<zopp_proto::ListWorkspaceServicePrincipalsRequest>,
+    ) -> Result<Response<zopp_proto::ServicePrincipalList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list service principals")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Get all principals in the workspace
+        let workspace_principals = self
+            .store
+            .list_workspace_principals(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list workspace principals: {}", e)))?;
+
+        // Get all projects in the workspace (for aggregating permissions)
+        let projects = self
+            .store
+            .list_projects(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list projects: {}", e)))?;
+
+        let mut service_principals = Vec::new();
+
+        for wp in workspace_principals {
+            // Get the principal details
+            let principal_info = match self.store.get_principal(&wp.principal_id).await {
+                Ok(p) => p,
+                Err(_) => continue, // Skip if principal not found
+            };
+
+            // Only include service principals (user_id is None)
+            if principal_info.user_id.is_some() {
+                continue;
+            }
+
+            // Aggregate permissions for this service principal
+            let mut permissions = Vec::new();
+
+            // Check project-level permissions
+            for project in &projects {
+                if let Ok(role) = self
+                    .store
+                    .get_project_permission(&project.id, &wp.principal_id)
+                    .await
+                {
+                    permissions.push(zopp_proto::ServicePrincipalPermission {
+                        scope: format!("project:{}", project.name),
+                        role: match role {
+                            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                        },
+                    });
+                }
+
+                // Check environment-level permissions within the project
+                if let Ok(environments) = self.store.list_environments(&project.id).await {
+                    for env in environments {
+                        if let Ok(role) = self
+                            .store
+                            .get_environment_permission(&env.id, &wp.principal_id)
+                            .await
+                        {
+                            permissions.push(zopp_proto::ServicePrincipalPermission {
+                                scope: format!("environment:{}/{}", project.name, env.name),
+                                role: match role {
+                                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+
+            service_principals.push(zopp_proto::ServicePrincipal {
+                id: principal_info.id.0.to_string(),
+                name: principal_info.name,
+                created_at: principal_info.created_at.to_rfc3339(),
+                permissions,
+            });
+        }
+
+        Ok(Response::new(zopp_proto::ServicePrincipalList {
+            service_principals,
+        }))
+    }
+
+    async fn remove_principal_from_workspace(
+        &self,
+        request: Request<zopp_proto::RemovePrincipalFromWorkspaceRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove principals from workspaces")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission (only admins can remove principals)
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Verify principal exists
+        self.store
+            .get_principal(&target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Principal not found"),
+                _ => Status::internal(format!("Failed to get principal: {}", e)),
+            })?;
+
+        // Prevent removing yourself
+        if target_principal_id == principal_id {
+            return Err(Status::invalid_argument("Cannot remove your own principal"));
+        }
+
+        // First remove all permissions for the principal
+        self.store
+            .remove_all_project_permissions_for_principal(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove project permissions: {}", e)))?;
+
+        self.store
+            .remove_all_environment_permissions_for_principal(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| {
+                Status::internal(format!("Failed to remove environment permissions: {}", e))
+            })?;
+
+        // Remove the principal from the workspace
+        self.store
+            .remove_workspace_principal(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| {
+                Status::internal(format!("Failed to remove principal from workspace: {}", e))
+            })?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn revoke_all_principal_permissions(
+        &self,
+        request: Request<zopp_proto::RevokeAllPrincipalPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::RevokeAllPrincipalPermissionsResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot revoke principal permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission (only admins can bulk revoke permissions)
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Verify principal exists
+        self.store
+            .get_principal(&target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Principal not found"),
+                _ => Status::internal(format!("Failed to get principal: {}", e)),
+            })?;
+
+        // Remove all permissions for the principal
+        let project_removed = self
+            .store
+            .remove_all_project_permissions_for_principal(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove project permissions: {}", e)))?;
+
+        let env_removed = self
+            .store
+            .remove_all_environment_permissions_for_principal(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| {
+                Status::internal(format!("Failed to remove environment permissions: {}", e))
+            })?;
+
+        Ok(Response::new(
+            zopp_proto::RevokeAllPrincipalPermissionsResponse {
+                permissions_revoked: (project_removed + env_removed) as i32,
+            },
+        ))
+    }
+
+    async fn get_effective_permissions(
+        &self,
+        request: Request<zopp_proto::GetEffectivePermissionsRequest>,
+    ) -> Result<Response<zopp_proto::EffectivePermissionsResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot query effective permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Get target principal info
+        let target_principal = self
+            .store
+            .get_principal(&target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Principal not found"),
+                _ => Status::internal(format!("Failed to get principal: {}", e)),
+            })?;
+
+        let is_service_principal = target_principal.user_id.is_none();
+
+        // Get workspace-level effective role
+        let workspace_role = self
+            .get_effective_workspace_role(&target_principal_id, &workspace.id)
+            .await?;
+
+        // Get all projects in the workspace
+        let projects = self
+            .store
+            .list_projects(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list projects: {}", e)))?;
+
+        let mut effective_projects = Vec::new();
+
+        for project in projects {
+            // Get project-level effective role
+            let project_role = self
+                .get_effective_project_role(&target_principal_id, &workspace.id, &project.id)
+                .await?;
+
+            // Get all environments in this project
+            let environments = self
+                .store
+                .list_environments(&project.id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to list environments: {}", e)))?;
+
+            let mut effective_environments = Vec::new();
+
+            for env in environments {
+                // Get environment-level effective role
+                let env_role = self
+                    .get_effective_environment_role(
+                        &target_principal_id,
+                        &workspace.id,
+                        &project.id,
+                        &env.id,
+                    )
+                    .await?;
+
+                if let Some(role) = env_role {
+                    effective_environments.push(zopp_proto::EffectiveEnvironmentPermission {
+                        environment_id: env.id.0.to_string(),
+                        environment_name: env.name,
+                        effective_role: match role {
+                            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                        },
+                    });
+                }
+            }
+
+            // Only include project if there are permissions at any level
+            if project_role.is_some() || !effective_environments.is_empty() {
+                effective_projects.push(zopp_proto::EffectiveProjectPermission {
+                    project_id: project.id.0.to_string(),
+                    project_name: project.name,
+                    effective_role: project_role.map(|r| match r {
+                        zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                        zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                        zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                    }),
+                    environments: effective_environments,
+                });
+            }
+        }
+
+        Ok(Response::new(zopp_proto::EffectivePermissionsResponse {
+            principal_id: target_principal.id.0.to_string(),
+            principal_name: target_principal.name,
+            is_service_principal,
+            workspace_role: workspace_role.map(|r| match r {
+                zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+            }),
+            projects: effective_projects,
+        }))
+    }
+
     async fn create_project(
         &self,
         request: Request<zopp_proto::CreateProjectRequest>,
@@ -1023,6 +1049,10 @@ impl ZoppService for ZoppServer {
                 }
                 _ => Status::internal(format!("Failed to get workspace: {}", e)),
             })?;
+
+        // Check ADMIN permission for creating projects
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
 
         let project_id = self
             .store
@@ -1168,6 +1198,10 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get workspace: {}", e)),
             })?;
 
+        // Check ADMIN permission for deleting projects
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
         // Look up project by name in workspace
         let project = self
             .store
@@ -1224,6 +1258,15 @@ impl ZoppService for ZoppServer {
                 zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
                 _ => Status::internal(format!("Failed to get project: {}", e)),
             })?;
+
+        // Check ADMIN permission for creating environments (project-level or higher)
+        self.check_project_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            zopp_storage::Role::Admin,
+        )
+        .await?;
 
         let env_id = self
             .store
@@ -1407,6 +1450,15 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get project: {}", e)),
             })?;
 
+        // Check ADMIN permission for deleting environments (project-level or higher)
+        self.check_project_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            zopp_storage::Role::Admin,
+        )
+        .await?;
+
         // Look up environment by name in project
         let env = self
             .store
@@ -1474,6 +1526,16 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
+        // Check RBAC permission - upsert requires Write
+        self.check_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Write,
+        )
+        .await?;
+
         let new_version = self
             .store
             .upsert_secret(&env.id, &req.key, &req.nonce, &req.ciphertext)
@@ -1538,6 +1600,16 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
+        // Check RBAC permission - get requires Read
+        self.check_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Read,
+        )
+        .await?;
+
         let secret = self
             .store
             .get_secret(&env.id, &req.key)
@@ -1599,6 +1671,16 @@ impl ZoppService for ZoppServer {
                 zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
+
+        // Check RBAC permission - list requires Read
+        self.check_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Read,
+        )
+        .await?;
 
         let keys = self
             .store
@@ -1673,6 +1755,16 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
+        // Check RBAC permission - delete requires Write
+        self.check_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Write,
+        )
+        .await?;
+
         let new_version =
             self.store
                 .delete_secret(&env.id, &req.key)
@@ -1744,6 +1836,16 @@ impl ZoppService for ZoppServer {
                 _ => Status::internal(format!("Failed to get environment: {}", e)),
             })?;
 
+        // Check RBAC permission - watch requires Read
+        self.check_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Read,
+        )
+        .await?;
+
         // Check if client is behind (needs resync)
         if let Some(client_version) = req.since_version {
             if client_version < env.version {
@@ -1804,38 +1906,2817 @@ impl ZoppService for ZoppServer {
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }
-}
 
-fn extract_signature<T>(request: &Request<T>) -> Result<(PrincipalId, i64, Vec<u8>), Status> {
-    let metadata = request.metadata();
+    // ───────────────────────────────────── Principal Permissions ─────────────────────────────────────
 
-    let principal_id_str = metadata
-        .get("principal-id")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| Status::unauthenticated("Missing principal-id metadata"))?;
+    async fn set_workspace_permission(
+        &self,
+        request: Request<zopp_proto::SetWorkspacePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot set permissions"))?;
 
-    let principal_id = Uuid::parse_str(principal_id_str)
-        .map(PrincipalId)
-        .map_err(|_| Status::unauthenticated("Invalid principal-id format"))?;
+        let req = request.into_inner();
 
-    let timestamp_str = metadata
-        .get("timestamp")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| Status::unauthenticated("Missing timestamp metadata"))?;
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
 
-    let timestamp = timestamp_str
-        .parse::<i64>()
-        .map_err(|_| Status::unauthenticated("Invalid timestamp format"))?;
+        // Parse principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
 
-    let signature_str = metadata
-        .get("signature")
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| Status::unauthenticated("Missing signature metadata"))?;
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
 
-    let signature = hex::decode(signature_str)
-        .map_err(|_| Status::unauthenticated("Invalid signature format"))?;
+        self.store
+            .set_workspace_permission(&workspace.id, &target_principal_id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set permission: {}", e)))?;
 
-    Ok((principal_id, timestamp, signature))
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_workspace_permission(
+        &self,
+        request: Request<zopp_proto::GetWorkspacePermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Parse principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        let role = self
+            .store
+            .get_workspace_permission(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get permission: {}", e)),
+            })?;
+
+        // Convert storage Role to proto Role
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role,
+        }))
+    }
+
+    async fn list_workspace_permissions(
+        &self,
+        request: Request<zopp_proto::ListWorkspacePermissionsRequest>,
+    ) -> Result<Response<zopp_proto::PermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_workspace_permissions(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::with_capacity(permissions.len());
+        for p in permissions {
+            let principal_name = match self.store.get_principal(&p.principal_id).await {
+                Ok(principal) => principal.name,
+                Err(_) => String::new(), // Principal might have been deleted
+            };
+            proto_permissions.push(zopp_proto::Permission {
+                principal_id: p.principal_id.0.to_string(),
+                principal_name,
+                role: match p.role {
+                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                },
+            });
+        }
+
+        Ok(Response::new(zopp_proto::PermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_workspace_permission(
+        &self,
+        request: Request<zopp_proto::RemoveWorkspacePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot remove permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Parse principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        self.store
+            .remove_workspace_permission(&workspace.id, &target_principal_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_project_permission(
+        &self,
+        request: Request<zopp_proto::SetProjectPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        self.verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name for this principal
+        let workspace = self
+            .store
+            .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        // Delegated authority: requester can only grant permissions <= their own effective role
+        let requester_role = self
+            .get_effective_project_role(&principal_id, &workspace.id, &project.id)
+            .await?
+            .ok_or_else(|| {
+                Status::permission_denied("No permission to set permissions on this project")
+            })?;
+
+        // Check if requester's role is sufficient to grant the requested role
+        if !requester_role.includes(&role) {
+            return Err(Status::permission_denied(format!(
+                "Cannot grant {:?} permission (you only have {:?} access)",
+                role, requester_role
+            )));
+        }
+
+        self.store
+            .set_project_permission(&project.id, &target_principal_id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_project_permission(
+        &self,
+        request: Request<zopp_proto::GetProjectPermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Parse principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        let role = self
+            .store
+            .get_project_permission(&project.id, &target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get permission: {}", e)),
+            })?;
+
+        // Convert storage Role to proto Role
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role,
+        }))
+    }
+
+    async fn list_project_permissions(
+        &self,
+        request: Request<zopp_proto::ListProjectPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::PermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_project_permissions(&project.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::with_capacity(permissions.len());
+        for p in permissions {
+            let principal_name = match self.store.get_principal(&p.principal_id).await {
+                Ok(principal) => principal.name,
+                Err(_) => String::new(), // Principal might have been deleted
+            };
+            proto_permissions.push(zopp_proto::Permission {
+                principal_id: p.principal_id.0.to_string(),
+                principal_name,
+                role: match p.role {
+                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                },
+            });
+        }
+
+        Ok(Response::new(zopp_proto::PermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_project_permission(
+        &self,
+        request: Request<zopp_proto::RemoveProjectPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        self.verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name for this principal
+        let workspace = self
+            .store
+            .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Get target's current permission level
+        let target_role = self
+            .store
+            .get_project_permission(&project.id, &target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Permission not found for target principal")
+                }
+                _ => Status::internal(format!("Failed to get target permission: {}", e)),
+            })?;
+
+        // Delegated authority: requester can only remove permissions <= their own effective role
+        let requester_role = self
+            .get_effective_project_role(&principal_id, &workspace.id, &project.id)
+            .await?
+            .ok_or_else(|| {
+                Status::permission_denied("No permission to remove permissions on this project")
+            })?;
+
+        // Check if requester's role is sufficient to remove the target's role
+        if !requester_role.includes(&target_role) {
+            return Err(Status::permission_denied(format!(
+                "Cannot remove {:?} permission (you only have {:?} access)",
+                target_role, requester_role
+            )));
+        }
+
+        self.store
+            .remove_project_permission(&project.id, &target_principal_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_environment_permission(
+        &self,
+        request: Request<zopp_proto::SetEnvironmentPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        self.verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name for this principal
+        let workspace = self
+            .store
+            .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        // Delegated authority: requester can only grant permissions <= their own effective role
+        let requester_role = self
+            .get_effective_environment_role(&principal_id, &workspace.id, &project.id, &env.id)
+            .await?
+            .ok_or_else(|| {
+                Status::permission_denied("No permission to set permissions on this environment")
+            })?;
+
+        // Check if requester's role is sufficient to grant the requested role
+        if !requester_role.includes(&role) {
+            return Err(Status::permission_denied(format!(
+                "Cannot grant {:?} permission (you only have {:?} access)",
+                role, requester_role
+            )));
+        }
+
+        self.store
+            .set_environment_permission(&env.id, &target_principal_id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_environment_permission(
+        &self,
+        request: Request<zopp_proto::GetEnvironmentPermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Parse principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        let role = self
+            .store
+            .get_environment_permission(&env.id, &target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get permission: {}", e)),
+            })?;
+
+        // Convert storage Role to proto Role
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role,
+        }))
+    }
+
+    async fn list_environment_permissions(
+        &self,
+        request: Request<zopp_proto::ListEnvironmentPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::PermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list permissions"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_environment_permissions(&env.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::with_capacity(permissions.len());
+        for p in permissions {
+            let principal_name = match self.store.get_principal(&p.principal_id).await {
+                Ok(principal) => principal.name,
+                Err(_) => String::new(), // Principal might have been deleted
+            };
+            proto_permissions.push(zopp_proto::Permission {
+                principal_id: p.principal_id.0.to_string(),
+                principal_name,
+                role: match p.role {
+                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                },
+            });
+        }
+
+        Ok(Response::new(zopp_proto::PermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_environment_permission(
+        &self,
+        request: Request<zopp_proto::RemoveEnvironmentPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        self.verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name for this principal
+        let workspace = self
+            .store
+            .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Parse target principal ID
+        let target_principal_id = Uuid::parse_str(&req.principal_id)
+            .map(PrincipalId)
+            .map_err(|_| Status::invalid_argument("Invalid principal ID"))?;
+
+        // Get target's current permission level
+        let target_role = self
+            .store
+            .get_environment_permission(&env.id, &target_principal_id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Permission not found for target principal")
+                }
+                _ => Status::internal(format!("Failed to get target permission: {}", e)),
+            })?;
+
+        // Delegated authority: requester can only remove permissions <= their own effective role
+        let requester_role = self
+            .get_effective_environment_role(&principal_id, &workspace.id, &project.id, &env.id)
+            .await?
+            .ok_or_else(|| {
+                Status::permission_denied("No permission to remove permissions on this environment")
+            })?;
+
+        // Check if requester's role is sufficient to remove the target's role
+        if !requester_role.includes(&target_role) {
+            return Err(Status::permission_denied(format!(
+                "Cannot remove {:?} permission (you only have {:?} access)",
+                target_role, requester_role
+            )));
+        }
+
+        self.store
+            .remove_environment_permission(&env.id, &target_principal_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    // ───────────────────────────────────── Groups ─────────────────────────────────────
+
+    async fn create_group(
+        &self,
+        request: Request<zopp_proto::CreateGroupRequest>,
+    ) -> Result<Response<zopp_proto::Group>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot create groups"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for creating groups
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        let group_id = self
+            .store
+            .create_group(&zopp_storage::CreateGroupParams {
+                workspace_id: workspace.id.clone(),
+                name: req.name,
+                description: if req.description.is_empty() {
+                    None
+                } else {
+                    Some(req.description)
+                },
+            })
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::AlreadyExists => {
+                    Status::already_exists("Group with this name already exists")
+                }
+                _ => Status::internal(format!("Failed to create group: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group(&group_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get group: {}", e)))?;
+
+        Ok(Response::new(zopp_proto::Group {
+            id: group.id.0.to_string(),
+            workspace_id: group.workspace_id.0.to_string(),
+            name: group.name,
+            description: group.description.unwrap_or_default(),
+            created_at: group.created_at.to_rfc3339(),
+            updated_at: group.updated_at.to_rfc3339(),
+        }))
+    }
+
+    async fn get_group(
+        &self,
+        request: Request<zopp_proto::GetGroupRequest>,
+    ) -> Result<Response<zopp_proto::Group>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot get groups"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        Ok(Response::new(zopp_proto::Group {
+            id: group.id.0.to_string(),
+            workspace_id: group.workspace_id.0.to_string(),
+            name: group.name,
+            description: group.description.unwrap_or_default(),
+            created_at: group.created_at.to_rfc3339(),
+            updated_at: group.updated_at.to_rfc3339(),
+        }))
+    }
+
+    async fn list_groups(
+        &self,
+        request: Request<zopp_proto::ListGroupsRequest>,
+    ) -> Result<Response<zopp_proto::GroupList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list groups"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let groups = self
+            .store
+            .list_groups(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list groups: {}", e)))?;
+
+        let proto_groups = groups
+            .into_iter()
+            .map(|g| zopp_proto::Group {
+                id: g.id.0.to_string(),
+                workspace_id: g.workspace_id.0.to_string(),
+                name: g.name,
+                description: g.description.unwrap_or_default(),
+                created_at: g.created_at.to_rfc3339(),
+                updated_at: g.updated_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Response::new(zopp_proto::GroupList {
+            groups: proto_groups,
+        }))
+    }
+
+    async fn update_group(
+        &self,
+        request: Request<zopp_proto::UpdateGroupRequest>,
+    ) -> Result<Response<zopp_proto::Group>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot update groups"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        self.store
+            .update_group(
+                &group.id,
+                &req.new_name,
+                if req.new_description.is_empty() {
+                    None
+                } else {
+                    Some(&req.new_description)
+                },
+            )
+            .await
+            .map_err(|e| Status::internal(format!("Failed to update group: {}", e)))?;
+
+        let updated_group = self
+            .store
+            .get_group(&group.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get updated group: {}", e)))?;
+
+        Ok(Response::new(zopp_proto::Group {
+            id: updated_group.id.0.to_string(),
+            workspace_id: updated_group.workspace_id.0.to_string(),
+            name: updated_group.name,
+            description: updated_group.description.unwrap_or_default(),
+            created_at: updated_group.created_at.to_rfc3339(),
+            updated_at: updated_group.updated_at.to_rfc3339(),
+        }))
+    }
+
+    async fn delete_group(
+        &self,
+        request: Request<zopp_proto::DeleteGroupRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot delete groups"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for deleting groups
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        self.store
+            .delete_group(&group.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete group: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn add_group_member(
+        &self,
+        request: Request<zopp_proto::AddGroupMemberRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot add group members"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for managing group members
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        // Look up user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        self.store
+            .add_group_member(&group.id, &target_user.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::AlreadyExists => {
+                    Status::already_exists("User is already a member of this group")
+                }
+                _ => Status::internal(format!("Failed to add group member: {}", e)),
+            })?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn remove_group_member(
+        &self,
+        request: Request<zopp_proto::RemoveGroupMemberRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove group members")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for managing group members
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        // Look up user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        self.store
+            .remove_group_member(&group.id, &target_user.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove group member: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn list_group_members(
+        &self,
+        request: Request<zopp_proto::ListGroupMembersRequest>,
+    ) -> Result<Response<zopp_proto::GroupMemberList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list group members"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        let members = self
+            .store
+            .list_group_members(&group.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list group members: {}", e)))?;
+
+        let mut proto_members = Vec::new();
+        for member in members {
+            // Look up user to get email
+            let user = self
+                .store
+                .get_user_by_id(&member.user_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get user: {}", e)))?;
+
+            proto_members.push(zopp_proto::GroupMember {
+                user_id: member.user_id.0.to_string(),
+                user_email: user.email,
+                created_at: member.created_at.to_rfc3339(),
+            });
+        }
+
+        Ok(Response::new(zopp_proto::GroupMemberList {
+            members: proto_members,
+        }))
+    }
+
+    async fn list_user_groups(
+        &self,
+        request: Request<zopp_proto::ListUserGroupsRequest>,
+    ) -> Result<Response<zopp_proto::GroupList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal
+            .user_id
+            .ok_or_else(|| Status::unauthenticated("Service accounts cannot list user groups"))?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        let groups = self
+            .store
+            .list_user_groups(&target_user.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list user groups: {}", e)))?;
+
+        // Filter groups by workspace
+        let proto_groups = groups
+            .into_iter()
+            .filter(|g| g.workspace_id == workspace.id)
+            .map(|g| zopp_proto::Group {
+                id: g.id.0.to_string(),
+                workspace_id: g.workspace_id.0.to_string(),
+                name: g.name,
+                description: g.description.unwrap_or_default(),
+                created_at: g.created_at.to_rfc3339(),
+                updated_at: g.updated_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Response::new(zopp_proto::GroupList {
+            groups: proto_groups,
+        }))
+    }
+
+    // ───────────────────────────────────── Group Permissions ─────────────────────────────────────
+
+    async fn set_group_workspace_permission(
+        &self,
+        request: Request<zopp_proto::SetGroupWorkspacePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot set group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for setting group permissions
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        self.store
+            .set_group_workspace_permission(&workspace.id, &group.id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set group permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_group_workspace_permission(
+        &self,
+        request: Request<zopp_proto::GetGroupWorkspacePermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot get group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        let role = self
+            .store
+            .get_group_workspace_permission(&workspace.id, &group.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get group permission: {}", e)),
+            })?;
+
+        // Convert storage Role to proto Role
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role,
+        }))
+    }
+
+    async fn list_group_workspace_permissions(
+        &self,
+        request: Request<zopp_proto::ListGroupWorkspacePermissionsRequest>,
+    ) -> Result<Response<zopp_proto::GroupPermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_group_workspace_permissions(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list group permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::new();
+        for perm in permissions {
+            // Look up group to get name
+            let group = self
+                .store
+                .get_group(&perm.group_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get group: {}", e)))?;
+
+            proto_permissions.push(zopp_proto::GroupPermission {
+                group_id: perm.group_id.0.to_string(),
+                group_name: group.name,
+                role: match perm.role {
+                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                },
+            });
+        }
+
+        Ok(Response::new(zopp_proto::GroupPermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_group_workspace_permission(
+        &self,
+        request: Request<zopp_proto::RemoveGroupWorkspacePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        self.store
+            .remove_group_workspace_permission(&workspace.id, &group.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove group permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_group_project_permission(
+        &self,
+        request: Request<zopp_proto::SetGroupProjectPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot set group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        self.store
+            .set_group_project_permission(&project.id, &group.id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set group permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_group_project_permission(
+        &self,
+        request: Request<zopp_proto::GetGroupProjectPermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot get group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        let role = self
+            .store
+            .get_group_project_permission(&project.id, &group.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get group permission: {}", e)),
+            })?;
+
+        // Convert storage Role to proto Role
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role,
+        }))
+    }
+
+    async fn list_group_project_permissions(
+        &self,
+        request: Request<zopp_proto::ListGroupProjectPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::GroupPermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_group_project_permissions(&project.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list group permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::new();
+        for perm in permissions {
+            // Look up group to get name
+            let group = self
+                .store
+                .get_group(&perm.group_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get group: {}", e)))?;
+
+            proto_permissions.push(zopp_proto::GroupPermission {
+                group_id: perm.group_id.0.to_string(),
+                group_name: group.name,
+                role: match perm.role {
+                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                },
+            });
+        }
+
+        Ok(Response::new(zopp_proto::GroupPermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_group_project_permission(
+        &self,
+        request: Request<zopp_proto::RemoveGroupProjectPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        self.store
+            .remove_group_project_permission(&project.id, &group.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove group permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_group_environment_permission(
+        &self,
+        request: Request<zopp_proto::SetGroupEnvironmentPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot set group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        self.store
+            .set_group_environment_permission(&env.id, &group.id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set group permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_group_environment_permission(
+        &self,
+        request: Request<zopp_proto::GetGroupEnvironmentPermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot get group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        let role = self
+            .store
+            .get_group_environment_permission(&env.id, &group.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get group permission: {}", e)),
+            })?;
+
+        // Convert storage Role to proto Role
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+            zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+            zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role,
+        }))
+    }
+
+    async fn list_group_environment_permissions(
+        &self,
+        request: Request<zopp_proto::ListGroupEnvironmentPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::GroupPermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_group_environment_permissions(&env.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list group permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::new();
+        for perm in permissions {
+            // Look up group to get name
+            let group = self
+                .store
+                .get_group(&perm.group_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get group: {}", e)))?;
+
+            proto_permissions.push(zopp_proto::GroupPermission {
+                group_id: perm.group_id.0.to_string(),
+                group_name: group.name,
+                role: match perm.role {
+                    zopp_storage::Role::Admin => zopp_proto::Role::Admin as i32,
+                    zopp_storage::Role::Write => zopp_proto::Role::Write as i32,
+                    zopp_storage::Role::Read => zopp_proto::Role::Read as i32,
+                },
+            });
+        }
+
+        Ok(Response::new(zopp_proto::GroupPermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_group_environment_permission(
+        &self,
+        request: Request<zopp_proto::RemoveGroupEnvironmentPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove group permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        let group = self
+            .store
+            .get_group_by_name(&workspace.id, &req.group_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Group not found"),
+                _ => Status::internal(format!("Failed to get group: {}", e)),
+            })?;
+
+        self.store
+            .remove_group_environment_permission(&env.id, &group.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove group permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    // ────────────────────────────────────── User Permissions ──────────────────────────────────────
+
+    async fn set_user_workspace_permission(
+        &self,
+        request: Request<zopp_proto::SetUserWorkspacePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot set user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for setting user permissions
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        self.store
+            .set_user_workspace_permission(&workspace.id, &target_user.id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set user permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_user_workspace_permission(
+        &self,
+        request: Request<zopp_proto::GetUserWorkspacePermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot get user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        let role = self
+            .store
+            .get_user_workspace_permission(&workspace.id, &target_user.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get user permission: {}", e)),
+            })?;
+
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin,
+            zopp_storage::Role::Write => zopp_proto::Role::Write,
+            zopp_storage::Role::Read => zopp_proto::Role::Read,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role as i32,
+        }))
+    }
+
+    async fn list_user_workspace_permissions(
+        &self,
+        request: Request<zopp_proto::ListUserWorkspacePermissionsRequest>,
+    ) -> Result<Response<zopp_proto::UserPermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_user_workspace_permissions(&workspace.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list user permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::with_capacity(permissions.len());
+        for perm in permissions {
+            let user = self.store.get_user_by_id(&perm.user_id).await.ok();
+            let proto_role = match perm.role {
+                zopp_storage::Role::Admin => zopp_proto::Role::Admin,
+                zopp_storage::Role::Write => zopp_proto::Role::Write,
+                zopp_storage::Role::Read => zopp_proto::Role::Read,
+            };
+            proto_permissions.push(zopp_proto::UserPermission {
+                user_id: perm.user_id.0.to_string(),
+                user_email: user.map(|u| u.email).unwrap_or_default(),
+                role: proto_role as i32,
+            });
+        }
+
+        Ok(Response::new(zopp_proto::UserPermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_user_workspace_permission(
+        &self,
+        request: Request<zopp_proto::RemoveUserWorkspacePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Check ADMIN permission for removing user permissions
+        self.check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        self.store
+            .remove_user_workspace_permission(&workspace.id, &target_user.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove user permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_user_project_permission(
+        &self,
+        request: Request<zopp_proto::SetUserProjectPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot set user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        // Check ADMIN permission (project-level or higher)
+        self.check_project_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            zopp_storage::Role::Admin,
+        )
+        .await?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        self.store
+            .set_user_project_permission(&project.id, &target_user.id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set user permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_user_project_permission(
+        &self,
+        request: Request<zopp_proto::GetUserProjectPermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot get user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        let role = self
+            .store
+            .get_user_project_permission(&project.id, &target_user.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get user permission: {}", e)),
+            })?;
+
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin,
+            zopp_storage::Role::Write => zopp_proto::Role::Write,
+            zopp_storage::Role::Read => zopp_proto::Role::Read,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role as i32,
+        }))
+    }
+
+    async fn list_user_project_permissions(
+        &self,
+        request: Request<zopp_proto::ListUserProjectPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::UserPermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_user_project_permissions(&project.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list user permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::with_capacity(permissions.len());
+        for perm in permissions {
+            let user = self.store.get_user_by_id(&perm.user_id).await.ok();
+            let proto_role = match perm.role {
+                zopp_storage::Role::Admin => zopp_proto::Role::Admin,
+                zopp_storage::Role::Write => zopp_proto::Role::Write,
+                zopp_storage::Role::Read => zopp_proto::Role::Read,
+            };
+            proto_permissions.push(zopp_proto::UserPermission {
+                user_id: perm.user_id.0.to_string(),
+                user_email: user.map(|u| u.email).unwrap_or_default(),
+                role: proto_role as i32,
+            });
+        }
+
+        Ok(Response::new(zopp_proto::UserPermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_user_project_permission(
+        &self,
+        request: Request<zopp_proto::RemoveUserProjectPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        // Check ADMIN permission (project-level or higher)
+        self.check_project_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            zopp_storage::Role::Admin,
+        )
+        .await?;
+
+        self.store
+            .remove_user_project_permission(&project.id, &target_user.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove user permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn set_user_environment_permission(
+        &self,
+        request: Request<zopp_proto::SetUserEnvironmentPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot set user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        // Check ADMIN permission (environment-level or higher)
+        self.check_environment_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Admin,
+        )
+        .await?;
+
+        // Convert proto Role to storage Role
+        let role = match zopp_proto::Role::try_from(req.role) {
+            Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+            Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+            Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+            _ => return Err(Status::invalid_argument("Invalid role")),
+        };
+
+        self.store
+            .set_user_environment_permission(&env.id, &target_user.id, role)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to set user permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_user_environment_permission(
+        &self,
+        request: Request<zopp_proto::GetUserEnvironmentPermissionRequest>,
+    ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot get user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        let role = self
+            .store
+            .get_user_environment_permission(&env.id, &target_user.id)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Permission not found"),
+                _ => Status::internal(format!("Failed to get user permission: {}", e)),
+            })?;
+
+        let proto_role = match role {
+            zopp_storage::Role::Admin => zopp_proto::Role::Admin,
+            zopp_storage::Role::Write => zopp_proto::Role::Write,
+            zopp_storage::Role::Read => zopp_proto::Role::Read,
+        };
+
+        Ok(Response::new(zopp_proto::PermissionResponse {
+            role: proto_role as i32,
+        }))
+    }
+
+    async fn list_user_environment_permissions(
+        &self,
+        request: Request<zopp_proto::ListUserEnvironmentPermissionsRequest>,
+    ) -> Result<Response<zopp_proto::UserPermissionList>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot list user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        let permissions = self
+            .store
+            .list_user_environment_permissions(&env.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to list user permissions: {}", e)))?;
+
+        let mut proto_permissions = Vec::with_capacity(permissions.len());
+        for perm in permissions {
+            let user = self.store.get_user_by_id(&perm.user_id).await.ok();
+            let proto_role = match perm.role {
+                zopp_storage::Role::Admin => zopp_proto::Role::Admin,
+                zopp_storage::Role::Write => zopp_proto::Role::Write,
+                zopp_storage::Role::Read => zopp_proto::Role::Read,
+            };
+            proto_permissions.push(zopp_proto::UserPermission {
+                user_id: perm.user_id.0.to_string(),
+                user_email: user.map(|u| u.email).unwrap_or_default(),
+                role: proto_role as i32,
+            });
+        }
+
+        Ok(Response::new(zopp_proto::UserPermissionList {
+            permissions: proto_permissions,
+        }))
+    }
+
+    async fn remove_user_environment_permission(
+        &self,
+        request: Request<zopp_proto::RemoveUserEnvironmentPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let (principal_id, timestamp, signature) = extract_signature(&request)?;
+        let principal = self
+            .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+            .await?;
+        let user_id = principal.user_id.ok_or_else(|| {
+            Status::unauthenticated("Service accounts cannot remove user permissions")
+        })?;
+
+        let req = request.into_inner();
+
+        // Look up workspace by name
+        let workspace = self
+            .store
+            .get_workspace_by_name(&user_id, &req.workspace_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => {
+                    Status::not_found("Workspace not found or access denied")
+                }
+                _ => Status::internal(format!("Failed to get workspace: {}", e)),
+            })?;
+
+        // Look up project by name
+        let project = self
+            .store
+            .get_project_by_name(&workspace.id, &req.project_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Project not found"),
+                _ => Status::internal(format!("Failed to get project: {}", e)),
+            })?;
+
+        // Look up environment by name
+        let env = self
+            .store
+            .get_environment_by_name(&project.id, &req.environment_name)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("Environment not found"),
+                _ => Status::internal(format!("Failed to get environment: {}", e)),
+            })?;
+
+        // Look up target user by email
+        let target_user = self
+            .store
+            .get_user_by_email(&req.user_email)
+            .await
+            .map_err(|e| match e {
+                zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
+                _ => Status::internal(format!("Failed to get user: {}", e)),
+            })?;
+
+        // Check ADMIN permission (environment-level or higher)
+        self.check_environment_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Admin,
+        )
+        .await?;
+
+        self.store
+            .remove_user_environment_permission(&env.id, &target_user.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove user permission: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
 }
 
 // ────────────────────────────────────── CLI Commands ──────────────────────────────────────

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM environment_permissions WHERE environment_id = ? AND principal_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d166ae5308b87c9b5b03498308e0f7cb3a89722143ec814b5cc98099bc064a23"
+}

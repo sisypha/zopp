@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM group_workspace_permissions WHERE workspace_id = ? AND group_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "68d94a4d551c040c0c5b4b2ce296a03b89fbb786e503aa127cdb2ad679dbdaa7"
+}

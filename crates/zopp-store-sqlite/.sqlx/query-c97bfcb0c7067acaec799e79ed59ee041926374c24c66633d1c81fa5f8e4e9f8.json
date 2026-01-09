@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM group_project_permissions WHERE project_id = ? AND group_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c97bfcb0c7067acaec799e79ed59ee041926374c24c66633d1c81fa5f8e4e9f8"
+}
