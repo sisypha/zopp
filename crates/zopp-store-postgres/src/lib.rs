@@ -1756,15 +1756,19 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::GroupWorkspacePermission {
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(zopp_storage::GroupWorkspacePermission {
                 workspace_id: WorkspaceId(row.workspace_id),
                 group_id: zopp_storage::GroupId(row.group_id),
-                role: Role::from_str(&row.role).unwrap(),
+                role,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_group_workspace_permission(
@@ -1840,15 +1844,19 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::GroupProjectPermission {
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(zopp_storage::GroupProjectPermission {
                 project_id: zopp_storage::ProjectId(row.project_id),
                 group_id: zopp_storage::GroupId(row.group_id),
-                role: Role::from_str(&row.role).unwrap(),
+                role,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_group_project_permission(
@@ -1924,15 +1932,19 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::GroupEnvironmentPermission {
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(zopp_storage::GroupEnvironmentPermission {
                 environment_id: EnvironmentId(row.environment_id),
                 group_id: zopp_storage::GroupId(row.group_id),
-                role: Role::from_str(&row.role).unwrap(),
+                role,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_group_environment_permission(
@@ -2010,15 +2022,19 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| UserWorkspacePermission {
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(UserWorkspacePermission {
                 workspace_id: WorkspaceId(row.workspace_id),
                 user_id: UserId(row.user_id),
-                role: Role::from_str(&row.role).unwrap(),
+                role,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_user_workspace_permission(
@@ -2094,15 +2110,19 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| UserProjectPermission {
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(UserProjectPermission {
                 project_id: zopp_storage::ProjectId(row.project_id),
                 user_id: UserId(row.user_id),
-                role: Role::from_str(&row.role).unwrap(),
+                role,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_user_project_permission(
@@ -2178,15 +2198,19 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| UserEnvironmentPermission {
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(UserEnvironmentPermission {
                 environment_id: EnvironmentId(row.environment_id),
                 user_id: UserId(row.user_id),
-                role: Role::from_str(&row.role).unwrap(),
+                role,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_user_environment_permission(

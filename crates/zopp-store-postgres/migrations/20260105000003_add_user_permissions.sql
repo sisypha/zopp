@@ -4,7 +4,7 @@
 CREATE TABLE user_workspace_permissions (
     workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role VARCHAR(10) NOT NULL CHECK (role IN ('admin', 'write', 'read')),
+    role role NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (workspace_id, user_id)
@@ -13,7 +13,7 @@ CREATE TABLE user_workspace_permissions (
 CREATE TABLE user_project_permissions (
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role VARCHAR(10) NOT NULL CHECK (role IN ('admin', 'write', 'read')),
+    role role NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (project_id, user_id)
@@ -22,7 +22,7 @@ CREATE TABLE user_project_permissions (
 CREATE TABLE user_environment_permissions (
     environment_id UUID NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role VARCHAR(10) NOT NULL CHECK (role IN ('admin', 'write', 'read')),
+    role role NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (environment_id, user_id)
@@ -32,3 +32,13 @@ CREATE TABLE user_environment_permissions (
 CREATE INDEX idx_user_workspace_permissions_user ON user_workspace_permissions(user_id);
 CREATE INDEX idx_user_project_permissions_user ON user_project_permissions(user_id);
 CREATE INDEX idx_user_environment_permissions_user ON user_environment_permissions(user_id);
+
+-- Triggers for updated_at
+CREATE TRIGGER user_workspace_permissions_updated_at BEFORE UPDATE ON user_workspace_permissions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER user_project_permissions_updated_at BEFORE UPDATE ON user_project_permissions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER user_environment_permissions_updated_at BEFORE UPDATE ON user_environment_permissions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

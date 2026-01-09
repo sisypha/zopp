@@ -4,7 +4,7 @@ use ed25519_dalek::SigningKey;
 use tonic::metadata::MetadataValue;
 use zopp_proto::{
     ListWorkspaceServicePrincipalsRequest, RegisterRequest, RemovePrincipalFromWorkspaceRequest,
-    RenamePrincipalRequest, RevokeAllPrincipalPermissionsRequest,
+    RenamePrincipalRequest, Role, RevokeAllPrincipalPermissionsRequest,
 };
 
 pub async fn cmd_principal_list() -> Result<(), Box<dyn std::error::Error>> {
@@ -237,10 +237,10 @@ pub async fn cmd_principal_service_list(
         } else {
             println!("    Permissions:");
             for perm in sp.permissions {
-                let role = match perm.role {
-                    0 => "admin",
-                    1 => "write",
-                    2 => "read",
+                let role = match Role::try_from(perm.role) {
+                    Ok(Role::Admin) => "admin",
+                    Ok(Role::Write) => "write",
+                    Ok(Role::Read) => "read",
                     _ => "unknown",
                 };
                 println!("      {} -> {}", perm.scope, role);

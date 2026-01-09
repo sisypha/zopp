@@ -791,6 +791,7 @@ pub enum GroupCommand {
         #[arg(long, short = 'w')]
         workspace: Option<String>,
         /// Group name
+        #[arg(long, short = 'g')]
         group: String,
     },
     /// Set workspace permission for a group

@@ -2172,17 +2172,25 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::GroupWorkspacePermission {
-                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
-                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
-                role: Role::from_str(&row.role).unwrap(),
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(zopp_storage::GroupWorkspacePermission {
+                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid workspace_id: {}", e))
+                })?),
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid group_id: {}", e))
+                })?),
+                role,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_group_workspace_permission(
@@ -2268,17 +2276,25 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::GroupProjectPermission {
-                project_id: zopp_storage::ProjectId(Uuid::parse_str(&row.project_id).unwrap()),
-                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
-                role: Role::from_str(&row.role).unwrap(),
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(zopp_storage::GroupProjectPermission {
+                project_id: zopp_storage::ProjectId(Uuid::parse_str(&row.project_id).map_err(
+                    |e| StoreError::Backend(format!("invalid project_id: {}", e)),
+                )?),
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid group_id: {}", e))
+                })?),
+                role,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_group_project_permission(
@@ -2364,17 +2380,25 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::GroupEnvironmentPermission {
-                environment_id: EnvironmentId(Uuid::parse_str(&row.environment_id).unwrap()),
-                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).unwrap()),
-                role: Role::from_str(&row.role).unwrap(),
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(zopp_storage::GroupEnvironmentPermission {
+                environment_id: EnvironmentId(Uuid::parse_str(&row.environment_id).map_err(
+                    |e| StoreError::Backend(format!("invalid environment_id: {}", e)),
+                )?),
+                group_id: zopp_storage::GroupId(Uuid::parse_str(&row.group_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid group_id: {}", e))
+                })?),
+                role,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_group_environment_permission(
@@ -2462,17 +2486,25 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| UserWorkspacePermission {
-                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).unwrap()),
-                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
-                role: Role::from_str(&row.role).unwrap(),
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(UserWorkspacePermission {
+                workspace_id: WorkspaceId(Uuid::parse_str(&row.workspace_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid workspace_id: {}", e))
+                })?),
+                user_id: UserId(Uuid::parse_str(&row.user_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid user_id: {}", e))
+                })?),
+                role,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_user_workspace_permission(
@@ -2558,17 +2590,25 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| UserProjectPermission {
-                project_id: zopp_storage::ProjectId(Uuid::parse_str(&row.project_id).unwrap()),
-                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
-                role: Role::from_str(&row.role).unwrap(),
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(UserProjectPermission {
+                project_id: zopp_storage::ProjectId(Uuid::parse_str(&row.project_id).map_err(
+                    |e| StoreError::Backend(format!("invalid project_id: {}", e)),
+                )?),
+                user_id: UserId(Uuid::parse_str(&row.user_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid user_id: {}", e))
+                })?),
+                role,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_user_project_permission(
@@ -2654,17 +2694,25 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| UserEnvironmentPermission {
-                environment_id: EnvironmentId(Uuid::parse_str(&row.environment_id).unwrap()),
-                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
-                role: Role::from_str(&row.role).unwrap(),
+        let mut perms = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = Role::from_str(&row.role).ok_or_else(|| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            perms.push(UserEnvironmentPermission {
+                environment_id: EnvironmentId(Uuid::parse_str(&row.environment_id).map_err(
+                    |e| StoreError::Backend(format!("invalid environment_id: {}", e)),
+                )?),
+                user_id: UserId(Uuid::parse_str(&row.user_id).map_err(|e| {
+                    StoreError::Backend(format!("invalid user_id: {}", e))
+                })?),
+                role,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(perms)
     }
 
     async fn remove_user_environment_permission(

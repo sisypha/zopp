@@ -420,9 +420,10 @@ message SecretChangeEvent {
 
 // RBAC Permission messages
 enum Role {
-  ADMIN = 0;
-  WRITE = 1;
-  READ = 2;
+  ROLE_UNSPECIFIED = 0;  // Default value - must be handled as error
+  ADMIN = 1;
+  WRITE = 2;
+  READ = 3;
 }
 
 message SetWorkspacePermissionRequest {
