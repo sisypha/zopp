@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT project_id, user_id, role as \"role: String\", created_at FROM user_project_permissions WHERE project_id = $1",
+  "query": "SELECT environment_id, principal_id, role as \"role: String\", created_at\n             FROM environment_permissions WHERE environment_id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "project_id",
+        "name": "environment_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 1,
-        "name": "user_id",
+        "name": "principal_id",
         "type_info": "Uuid"
       },
       {
@@ -47,5 +47,5 @@
       false
     ]
   },
-  "hash": "d440d7d301f6204b798dc0c4969518cb267e97952e8743fe27ae4208c08cbc0e"
+  "hash": "e016e76284c71ca57303990e36b77ada9a5b234c3beefc7e34e34caa1499f2d7"
 }

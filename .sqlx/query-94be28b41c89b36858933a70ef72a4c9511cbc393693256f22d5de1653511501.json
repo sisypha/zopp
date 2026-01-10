@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,\n               w.created_at, w.updated_at\n               FROM workspaces w\n               JOIN workspace_members wm ON w.id = wm.workspace_id\n               WHERE wm.user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "kdf_salt",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "kdf_m_cost_kib",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "kdf_t_cost",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "kdf_p_cost",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "94be28b41c89b36858933a70ef72a4c9511cbc393693256f22d5de1653511501"
+}

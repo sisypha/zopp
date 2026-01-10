@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM environment_permissions WHERE environment_id = $1 AND principal_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98ece2e4086967b90000c578cd55eb36f867d57b9fdd04b74694086fe2f9741c"
+}

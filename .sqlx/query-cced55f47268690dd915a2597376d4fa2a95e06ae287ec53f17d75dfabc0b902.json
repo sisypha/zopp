@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT project_id, user_id, role as \"role: String\", created_at FROM user_project_permissions WHERE project_id = $1",
+  "query": "SELECT project_id, group_id, role as \"role: String\", created_at FROM group_project_permissions WHERE project_id = $1",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "user_id",
+        "name": "group_id",
         "type_info": "Uuid"
       },
       {
@@ -47,5 +47,5 @@
       false
     ]
   },
-  "hash": "d440d7d301f6204b798dc0c4969518cb267e97952e8743fe27ae4208c08cbc0e"
+  "hash": "cced55f47268690dd915a2597376d4fa2a95e06ae287ec53f17d75dfabc0b902"
 }

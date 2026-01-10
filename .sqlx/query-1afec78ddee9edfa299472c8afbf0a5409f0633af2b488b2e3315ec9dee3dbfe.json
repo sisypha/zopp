@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO environments(id, workspace_id, project_id, name, dek_wrapped, dek_nonce)\n             VALUES($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1afec78ddee9edfa299472c8afbf0a5409f0633af2b488b2e3315ec9dee3dbfe"
+}

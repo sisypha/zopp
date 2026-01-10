@@ -1971,7 +1971,7 @@ impl Store for PostgresStore {
         let role_str = role.as_str();
 
         sqlx::query!(
-            "INSERT INTO user_workspace_permissions(workspace_id, user_id, role) VALUES($1, $2, $3)
+            "INSERT INTO user_workspace_permissions(workspace_id, user_id, role) VALUES($1, $2, $3::text::role)
              ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()",
             workspace_id.0,
             user_id.0,
@@ -2058,7 +2058,7 @@ impl Store for PostgresStore {
         let role_str = role.as_str();
 
         sqlx::query!(
-            "INSERT INTO user_project_permissions(project_id, user_id, role) VALUES($1, $2, $3)
+            "INSERT INTO user_project_permissions(project_id, user_id, role) VALUES($1, $2, $3::text::role)
              ON CONFLICT(project_id, user_id) DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()",
             project_id.0,
             user_id.0,
@@ -2145,7 +2145,7 @@ impl Store for PostgresStore {
         let role_str = role.as_str();
 
         sqlx::query!(
-            "INSERT INTO user_environment_permissions(environment_id, user_id, role) VALUES($1, $2, $3)
+            "INSERT INTO user_environment_permissions(environment_id, user_id, role) VALUES($1, $2, $3::text::role)
              ON CONFLICT(environment_id, user_id) DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()",
             environment_id.0,
             user_id.0,

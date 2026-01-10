@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT role as \"role: String\" FROM user_environment_permissions WHERE environment_id = $1 AND user_id = $2",
+  "query": "SELECT role as \"role: String\" FROM project_permissions WHERE project_id = $1 AND principal_id = $2",
   "describe": {
     "columns": [
       {
@@ -30,5 +30,5 @@
       false
     ]
   },
-  "hash": "53d2f222b4f08e66b88ada47220e03a7d5ed6a167c439037c993f63d40f9a51a"
+  "hash": "0a6807677cf3fabc8eda45884fa64ef661dad9c8649ad968d2cc9745d4acd829"
 }
