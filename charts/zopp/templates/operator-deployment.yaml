@@ -34,7 +34,6 @@ spec:
         imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
         args:
           - "--server={{ include "zopp.operator.serverAddress" . }}"
-          - "--credentials=/etc/zopp/credentials/config.json"
           - "--health-addr=0.0.0.0:{{ .Values.operator.healthCheck.port }}"
           {{- if .Values.operator.watchNamespace }}
           - "--namespace={{ .Values.operator.watchNamespace }}"
@@ -42,6 +41,9 @@ spec:
           {{- if .Values.operator.server.tls.existingSecret }}
           - "--tls-ca-cert=/etc/zopp/server-ca/ca.crt"
           {{- end }}
+        envFrom:
+        - secretRef:
+            name: {{ .Values.operator.credentials.existingSecret | default (printf "%s-operator-credentials" (include "zopp.fullname" .)) }}
         ports:
         - name: http
           containerPort: {{ .Values.operator.healthCheck.port }}
@@ -60,20 +62,14 @@ spec:
           periodSeconds: 5
         resources:
           {{- toYaml .Values.operator.resources | nindent 12 }}
-        volumeMounts:
-        - name: credentials
-          mountPath: /etc/zopp/credentials
-          readOnly: true
         {{- if .Values.operator.server.tls.existingSecret }}
+        volumeMounts:
         - name: server-ca
           mountPath: /etc/zopp/server-ca
           readOnly: true
         {{- end }}
-      volumes:
-      - name: credentials
-        secret:
-          secretName: {{ .Values.operator.credentials.existingSecret | default (printf "%s-operator-credentials" (include "zopp.fullname" .)) }}
       {{- if .Values.operator.server.tls.existingSecret }}
+      volumes:
       - name: server-ca
         secret:
           secretName: {{ .Values.operator.server.tls.existingSecret }}

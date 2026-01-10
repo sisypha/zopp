@@ -15,7 +15,10 @@ use tonic::transport::Channel;
 use tracing::{debug, error, info, warn};
 use zopp_proto::zopp_service_client::ZoppServiceClient;
 
+mod controller;
+mod crd;
 mod credentials;
+mod reload;
 mod sync;
 mod watch;
 
@@ -151,20 +154,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Server: {}", args.server);
     info!("Health checks listening on {}", args.health_addr);
 
-    // Load credentials - use standard CLI config format
-    let config_path = args
-        .credentials
-        .unwrap_or_else(zopp_config::CliConfig::default_path);
-
-    let config = zopp_config::CliConfig::load_from(&config_path)?;
-    let principal = config.get_current_principal()?.clone();
-
-    let credentials = Arc::new(OperatorCredentials::new(principal.clone()));
+    // Load credentials - try env vars first, then fall back to file
+    let credentials = OperatorCredentials::load(args.credentials)?;
+    let principal = &credentials.principal;
 
     info!(
         "Loaded credentials for principal: {} ({})",
         principal.name, principal.id
     );
+
+    let credentials = Arc::new(credentials);
 
     // Validate TLS configuration
     let uses_tls = args.server.starts_with("https://");
@@ -208,6 +207,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let k8s_client = Client::try_default().await?;
 
     let state = Arc::new(OperatorState::new());
+
+    // Start CRD controller (ZoppSecretSync resources)
+    let crd_ctx = Arc::new(controller::ControllerContext {
+        k8s_client: k8s_client.clone(),
+        grpc_client: grpc_client.clone(),
+        credentials: credentials.clone(),
+    });
+    let crd_namespace = args.namespace.clone();
+    tokio::spawn(async move {
+        controller::run_controller(crd_ctx, crd_namespace).await;
+    });
+    info!("Started ZoppSecretSync CRD controller");
 
     // Health check endpoints - /readyz actually verifies gRPC is working
     let readiness_check = ReadinessCheck::new(channel);

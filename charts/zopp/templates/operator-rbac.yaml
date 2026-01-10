@@ -11,9 +11,21 @@ metadata:
   labels:
     {{- include "zopp.operator.labels" . | nindent 4 }}
 rules:
+# Core secrets management
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "list", "watch", "update", "patch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+# ZoppSecretSync CRD
+- apiGroups: ["zopp.dev"]
+  resources: ["zoppsecretsyncs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["zopp.dev"]
+  resources: ["zoppsecretsyncs/status"]
+  verbs: ["get", "update", "patch"]
+# Deployment reload functionality
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -40,9 +52,21 @@ metadata:
   labels:
     {{- include "zopp.operator.labels" . | nindent 4 }}
 rules:
+# Core secrets management
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "list", "watch", "update", "patch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+# ZoppSecretSync CRD
+- apiGroups: ["zopp.dev"]
+  resources: ["zoppsecretsyncs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["zopp.dev"]
+  resources: ["zoppsecretsyncs/status"]
+  verbs: ["get", "update", "patch"]
+# Deployment reload functionality
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

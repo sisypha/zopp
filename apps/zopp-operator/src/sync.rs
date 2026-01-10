@@ -108,7 +108,7 @@ pub async fn run_sync(
     )
     .await
     {
-        Ok(version) => version,
+        Ok((version, _count)) => version,
         Err(e) => {
             error!("Initial sync failed: {}", e);
             return Err(e);
@@ -187,7 +187,7 @@ pub async fn run_sync(
         )
         .await
         {
-            Ok(version) => {
+            Ok((version, _count)) => {
                 current_version = version;
                 debug!(
                     "Periodic reconciliation complete for {}/{}, version: {}",
@@ -209,14 +209,17 @@ pub async fn run_sync(
     // Ok(())
 }
 
-async fn full_resync(
+/// Perform a full resync of secrets from Zopp to a Kubernetes Secret.
+///
+/// Returns (version, secret_count) on success.
+pub async fn full_resync(
     grpc_client: &Arc<ZoppServiceClient<tonic::transport::Channel>>,
     k8s_client: &Client,
     credentials: &crate::credentials::OperatorCredentials,
     namespace: &str,
     name: &str,
     config: &SecretSyncConfig,
-) -> Result<i64, OperatorError> {
+) -> Result<(i64, usize), OperatorError> {
     info!("Performing full resync for {}/{}", namespace, name);
 
     let mut client = grpc_client.as_ref().clone();
@@ -262,10 +265,12 @@ async fn full_resync(
         }
     }
 
+    let secret_count = decrypted.len();
+
     // Update K8s Secret
     update_k8s_secret(k8s_client, namespace, name, decrypted).await?;
 
-    Ok(secrets_data.version)
+    Ok((secrets_data.version, secret_count))
 }
 
 async fn unwrap_environment_dek(
@@ -371,7 +376,7 @@ async fn start_watch_stream(
                     current, resync.current_version
                 );
 
-                let new_version = full_resync(
+                let (new_version, _count) = full_resync(
                     grpc_client,
                     k8s_client,
                     credentials,

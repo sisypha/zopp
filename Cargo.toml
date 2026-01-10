@@ -48,6 +48,7 @@ prost = "0.14"
 rand = "0.9.2"
 rand_core = { version = "0.6", features = ["getrandom"] }
 reqwest = "0.12"
+schemars = "1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 serde_yaml = "0.9"

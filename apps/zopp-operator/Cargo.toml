@@ -14,7 +14,8 @@ path = "src/main.rs"
 [dependencies]
 axum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "fs"] }
-kube = { workspace = true, features = ["runtime"] }
+kube = { workspace = true, features = ["runtime", "derive"] }
+schemars = { workspace = true }
 k8s-openapi = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
