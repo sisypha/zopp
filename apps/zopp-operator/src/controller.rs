@@ -159,7 +159,7 @@ async fn reconcile(
             let mut status = ZoppSecretSyncStatus::new();
             status.last_sync_time = Some(chrono::Utc::now().to_rfc3339());
             status.last_sync_version = Some(version);
-            status.secret_count = Some(secret_count as i32);
+            status.secret_count = Some(i32::try_from(secret_count).unwrap_or(i32::MAX));
             status.observed_generation = zss.metadata.generation;
 
             update_status(

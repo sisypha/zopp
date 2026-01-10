@@ -152,6 +152,23 @@ fn references_secret(deployment: &Deployment, secret_name: &str) -> bool {
                     }
                 }
             }
+
+            // Check individual env vars that reference secrets (same as regular containers)
+            if let Some(env) = &container.env {
+                for env_var in env {
+                    if let Some(value_from) = &env_var.value_from {
+                        if let Some(secret_key_ref) = &value_from.secret_key_ref {
+                            if secret_key_ref.name == secret_name {
+                                debug!(
+                                    "Deployment references secret {} via env var {} in init container {}",
+                                    secret_name, env_var.name, container.name
+                                );
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

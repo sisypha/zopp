@@ -11,6 +11,10 @@ use zopp_storage::{PrincipalId, Role, Store, UserId};
 
 use crate::server::{extract_signature, ZoppServer};
 
+/// Maximum number of audit log entries that can be returned in a single request.
+/// This prevents memory exhaustion from unbounded queries.
+const MAX_AUDIT_LOG_LIMIT: u32 = 1000;
+
 pub async fn list_audit_logs(
     server: &ZoppServer,
     request: Request<ListAuditLogsRequest>,
@@ -105,9 +109,12 @@ pub async fn list_audit_logs(
         filter = filter.to(to);
     }
 
-    if let Some(limit) = req.limit {
-        filter = filter.limit(limit);
-    }
+    // Apply limit with enforcement of maximum
+    let limit = req
+        .limit
+        .map(|l| l.min(MAX_AUDIT_LOG_LIMIT))
+        .unwrap_or(MAX_AUDIT_LOG_LIMIT);
+    filter = filter.limit(limit);
 
     if let Some(offset) = req.offset {
         filter = filter.offset(offset);

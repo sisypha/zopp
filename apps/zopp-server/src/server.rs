@@ -1024,24 +1024,26 @@ impl ZoppServer {
             }
         }
 
+        // Get principal-level workspace permission (if any) - this acts as a ceiling
+        let principal_permission = self
+            .store
+            .get_workspace_permission(workspace_id, principal_id)
+            .await
+            .ok();
+
         // Get workspace permission
         let user_id = match principal.user_id {
             Some(uid) => uid,
             None => {
-                // Service account: check principal permission
-                let role = self
-                    .store
-                    .get_workspace_permission(workspace_id, principal_id)
-                    .await
-                    .map_err(|_| {
-                        Status::permission_denied("No permissions found for service account")
-                    })?;
-                return if role.includes(&required_role) {
-                    Ok(())
-                } else {
-                    Err(Status::permission_denied(
+                // Service account: principal permission is their only source
+                return match principal_permission {
+                    Some(role) if role.includes(&required_role) => Ok(()),
+                    Some(_) => Err(Status::permission_denied(
                         "Insufficient service account permissions",
-                    ))
+                    )),
+                    None => Err(Status::permission_denied(
+                        "No permissions found for service account",
+                    )),
                 };
             }
         };
@@ -1070,7 +1072,15 @@ impl ZoppServer {
             }
         }
 
-        match base_role {
+        // Apply principal permission as ceiling (same as check_workspace_permission)
+        let effective_role = match (base_role, principal_permission) {
+            (Some(base), Some(ceiling)) => Some(self.min_role(base, ceiling)),
+            (Some(base), None) => Some(base),
+            (None, Some(_)) => None, // Principal permission alone doesn't grant access
+            (None, None) => None,
+        };
+
+        match effective_role {
             Some(role) if role.includes(&required_role) => Ok(()),
             Some(_) => Err(Status::permission_denied("Insufficient permissions")),
             None => Err(Status::permission_denied("No permissions found")),
