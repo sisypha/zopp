@@ -313,7 +313,10 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|s| s.split(')').next())
         .map(|s| s.trim().to_string())
         .ok_or("Failed to parse principal ID from create output")?;
-    println!("✓ Service principal 'k8s-operator' created (ID: {})", operator_principal_id);
+    println!(
+        "✓ Service principal 'k8s-operator' created (ID: {})",
+        operator_principal_id
+    );
 
     // Create workspace invite to add operator to workspace
     let output = Command::new(&zopp_bin)
