@@ -305,9 +305,14 @@ pub async fn set_group_project_permission(
             _ => Status::internal(format!("Failed to get project: {}", e)),
         })?;
 
-    // Check ADMIN permission for setting group permissions
+    // Check ADMIN permission at project level (allows project admins to manage group permissions)
     server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+        .check_project_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            zopp_storage::Role::Admin,
+        )
         .await?;
 
     let group = server
@@ -529,9 +534,14 @@ pub async fn remove_group_project_permission(
             _ => Status::internal(format!("Failed to get project: {}", e)),
         })?;
 
-    // Check ADMIN permission for removing group permissions
+    // Check ADMIN permission at project level (allows project admins to manage group permissions)
     server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+        .check_project_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            zopp_storage::Role::Admin,
+        )
         .await?;
 
     let group = server
@@ -608,9 +618,15 @@ pub async fn set_group_environment_permission(
             _ => Status::internal(format!("Failed to get environment: {}", e)),
         })?;
 
-    // Check ADMIN permission for setting group permissions
+    // Check ADMIN permission at environment level (allows environment admins to manage group permissions)
     server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+        .check_environment_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Admin,
+        )
         .await?;
 
     let group = server
@@ -862,9 +878,15 @@ pub async fn remove_group_environment_permission(
             _ => Status::internal(format!("Failed to get environment: {}", e)),
         })?;
 
-    // Check ADMIN permission for removing group permissions
+    // Check ADMIN permission at environment level (allows environment admins to manage group permissions)
     server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+        .check_environment_permission(
+            &principal_id,
+            &workspace.id,
+            &project.id,
+            &env.id,
+            zopp_storage::Role::Admin,
+        )
         .await?;
 
     let group = server

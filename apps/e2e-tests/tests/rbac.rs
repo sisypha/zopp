@@ -6167,3 +6167,58 @@ async fn test_device_inherits_joined_workspace() -> Result<(), Box<dyn std::erro
     println!("\n✅ test_device_inherits_joined_workspace PASSED");
     Ok(())
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Test: Project Admin Can Manage Group Project Permissions
+// ═══════════════════════════════════════════════════════════════════════════
+// This test verifies that a project admin (not workspace admin) can set
+// group permissions on their project. Currently FAILS due to bug in
+// group_permissions.rs using check_workspace_permission instead of
+// check_project_permission.
+
+#[tokio::test]
+async fn test_project_admin_can_manage_group_project_permissions(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("proj_admin_group_perm", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+
+    // Alice creates workspace and project
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+    env.create_project(&alice, "acme", "api")?;
+    env.create_project(&alice, "acme", "frontend")?;
+
+    // Alice creates a group
+    env.create_group(&alice, "acme", "developers")?;
+    println!("✓ Created group 'developers'");
+
+    // Bob joins workspace (no workspace-level permissions, just member)
+    let ws_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &ws_invite)?;
+    println!("✓ Bob joined workspace as member");
+
+    // Give Bob PROJECT ADMIN on 'api' project only (NOT workspace admin)
+    env.set_user_project_permission(&alice, "acme", "api", &bob.email, "admin")?;
+    println!("✓ Bob has PROJECT ADMIN on 'api' (but NOT workspace admin)");
+
+    // Test: Bob (project admin) CAN set group project permissions on 'api'
+    let output = env.group_set_project_permission_check(&bob, "acme", "api", "developers", "read");
+    assert_success(
+        &output,
+        "Project admin Bob set group project permission on api",
+    );
+    println!("✓ Bob (project admin) can set group permissions on 'api'");
+
+    // Test: Bob CANNOT set group project permissions on 'frontend' (no access)
+    let output =
+        env.group_set_project_permission_check(&bob, "acme", "frontend", "developers", "read");
+    assert_denied(&output, "Bob set group project permission on frontend");
+    println!("✓ Bob denied setting group permissions on 'frontend'");
+
+    println!("\n✅ test_project_admin_can_manage_group_project_permissions PASSED");
+    Ok(())
+}
