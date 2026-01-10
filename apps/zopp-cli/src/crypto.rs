@@ -1,6 +1,5 @@
 use crate::config::PrincipalConfig;
 use std::collections::BTreeMap;
-use tonic::metadata::MetadataValue;
 use tonic::transport::Channel;
 use zopp_proto::zopp_service_client::ZoppServiceClient;
 use zopp_secrets::SecretContext;
@@ -12,21 +11,10 @@ pub async fn unwrap_workspace_kek(
     principal: &PrincipalConfig,
     workspace_name: &str,
 ) -> Result<[u8; 32], Box<dyn std::error::Error>> {
-    let (timestamp, signature) = crate::grpc::sign_request(&principal.private_key)?;
-
     let mut request = tonic::Request::new(zopp_proto::GetWorkspaceKeysRequest {
         workspace_name: workspace_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    crate::grpc::add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetWorkspaceKeys")?;
 
     let response = client.get_workspace_keys(request).await?.into_inner();
 
@@ -68,58 +56,28 @@ pub async fn fetch_and_decrypt_secrets(
     environment_name: &str,
 ) -> Result<BTreeMap<String, String>, Box<dyn std::error::Error>> {
     // Get workspace keys
-    let (timestamp, signature) = crate::grpc::sign_request(&principal.private_key)?;
     let mut request = tonic::Request::new(zopp_proto::GetWorkspaceKeysRequest {
         workspace_name: workspace_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    crate::grpc::add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetWorkspaceKeys")?;
     let workspace_keys = client.get_workspace_keys(request).await?.into_inner();
 
     // Get environment
-    let (timestamp, signature) = crate::grpc::sign_request(&principal.private_key)?;
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    crate::grpc::add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetEnvironment")?;
     let environment = client.get_environment(request).await?.into_inner();
 
     // List all secrets
-    let (timestamp, signature) = crate::grpc::sign_request(&principal.private_key)?;
     let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    crate::grpc::add_auth_metadata(&mut request, principal, "/zopp.ZoppService/ListSecrets")?;
     let secrets_response = client.list_secrets(request).await?.into_inner();
 
     // Create SecretContext to hide all crypto details

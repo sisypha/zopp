@@ -14,9 +14,10 @@ pub async fn create_workspace(
     server: &ZoppServer,
     request: Request<CreateWorkspaceRequest>,
 ) -> Result<Response<zopp_proto::Workspace>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/CreateWorkspace", &req_for_verify, &request_hash)
         .await?;
     let req = request.into_inner();
 
@@ -86,9 +87,10 @@ pub async fn list_workspaces(
     server: &ZoppServer,
     request: Request<Empty>,
 ) -> Result<Response<WorkspaceList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListWorkspaces", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -113,9 +115,10 @@ pub async fn get_workspace_keys(
     server: &ZoppServer,
     request: Request<GetWorkspaceKeysRequest>,
 ) -> Result<Response<WorkspaceKeys>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetWorkspaceKeys", &req_for_verify, &request_hash)
         .await?;
     let req = request.into_inner();
 

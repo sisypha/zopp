@@ -21,7 +21,7 @@ pub async fn cmd_invite_create(
     let secret_hash = zopp_crypto::hash_sha256(&invite_secret);
 
     let mut ws_request = tonic::Request::new(zopp_proto::Empty {});
-    add_auth_metadata(&mut ws_request, &principal)?;
+    add_auth_metadata(&mut ws_request, &principal, "/zopp.ZoppService/ListWorkspaces")?;
     let workspaces = client.list_workspaces(ws_request).await?.into_inner();
     let workspace = workspaces
         .workspaces
@@ -42,14 +42,14 @@ pub async fn cmd_invite_create(
         kek_encrypted: kek_encrypted.0,
         kek_nonce: kek_nonce.0.to_vec(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateInvite")?;
 
     let _response = client.create_invite(request).await?.into_inner();
 
     if plain {
         println!("{}", invite_secret_hex);
     } else {
-        println!("✓ Workspace invite created!\n");
+        println!("Workspace invite created!\n");
         println!("Invite code: {}", invite_secret_hex);
         println!("Expires:     {}", expires_at);
         println!("\n⚠️  Share this invite code with the invitee via secure channel");
@@ -68,7 +68,7 @@ pub async fn cmd_invite_list(
     let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::Empty {});
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListInvites")?;
 
     let response = client.list_invites(request).await?.into_inner();
 
@@ -108,11 +108,11 @@ pub async fn cmd_invite_revoke(
     let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RevokeInviteRequest { token });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/RevokeInvite")?;
 
     client.revoke_invite(request).await?;
 
-    println!("✓ Invite revoked");
+    println!("Invite revoked");
 
     Ok(())
 }

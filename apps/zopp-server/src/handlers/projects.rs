@@ -13,9 +13,10 @@ pub async fn create_project(
     server: &ZoppServer,
     request: Request<CreateProjectRequest>,
 ) -> Result<Response<Project>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/CreateProject", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -73,9 +74,10 @@ pub async fn list_projects(
     server: &ZoppServer,
     request: Request<ListProjectsRequest>,
 ) -> Result<Response<ProjectList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListProjects", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -122,9 +124,10 @@ pub async fn get_project(
     server: &ZoppServer,
     request: Request<GetProjectRequest>,
 ) -> Result<Response<Project>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetProject", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -177,9 +180,10 @@ pub async fn delete_project(
     server: &ZoppServer,
     request: Request<DeleteProjectRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/DeleteProject", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id

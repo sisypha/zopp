@@ -1,7 +1,6 @@
 use crate::config::{get_current_principal, load_config, save_config, PrincipalConfig};
-use crate::grpc::{connect, sign_request};
+use crate::grpc::{add_auth_metadata, connect};
 use ed25519_dalek::SigningKey;
-use tonic::metadata::MetadataValue;
 use zopp_proto::{
     ListWorkspaceServicePrincipalsRequest, RegisterRequest, RemovePrincipalFromWorkspaceRequest,
     RenamePrincipalRequest, RevokeAllPrincipalPermissionsRequest, Role,
@@ -54,7 +53,6 @@ pub async fn cmd_principal_create(
 
     let mut client = connect(server, tls_ca_cert).await?;
     let principal = get_current_principal(&config)?;
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut request = tonic::Request::new(RegisterRequest {
         email: config.email.clone(),
@@ -63,16 +61,7 @@ pub async fn cmd_principal_create(
         x25519_public_key: x25519_public_bytes,
         is_service,
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/Register")?;
 
     let response = client.register(request).await?.into_inner();
 
@@ -135,23 +124,13 @@ pub async fn cmd_principal_rename(
     let principal = config.principals.iter().find(|p| p.name == name).unwrap();
 
     let principal_id = principal.id.clone();
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(RenamePrincipalRequest {
         principal_id: principal_id.clone(),
         new_name: new_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal_id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/RenamePrincipal")?;
 
     client.rename_principal(request).await?;
 
@@ -206,22 +185,12 @@ pub async fn cmd_principal_service_list(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(ListWorkspaceServicePrincipalsRequest {
         workspace_name: workspace.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/ListWorkspaceServicePrincipals")?;
 
     let response = client
         .list_workspace_service_principals(request)
@@ -264,23 +233,13 @@ pub async fn cmd_principal_workspace_remove(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(RemovePrincipalFromWorkspaceRequest {
         workspace_name: workspace.to_string(),
         principal_id: principal_id.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/RemovePrincipalFromWorkspace")?;
 
     client.remove_principal_from_workspace(request).await?;
 
@@ -299,23 +258,13 @@ pub async fn cmd_principal_revoke_all(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
-    let (timestamp, signature) = sign_request(&principal.private_key)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(RevokeAllPrincipalPermissionsRequest {
         workspace_name: workspace.to_string(),
         principal_id: principal_id.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/RevokeAllPrincipalPermissions")?;
 
     let response = client
         .revoke_all_principal_permissions(request)

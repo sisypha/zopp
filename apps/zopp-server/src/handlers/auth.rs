@@ -1,5 +1,7 @@
 //! Authentication handlers: join, register, login
 
+use prost::Message;
+use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
 use zopp_proto::{
     JoinRequest, JoinResponse, LoginRequest, LoginResponse, RegisterRequest, RegisterResponse,
@@ -198,8 +200,16 @@ pub async fn login(
             Status::not_found(format!("Principal '{}' not found", req.principal_name))
         })?;
 
+    // Compute the request hash for signature verification
+    let method = "/zopp.ZoppService/Login";
+    let body_bytes = req.encode_to_vec();
+    let mut hasher = Sha256::new();
+    hasher.update(method.as_bytes());
+    hasher.update(&body_bytes);
+    let request_hash = hasher.finalize().to_vec();
+
     server
-        .verify_signature_and_get_principal(&principal.id, req.timestamp, &req.signature)
+        .verify_signature_and_get_principal(&principal.id, req.timestamp, &req.signature, method, &req, &request_hash)
         .await?;
 
     Ok(Response::new(LoginResponse {

@@ -763,6 +763,20 @@ pub enum GroupCommand {
         /// Group name
         name: String,
     },
+    /// Update a group (rename or change description)
+    Update {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Current group name
+        name: String,
+        /// New group name
+        #[arg(long)]
+        new_name: Option<String>,
+        /// New description
+        #[arg(long, short = 'd')]
+        description: Option<String>,
+    },
     /// Add a user to a group
     AddMember {
         /// Workspace name

@@ -10,9 +10,10 @@ pub async fn create_group(
     server: &ZoppServer,
     request: Request<zopp_proto::CreateGroupRequest>,
 ) -> Result<Response<zopp_proto::Group>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/CreateGroup", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -76,9 +77,10 @@ pub async fn get_group(
     server: &ZoppServer,
     request: Request<zopp_proto::GetGroupRequest>,
 ) -> Result<Response<zopp_proto::Group>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetGroup", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -121,9 +123,10 @@ pub async fn list_groups(
     server: &ZoppServer,
     request: Request<zopp_proto::ListGroupsRequest>,
 ) -> Result<Response<zopp_proto::GroupList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListGroups", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -170,9 +173,10 @@ pub async fn update_group(
     server: &ZoppServer,
     request: Request<zopp_proto::UpdateGroupRequest>,
 ) -> Result<Response<zopp_proto::Group>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/UpdateGroup", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -206,11 +210,18 @@ pub async fn update_group(
             _ => Status::internal(format!("Failed to get group: {}", e)),
         })?;
 
+    // If new_name is empty, keep the current name
+    let name_to_use = if req.new_name.is_empty() {
+        &group.name
+    } else {
+        &req.new_name
+    };
+
     server
         .store
         .update_group(
             &group.id,
-            &req.new_name,
+            name_to_use,
             if req.new_description.is_empty() {
                 None
             } else {
@@ -240,9 +251,10 @@ pub async fn delete_group(
     server: &ZoppServer,
     request: Request<zopp_proto::DeleteGroupRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/DeleteGroup", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -291,9 +303,10 @@ pub async fn add_group_member(
     server: &ZoppServer,
     request: Request<zopp_proto::AddGroupMemberRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/AddGroupMember", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -355,9 +368,10 @@ pub async fn remove_group_member(
     server: &ZoppServer,
     request: Request<zopp_proto::RemoveGroupMemberRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/RemoveGroupMember", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -414,9 +428,10 @@ pub async fn list_group_members(
     server: &ZoppServer,
     request: Request<zopp_proto::ListGroupMembersRequest>,
 ) -> Result<Response<zopp_proto::GroupMemberList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListGroupMembers", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -476,9 +491,10 @@ pub async fn list_user_groups(
     server: &ZoppServer,
     request: Request<zopp_proto::ListUserGroupsRequest>,
 ) -> Result<Response<zopp_proto::GroupList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListUserGroups", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id

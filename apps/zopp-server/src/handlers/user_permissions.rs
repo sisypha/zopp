@@ -12,9 +12,10 @@ pub async fn set_user_workspace_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::SetUserWorkspacePermissionRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/SetUserWorkspacePermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -34,10 +35,29 @@ pub async fn set_user_workspace_permission(
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
 
-    // Check ADMIN permission for setting user permissions
-    server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
-        .await?;
+    // Convert proto Role to storage Role first so we can check delegated authority
+    let role = match zopp_proto::Role::try_from(req.role) {
+        Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
+        Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
+        Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
+        _ => return Err(Status::invalid_argument("Invalid role")),
+    };
+
+    // Delegated authority: requester can only grant permissions <= their own effective role
+    let requester_role = server
+        .get_effective_workspace_role(&principal_id, &workspace.id)
+        .await?
+        .ok_or_else(|| {
+            Status::permission_denied("No permission to set user permissions on this workspace")
+        })?;
+
+    // Check if requester's role is sufficient to grant the requested role
+    if !requester_role.includes(&role) {
+        return Err(Status::permission_denied(format!(
+            "Cannot grant {:?} permission (you only have {:?} access)",
+            role, requester_role
+        )));
+    }
 
     // Look up target user by email
     let target_user = server
@@ -48,14 +68,6 @@ pub async fn set_user_workspace_permission(
             zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
             _ => Status::internal(format!("Failed to get user: {}", e)),
         })?;
-
-    // Convert proto Role to storage Role
-    let role = match zopp_proto::Role::try_from(req.role) {
-        Ok(zopp_proto::Role::Admin) => zopp_storage::Role::Admin,
-        Ok(zopp_proto::Role::Write) => zopp_storage::Role::Write,
-        Ok(zopp_proto::Role::Read) => zopp_storage::Role::Read,
-        _ => return Err(Status::invalid_argument("Invalid role")),
-    };
 
     server
         .store
@@ -70,9 +82,10 @@ pub async fn get_user_workspace_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::GetUserWorkspacePermissionRequest>,
 ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetUserWorkspacePermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -126,9 +139,10 @@ pub async fn list_user_workspace_permissions(
     server: &ZoppServer,
     request: Request<zopp_proto::ListUserWorkspacePermissionsRequest>,
 ) -> Result<Response<zopp_proto::UserPermissionList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListUserWorkspacePermissions", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -178,9 +192,10 @@ pub async fn remove_user_workspace_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::RemoveUserWorkspacePermissionRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/RemoveUserWorkspacePermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal.user_id.ok_or_else(|| {
         Status::unauthenticated("Service accounts cannot remove user permissions")
@@ -200,11 +215,6 @@ pub async fn remove_user_workspace_permission(
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
 
-    // Check ADMIN permission for removing user permissions
-    server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
-        .await?;
-
     // Look up target user by email
     let target_user = server
         .store
@@ -214,6 +224,32 @@ pub async fn remove_user_workspace_permission(
             zopp_storage::StoreError::NotFound => Status::not_found("User not found"),
             _ => Status::internal(format!("Failed to get user: {}", e)),
         })?;
+
+    // Get target user's current permission level
+    let target_role = server
+        .store
+        .get_user_workspace_permission(&workspace.id, &target_user.id)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => Status::not_found("User permission not found"),
+            _ => Status::internal(format!("Failed to get user permission: {}", e)),
+        })?;
+
+    // Delegated authority: requester can only remove permissions <= their own effective role
+    let requester_role = server
+        .get_effective_workspace_role(&principal_id, &workspace.id)
+        .await?
+        .ok_or_else(|| {
+            Status::permission_denied("No permission to remove user permissions on this workspace")
+        })?;
+
+    // Check if requester's role is sufficient to remove the target's role
+    if !requester_role.includes(&target_role) {
+        return Err(Status::permission_denied(format!(
+            "Cannot remove {:?} permission (you only have {:?} access)",
+            target_role, requester_role
+        )));
+    }
 
     server
         .store
@@ -230,9 +266,10 @@ pub async fn set_user_project_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::SetUserProjectPermissionRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/SetUserProjectPermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -303,9 +340,10 @@ pub async fn get_user_project_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::GetUserProjectPermissionRequest>,
 ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetUserProjectPermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -369,9 +407,10 @@ pub async fn list_user_project_permissions(
     server: &ZoppServer,
     request: Request<zopp_proto::ListUserProjectPermissionsRequest>,
 ) -> Result<Response<zopp_proto::UserPermissionList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListUserProjectPermissions", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -431,9 +470,10 @@ pub async fn remove_user_project_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::RemoveUserProjectPermissionRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/RemoveUserProjectPermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal.user_id.ok_or_else(|| {
         Status::unauthenticated("Service accounts cannot remove user permissions")
@@ -498,9 +538,10 @@ pub async fn set_user_environment_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::SetUserEnvironmentPermissionRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/SetUserEnvironmentPermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -582,9 +623,10 @@ pub async fn get_user_environment_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::GetUserEnvironmentPermissionRequest>,
 ) -> Result<Response<zopp_proto::PermissionResponse>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetUserEnvironmentPermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -658,9 +700,10 @@ pub async fn list_user_environment_permissions(
     server: &ZoppServer,
     request: Request<zopp_proto::ListUserEnvironmentPermissionsRequest>,
 ) -> Result<Response<zopp_proto::UserPermissionList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListUserEnvironmentPermissions", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -730,9 +773,10 @@ pub async fn remove_user_environment_permission(
     server: &ZoppServer,
     request: Request<zopp_proto::RemoveUserEnvironmentPermissionRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/RemoveUserEnvironmentPermission", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal.user_id.ok_or_else(|| {
         Status::unauthenticated("Service accounts cannot remove user permissions")

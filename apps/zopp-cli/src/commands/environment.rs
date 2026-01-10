@@ -13,7 +13,7 @@ pub async fn cmd_environment_list(
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListEnvironments")?;
 
     let response = client.list_environments(request).await?.into_inner();
 
@@ -52,12 +52,12 @@ pub async fn cmd_environment_create(
         dek_wrapped: dek_wrapped.0,
         dek_nonce: dek_nonce.0.to_vec(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateEnvironment")?;
 
     let response = client.create_environment(request).await?.into_inner();
 
     println!(
-        "✓ Environment '{}' created (ID: {})",
+        "Environment '{}' created (ID: {})",
         response.name, response.id
     );
 
@@ -78,7 +78,7 @@ pub async fn cmd_environment_get(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetEnvironment")?;
 
     let response = client.get_environment(request).await?.into_inner();
 
@@ -117,11 +117,11 @@ pub async fn cmd_environment_delete(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteEnvironment")?;
 
     client.delete_environment(request).await?;
 
-    println!("✓ Environment '{}' deleted", environment_name);
+    println!("Environment '{}' deleted", environment_name);
 
     Ok(())
 }

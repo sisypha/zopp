@@ -21,7 +21,7 @@ pub use group::{
     cmd_group_list_project_permissions, cmd_group_remove_environment_permission,
     cmd_group_remove_member, cmd_group_remove_permission, cmd_group_remove_project_permission,
     cmd_group_set_environment_permission, cmd_group_set_permission,
-    cmd_group_set_project_permission,
+    cmd_group_set_project_permission, cmd_group_update,
 };
 pub use invite::{cmd_invite_create, cmd_invite_list, cmd_invite_revoke};
 pub use join::cmd_join;

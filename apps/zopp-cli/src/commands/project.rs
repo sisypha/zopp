@@ -10,7 +10,7 @@ pub async fn cmd_project_list(
     let mut request = tonic::Request::new(zopp_proto::ListProjectsRequest {
         workspace_name: workspace_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListProjects")?;
 
     let response = client.list_projects(request).await?.into_inner();
 
@@ -38,12 +38,12 @@ pub async fn cmd_project_create(
         workspace_name: workspace_name.to_string(),
         name: name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateProject")?;
 
     let response = client.create_project(request).await?.into_inner();
 
     println!(
-        "✓ Project '{}' created (ID: {})",
+        "Project '{}' created (ID: {})",
         response.name, response.id
     );
 
@@ -62,7 +62,7 @@ pub async fn cmd_project_get(
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetProject")?;
 
     let response = client.get_project(request).await?.into_inner();
 
@@ -97,11 +97,11 @@ pub async fn cmd_project_delete(
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteProject")?;
 
     client.delete_project(request).await?;
 
-    println!("✓ Project '{}' deleted", project_name);
+    println!("Project '{}' deleted", project_name);
 
     Ok(())
 }

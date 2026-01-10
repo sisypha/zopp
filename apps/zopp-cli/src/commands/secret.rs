@@ -1,6 +1,5 @@
 use crate::crypto::fetch_and_decrypt_secrets;
 use crate::grpc::{add_auth_metadata, setup_client};
-use tonic::metadata::MetadataValue;
 use zopp_secrets::SecretContext;
 
 /// Helper to create a SecretContext for a given environment
@@ -12,39 +11,19 @@ async fn create_secret_context(
     environment_name: &str,
 ) -> Result<SecretContext, Box<dyn std::error::Error>> {
     // Get workspace keys
-    let (timestamp, signature) = crate::grpc::sign_request(&principal.private_key)?;
     let mut request = tonic::Request::new(zopp_proto::GetWorkspaceKeysRequest {
         workspace_name: workspace_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetWorkspaceKeys")?;
     let workspace_keys = client.get_workspace_keys(request).await?.into_inner();
 
     // Get environment
-    let (timestamp, signature) = crate::grpc::sign_request(&principal.private_key)?;
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    request
-        .metadata_mut()
-        .insert("principal-id", MetadataValue::try_from(&principal.id)?);
-    request
-        .metadata_mut()
-        .insert("timestamp", MetadataValue::try_from(timestamp.to_string())?);
-    request.metadata_mut().insert(
-        "signature",
-        MetadataValue::try_from(hex::encode(&signature))?,
-    );
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetEnvironment")?;
     let environment = client.get_environment(request).await?.into_inner();
 
     // Extract X25519 private key
@@ -97,11 +76,11 @@ pub async fn cmd_secret_set(
         nonce: encrypted.nonce,
         ciphertext: encrypted.ciphertext,
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/UpsertSecret")?;
 
     client.upsert_secret(request).await?;
 
-    println!("✓ Secret '{}' set", key);
+    println!("Secret '{}' set", key);
 
     Ok(())
 }
@@ -122,7 +101,7 @@ pub async fn cmd_secret_get(
         environment_name: environment_name.to_string(),
         key: key.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetSecret")?;
 
     let response = client.get_secret(request).await?.into_inner();
 
@@ -156,7 +135,7 @@ pub async fn cmd_secret_list(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListSecrets")?;
 
     let response = client.list_secrets(request).await?.into_inner();
 
@@ -188,11 +167,11 @@ pub async fn cmd_secret_delete(
         environment_name: environment_name.to_string(),
         key: key.to_string(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteSecret")?;
 
     client.delete_secret(request).await?;
 
-    println!("✓ Secret '{}' deleted", key);
+    println!("Secret '{}' deleted", key);
 
     Ok(())
 }
@@ -296,12 +275,12 @@ pub async fn cmd_secret_import(
             nonce: encrypted.nonce,
             ciphertext: encrypted.ciphertext,
         });
-        add_auth_metadata(&mut request, &principal)?;
+        add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/UpsertSecret")?;
 
         client.upsert_secret(request).await?;
     }
 
-    println!("✓ Imported {} secrets", secrets.len());
+    println!("Imported {} secrets", secrets.len());
 
     Ok(())
 }

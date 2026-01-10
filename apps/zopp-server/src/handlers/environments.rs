@@ -13,9 +13,10 @@ pub async fn create_environment(
     server: &ZoppServer,
     request: Request<CreateEnvironmentRequest>,
 ) -> Result<Response<Environment>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/CreateEnvironment", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -92,9 +93,10 @@ pub async fn list_environments(
     server: &ZoppServer,
     request: Request<ListEnvironmentsRequest>,
 ) -> Result<Response<EnvironmentList>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/ListEnvironments", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -158,9 +160,10 @@ pub async fn get_environment(
     server: &ZoppServer,
     request: Request<GetEnvironmentRequest>,
 ) -> Result<Response<Environment>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/GetEnvironment", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id
@@ -226,9 +229,10 @@ pub async fn delete_environment(
     server: &ZoppServer,
     request: Request<DeleteEnvironmentRequest>,
 ) -> Result<Response<Empty>, Status> {
-    let (principal_id, timestamp, signature) = extract_signature(&request)?;
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
     let principal = server
-        .verify_signature_and_get_principal(&principal_id, timestamp, &signature)
+        .verify_signature_and_get_principal(&principal_id, timestamp, &signature, "/zopp.ZoppService/DeleteEnvironment", &req_for_verify, &request_hash)
         .await?;
     let user_id = principal
         .user_id

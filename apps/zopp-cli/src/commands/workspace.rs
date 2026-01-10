@@ -8,7 +8,7 @@ pub async fn cmd_workspace_list(
     let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(Empty {});
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListWorkspaces")?;
 
     let response = client.list_workspaces(request).await?.into_inner();
 
@@ -65,11 +65,11 @@ pub async fn cmd_workspace_create(
         kek_wrapped: wrapped.0,
         kek_nonce: nonce.0.to_vec(),
     });
-    add_auth_metadata(&mut request, &principal)?;
+    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateWorkspace")?;
 
     let response = client.create_workspace(request).await?.into_inner();
 
-    println!("✓ Workspace created!\n");
+    println!("Workspace created!\n");
     println!("Name: {}", response.name);
     println!("ID:   {}", response.id);
 

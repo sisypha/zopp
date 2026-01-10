@@ -1,6 +1,8 @@
 use crate::backend::StoreBackend;
 use chrono::Utc;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use prost::Message;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tonic::Status;
 use zopp_events::EventBus;
@@ -919,11 +921,17 @@ impl ZoppServer {
         }
     }
 
-    pub async fn verify_signature_and_get_principal(
+    /// Verify the signature and return the principal.
+    /// The signature must cover: method_name + request_hash + timestamp
+    /// This prevents replay attacks across different methods or with different request bodies.
+    pub async fn verify_signature_and_get_principal<T: Message>(
         &self,
         principal_id: &PrincipalId,
         timestamp: i64,
         signature: &[u8],
+        method: &str,
+        request: &T,
+        provided_hash: &[u8],
     ) -> Result<Principal, Status> {
         // Check timestamp freshness (replay protection)
         let now = Utc::now().timestamp();
@@ -937,6 +945,19 @@ impl ZoppServer {
         if age < -30 {
             return Err(Status::unauthenticated(
                 "Request timestamp too far in future (>30s), check clock sync",
+            ));
+        }
+
+        // Compute expected hash and verify it matches provided hash
+        let body_bytes = request.encode_to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(method.as_bytes());
+        hasher.update(&body_bytes);
+        let expected_hash = hasher.finalize();
+
+        if expected_hash.as_slice() != provided_hash {
+            return Err(Status::unauthenticated(
+                "Request hash mismatch - body may have been tampered",
             ));
         }
 
@@ -961,7 +982,12 @@ impl ZoppServer {
                 .map_err(|_| Status::unauthenticated("Invalid signature length"))?,
         );
 
-        let message = timestamp.to_le_bytes();
+        // Build the expected signed message: method + hash + timestamp
+        let mut message = Vec::new();
+        message.extend_from_slice(method.as_bytes());
+        message.extend_from_slice(provided_hash);
+        message.extend_from_slice(&timestamp.to_le_bytes());
+
         verifying_key
             .verify(&message, &sig)
             .map_err(|_| Status::unauthenticated("Invalid signature"))?;
@@ -970,10 +996,11 @@ impl ZoppServer {
     }
 }
 
-/// Helper function to extract signature metadata from gRPC request headers
+/// Helper function to extract signature metadata from gRPC request headers.
+/// Returns (principal_id, timestamp, signature, request_hash).
 pub fn extract_signature<T>(
     request: &tonic::Request<T>,
-) -> Result<(PrincipalId, i64, Vec<u8>), Status> {
+) -> Result<(PrincipalId, i64, Vec<u8>, Vec<u8>), Status> {
     let metadata = request.metadata();
 
     let principal_id_str = metadata
@@ -1002,5 +1029,13 @@ pub fn extract_signature<T>(
     let signature = hex::decode(signature_str)
         .map_err(|_| Status::unauthenticated("Invalid signature format"))?;
 
-    Ok((principal_id, timestamp, signature))
+    let request_hash_str = metadata
+        .get("request-hash")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| Status::unauthenticated("Missing request-hash metadata"))?;
+
+    let request_hash = hex::decode(request_hash_str)
+        .map_err(|_| Status::unauthenticated("Invalid request-hash format"))?;
+
+    Ok((principal_id, timestamp, signature, request_hash))
 }

@@ -460,8 +460,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
+    use prost::Message;
     use rand_core::OsRng;
-    use zopp_proto::JoinRequest;
+    use sha2::{Digest, Sha256};
+    use zopp_proto::{GetPrincipalRequest, JoinRequest};
     use zopp_storage::{CreateInviteParams, CreatePrincipalParams, UserId};
 
     #[tokio::test]
@@ -551,9 +553,26 @@ mod tests {
             .await
             .unwrap();
 
+        // Create a test request and compute hash
+        let method = "/zopp.ZoppService/GetPrincipal";
+        let test_request = GetPrincipalRequest {
+            principal_id: "test".to_string(),
+        };
+        let body_bytes = test_request.encode_to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(method.as_bytes());
+        hasher.update(&body_bytes);
+        let request_hash = hasher.finalize().to_vec();
+
         // Create a timestamp 70 seconds in the past
         let old_timestamp = Utc::now().timestamp() - 70;
-        let signature = signing_key.sign(&old_timestamp.to_le_bytes());
+
+        // Sign: method + request_hash + timestamp
+        let mut message = Vec::new();
+        message.extend_from_slice(method.as_bytes());
+        message.extend_from_slice(&request_hash);
+        message.extend_from_slice(&old_timestamp.to_le_bytes());
+        let signature = signing_key.sign(&message);
 
         // Should reject old timestamp
         let result = server
@@ -561,6 +580,9 @@ mod tests {
                 &principal_id,
                 old_timestamp,
                 signature.to_bytes().as_ref(),
+                method,
+                &test_request,
+                &request_hash,
             )
             .await;
 
@@ -592,9 +614,26 @@ mod tests {
             .await
             .unwrap();
 
+        // Create a test request and compute hash
+        let method = "/zopp.ZoppService/GetPrincipal";
+        let test_request = GetPrincipalRequest {
+            principal_id: "test".to_string(),
+        };
+        let body_bytes = test_request.encode_to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(method.as_bytes());
+        hasher.update(&body_bytes);
+        let request_hash = hasher.finalize().to_vec();
+
         // Create a timestamp 70 seconds in the future
         let future_timestamp = Utc::now().timestamp() + 70;
-        let signature = signing_key.sign(&future_timestamp.to_le_bytes());
+
+        // Sign: method + request_hash + timestamp
+        let mut message = Vec::new();
+        message.extend_from_slice(method.as_bytes());
+        message.extend_from_slice(&request_hash);
+        message.extend_from_slice(&future_timestamp.to_le_bytes());
+        let signature = signing_key.sign(&message);
 
         // Should reject future timestamp
         let result = server
@@ -602,6 +641,9 @@ mod tests {
                 &principal_id,
                 future_timestamp,
                 signature.to_bytes().as_ref(),
+                method,
+                &test_request,
+                &request_hash,
             )
             .await;
 
@@ -633,9 +675,26 @@ mod tests {
             .await
             .unwrap();
 
+        // Create a test request and compute hash
+        let method = "/zopp.ZoppService/GetPrincipal";
+        let test_request = GetPrincipalRequest {
+            principal_id: "test".to_string(),
+        };
+        let body_bytes = test_request.encode_to_vec();
+        let mut hasher = Sha256::new();
+        hasher.update(method.as_bytes());
+        hasher.update(&body_bytes);
+        let request_hash = hasher.finalize().to_vec();
+
         // Create a current timestamp
         let current_timestamp = Utc::now().timestamp();
-        let signature = signing_key.sign(&current_timestamp.to_le_bytes());
+
+        // Sign: method + request_hash + timestamp
+        let mut message = Vec::new();
+        message.extend_from_slice(method.as_bytes());
+        message.extend_from_slice(&request_hash);
+        message.extend_from_slice(&current_timestamp.to_le_bytes());
+        let signature = signing_key.sign(&message);
 
         // Should accept current timestamp
         let result = server
@@ -643,6 +702,9 @@ mod tests {
                 &principal_id,
                 current_timestamp,
                 signature.to_bytes().as_ref(),
+                method,
+                &test_request,
+                &request_hash,
             )
             .await;
 

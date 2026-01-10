@@ -688,6 +688,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
             }
+            GroupCommand::Update {
+                workspace,
+                name,
+                new_name,
+                description,
+            } => {
+                commands::cmd_group_update(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    workspace.as_deref(),
+                    name.clone(),
+                    new_name.clone(),
+                    description.clone(),
+                )
+                .await?;
+            }
             GroupCommand::AddMember {
                 workspace,
                 group,
