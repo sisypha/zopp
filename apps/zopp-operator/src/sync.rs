@@ -1,3 +1,4 @@
+use crate::reload::trigger_deployment_reloads;
 use crate::OperatorError;
 use k8s_openapi::api::core::v1::Secret;
 use kube::{api::PatchParams, Api, Client};
@@ -120,6 +121,9 @@ pub async fn run_sync(
         namespace, name, current_version
     );
 
+    // Trigger deployment reloads after initial sync
+    trigger_reload_if_needed(&k8s_client, &namespace, &name).await;
+
     // Spawn watch stream task with exponential backoff reconnection
     let _stream_handle = tokio::spawn({
         let grpc_client = grpc_client.clone();
@@ -193,6 +197,8 @@ pub async fn run_sync(
                     "Periodic reconciliation complete for {}/{}, version: {}",
                     namespace, name, current_version
                 );
+                // Trigger deployment reloads after successful periodic sync
+                trigger_reload_if_needed(&k8s_client, &namespace, &name).await;
             }
             Err(e) => {
                 warn!(
@@ -466,12 +472,18 @@ async fn handle_secret_event(
             update_k8s_secret_key(k8s_client, namespace, name, &event.key, value).await?;
 
             info!("Updated secret key: {}", event.key);
+
+            // Trigger deployment reloads after secret update
+            trigger_reload_if_needed(k8s_client, namespace, name).await;
         }
         Ok(EventType::Deleted) => {
             // Remove key from K8s Secret
             delete_k8s_secret_key(k8s_client, namespace, name, &event.key).await?;
 
             info!("Deleted secret key: {}", event.key);
+
+            // Trigger deployment reloads after secret deletion
+            trigger_reload_if_needed(k8s_client, namespace, name).await;
         }
         Err(_) => {
             warn!("Unknown event type: {}", event.event_type);
@@ -581,4 +593,21 @@ async fn delete_k8s_secret_key(
     .await?;
 
     Ok(())
+}
+
+/// Trigger deployment reloads for Deployments that reference this secret.
+///
+/// This is a helper that wraps the reload logic with error handling.
+/// Failures are logged but don't propagate - reloads are best-effort.
+async fn trigger_reload_if_needed(k8s_client: &Client, namespace: &str, secret_name: &str) {
+    match trigger_deployment_reloads(k8s_client, namespace, secret_name).await {
+        Ok(restarted) => {
+            if !restarted.is_empty() {
+                info!("Triggered reload for deployments: {:?}", restarted);
+            }
+        }
+        Err(e) => {
+            warn!("Failed to trigger deployment reloads: {}", e);
+        }
+    }
 }
