@@ -30,6 +30,7 @@ zopp-config = { path = "../../crates/zopp-config", version = "0.1.0" }
 chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
 hex = { workspace = true }
 dirs = { workspace = true }
 clap = { workspace = true }

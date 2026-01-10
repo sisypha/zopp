@@ -1,10 +1,36 @@
 use crate::OperatorError;
 use k8s_openapi::api::core::v1::Secret;
 use kube::{api::PatchParams, Api, Client};
+use prost::Message;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use zopp_proto::zopp_service_client::ZoppServiceClient;
+
+/// Add authentication metadata to a gRPC request
+fn add_auth_metadata<T: Message + Clone>(
+    request: &mut tonic::Request<T>,
+    credentials: &crate::credentials::OperatorCredentials,
+    method: &str,
+) {
+    let timestamp = chrono::Utc::now().timestamp();
+    let req_body = request.get_ref().clone();
+    let (signature, request_hash) = crate::watch::create_signature(credentials, method, &req_body, timestamp);
+
+    request.metadata_mut().insert(
+        "principal-id",
+        credentials.principal.id.to_string().parse().unwrap(),
+    );
+    request
+        .metadata_mut()
+        .insert("timestamp", timestamp.to_string().parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("signature", hex::encode(&signature).parse().unwrap());
+    request
+        .metadata_mut()
+        .insert("request-hash", hex::encode(&request_hash).parse().unwrap());
+}
 
 #[derive(Debug, Clone)]
 pub struct SecretSyncConfig {
@@ -205,26 +231,12 @@ async fn full_resync(
     .await?;
 
     // List all secrets
-    let timestamp = chrono::Utc::now().timestamp();
-    let signature = crate::watch::create_signature(credentials, timestamp);
-
     let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
         workspace_name: config.workspace.clone(),
         project_name: config.project.clone(),
         environment_name: config.environment.clone(),
     });
-
-    // Add authentication metadata
-    request.metadata_mut().insert(
-        "principal-id",
-        credentials.principal.id.to_string().parse().unwrap(),
-    );
-    request
-        .metadata_mut()
-        .insert("timestamp", timestamp.to_string().parse().unwrap());
-    request
-        .metadata_mut()
-        .insert("signature", hex::encode(&signature).parse().unwrap());
+    add_auth_metadata(&mut request, credentials, "/zopp.ZoppService/ListSecrets");
 
     let response = client.list_secrets(request).await?;
     let secrets_data = response.into_inner();
@@ -270,45 +282,20 @@ async fn unwrap_environment_dek(
         return Ok(cached_dek);
     }
 
-    let timestamp = chrono::Utc::now().timestamp();
-    let signature = crate::watch::create_signature(credentials, timestamp);
-
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-
-    request.metadata_mut().insert(
-        "principal-id",
-        credentials.principal.id.to_string().parse().unwrap(),
-    );
-    request
-        .metadata_mut()
-        .insert("timestamp", timestamp.to_string().parse().unwrap());
-    request
-        .metadata_mut()
-        .insert("signature", hex::encode(&signature).parse().unwrap());
+    add_auth_metadata(&mut request, credentials, "/zopp.ZoppService/GetEnvironment");
 
     let environment = client.get_environment(request).await?.into_inner();
 
     // Get workspace keys
-    let timestamp = chrono::Utc::now().timestamp();
-    let signature = crate::watch::create_signature(credentials, timestamp);
-
     let mut ws_request = tonic::Request::new(zopp_proto::GetWorkspaceKeysRequest {
         workspace_name: workspace_name.to_string(),
     });
-    ws_request.metadata_mut().insert(
-        "principal-id",
-        credentials.principal.id.to_string().parse().unwrap(),
-    );
-    ws_request
-        .metadata_mut()
-        .insert("timestamp", timestamp.to_string().parse().unwrap());
-    ws_request
-        .metadata_mut()
-        .insert("signature", hex::encode(&signature).parse().unwrap());
+    add_auth_metadata(&mut ws_request, credentials, "/zopp.ZoppService/GetWorkspaceKeys");
 
     let workspace_keys = client.get_workspace_keys(ws_request).await?.into_inner();
 
@@ -355,9 +342,6 @@ async fn start_watch_stream(
 ) -> Result<(), OperatorError> {
     let mut client = grpc_client.as_ref().clone();
 
-    let timestamp = chrono::Utc::now().timestamp();
-    let signature = crate::watch::create_signature(credentials, timestamp);
-
     let version = *current_version.read().await;
     let mut request = tonic::Request::new(zopp_proto::WatchSecretsRequest {
         workspace_name: config.workspace.clone(),
@@ -365,18 +349,7 @@ async fn start_watch_stream(
         environment_name: config.environment.clone(),
         since_version: Some(version),
     });
-
-    // Add authentication metadata
-    request.metadata_mut().insert(
-        "principal-id",
-        credentials.principal.id.to_string().parse().unwrap(),
-    );
-    request
-        .metadata_mut()
-        .insert("timestamp", timestamp.to_string().parse().unwrap());
-    request
-        .metadata_mut()
-        .insert("signature", hex::encode(&signature).parse().unwrap());
+    add_auth_metadata(&mut request, credentials, "/zopp.ZoppService/WatchSecrets");
 
     let mut stream = client.watch_secrets(request).await?.into_inner();
 
@@ -461,27 +434,13 @@ async fn handle_secret_event(
             )
             .await?;
 
-            let timestamp = chrono::Utc::now().timestamp();
-            let signature = crate::watch::create_signature(credentials, timestamp);
-
             let mut request = tonic::Request::new(zopp_proto::GetSecretRequest {
                 workspace_name: config.workspace.clone(),
                 project_name: config.project.clone(),
                 environment_name: config.environment.clone(),
                 key: event.key.clone(),
             });
-
-            // Add authentication metadata
-            request.metadata_mut().insert(
-                "principal-id",
-                credentials.principal.id.to_string().parse().unwrap(),
-            );
-            request
-                .metadata_mut()
-                .insert("timestamp", timestamp.to_string().parse().unwrap());
-            request
-                .metadata_mut()
-                .insert("signature", hex::encode(&signature).parse().unwrap());
+            add_auth_metadata(&mut request, credentials, "/zopp.ZoppService/GetSecret");
 
             let response = client.get_secret(request).await?;
             let secret = response.into_inner();
