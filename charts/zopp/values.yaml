@@ -93,16 +93,27 @@ operator:
 
   # Operator credentials
   credentials:
-    # Existing secret containing zopp credentials (from zopp join)
-    # Must contain a key "config.json" with the CLI config
+    # Existing secret containing operator credentials as environment variables.
+    # The secret must have these keys: ZOPP_PRINCIPAL_ID, ZOPP_PRINCIPAL_NAME,
+    # ZOPP_PRIVATE_KEY, ZOPP_PUBLIC_KEY, ZOPP_X25519_PRIVATE_KEY, ZOPP_X25519_PUBLIC_KEY
+    #
+    # Create with:
+    #   kubectl create secret generic zopp-operator-credentials \
+    #     --from-literal=ZOPP_PRINCIPAL_ID=<principal-id> \
+    #     --from-literal=ZOPP_PRINCIPAL_NAME=<principal-name> \
+    #     --from-literal=ZOPP_PRIVATE_KEY=<private-key-base64> \
+    #     --from-literal=ZOPP_PUBLIC_KEY=<public-key-base64> \
+    #     --from-literal=ZOPP_X25519_PRIVATE_KEY=<x25519-private-key-base64> \
+    #     --from-literal=ZOPP_X25519_PUBLIC_KEY=<x25519-public-key-base64>
     existingSecret: ""
-    # OR create from inline principal data
+    # OR create from inline principal data (chart will generate the secret)
     principal:
       id: ""
       name: ""
       publicKey: ""
       x25519PublicKey: ""
       privateKey: ""
+      x25519PrivateKey: ""
 
   # Kubernetes namespace to watch
   # Empty string means all namespaces (requires cluster-wide RBAC)

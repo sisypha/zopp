@@ -14,7 +14,8 @@ path = "src/main.rs"
 [dependencies]
 axum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "signal", "fs"] }
-kube = { workspace = true, features = ["runtime"] }
+kube = { workspace = true, features = ["runtime", "derive"] }
+schemars = { workspace = true }
 k8s-openapi = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
@@ -41,3 +42,4 @@ tracing-subscriber = { workspace = true }
 [dev-dependencies]
 zopp-config = { path = "../../crates/zopp-config", version = "0.1.0" }
 reqwest = { workspace = true }
+serial_test = { workspace = true }

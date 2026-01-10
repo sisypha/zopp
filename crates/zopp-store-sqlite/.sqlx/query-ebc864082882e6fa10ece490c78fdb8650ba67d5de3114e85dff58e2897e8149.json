@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as count\n               FROM audit_logs\n               WHERE (? IS NULL OR principal_id = ?)\n                 AND (? IS NULL OR user_id = ?)\n                 AND (? IS NULL OR workspace_id = ?)\n                 AND (? IS NULL OR project_id = ?)\n                 AND (? IS NULL OR environment_id = ?)\n                 AND (? IS NULL OR action = ?)\n                 AND (? IS NULL OR result = ?)\n                 AND (? IS NULL OR timestamp >= ?)\n                 AND (? IS NULL OR timestamp < ?)",
+  "describe": {
+    "columns": [
+      {
+        "name": "count",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 18
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ebc864082882e6fa10ece490c78fdb8650ba67d5de3114e85dff58e2897e8149"
+}

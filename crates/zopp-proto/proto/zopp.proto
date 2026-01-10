@@ -111,6 +111,11 @@ service ZoppService {
 
   // Effective permissions (aggregated view)
   rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (EffectivePermissionsResponse);
+
+  // Audit logs
+  rpc ListAuditLogs(ListAuditLogsRequest) returns (AuditLogList);
+  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogEntry);
+  rpc CountAuditLogs(CountAuditLogsRequest) returns (CountAuditLogsResponse);
 }
 
 message Empty {}
@@ -794,4 +799,62 @@ message EffectiveEnvironmentPermission {
   string environment_id = 1;
   string environment_name = 2;
   Role effective_role = 3;
+}
+
+// Audit log messages
+message AuditLogEntry {
+  string id = 1;
+  string timestamp = 2;
+  string principal_id = 3;
+  optional string user_id = 4;
+  string action = 5;
+  string resource_type = 6;
+  string resource_id = 7;
+  optional string workspace_id = 8;
+  optional string project_id = 9;
+  optional string environment_id = 10;
+  string result = 11;
+  optional string reason = 12;
+  optional string details = 13; // JSON string
+  optional string client_ip = 14;
+}
+
+message AuditLogList {
+  repeated AuditLogEntry entries = 1;
+  uint64 total_count = 2;
+}
+
+message ListAuditLogsRequest {
+  string workspace_name = 1;
+  optional string principal_id = 2;
+  optional string user_id = 3;
+  optional string project_name = 4;
+  optional string environment_name = 5;
+  optional string action = 6;
+  optional string result = 7;
+  optional string from_timestamp = 8;
+  optional string to_timestamp = 9;
+  optional uint32 limit = 10;
+  optional uint32 offset = 11;
+}
+
+message GetAuditLogRequest {
+  string workspace_name = 1;
+  string audit_log_id = 2;
+}
+
+message CountAuditLogsRequest {
+  string workspace_name = 1;
+  optional string principal_id = 2;
+  optional string user_id = 3;
+  optional string project_name = 4;
+  optional string environment_name = 5;
+  optional string action = 6;
+  optional string result = 7;
+  optional string from_timestamp = 8;
+  optional string to_timestamp = 9;
+}
+
+message CountAuditLogsResponse {
+  uint64 count = 1;
 }

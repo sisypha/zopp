@@ -2,6 +2,9 @@ use chrono::{DateTime, Utc};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use std::str::FromStr;
 use uuid::Uuid;
+use zopp_audit::{
+    AuditAction, AuditEvent, AuditLog, AuditLogError, AuditLogFilter, AuditLogId, AuditResult,
+};
 use zopp_storage::{
     AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalParams,
     CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName, Environment,
@@ -2737,6 +2740,300 @@ impl Store for SqliteStore {
         }
 
         Ok(())
+    }
+}
+
+// ────────────────────────────────────── Audit Log ──────────────────────────────────────
+
+#[async_trait::async_trait]
+impl AuditLog for SqliteStore {
+    async fn record(&self, event: AuditEvent) -> Result<(), AuditLogError> {
+        let id = event.id.0.to_string();
+        let timestamp = event.timestamp.to_rfc3339();
+        let principal_id = event.principal_id.to_string();
+        let user_id = event.user_id.map(|u| u.to_string());
+        let action = event.action.to_string();
+        let workspace_id = event.workspace_id.map(|w| w.to_string());
+        let project_id = event.project_id.map(|p| p.to_string());
+        let environment_id = event.environment_id.map(|e| e.to_string());
+        let result = event.result.to_string();
+        let details = event.details.map(|d| d.to_string());
+
+        sqlx::query!(
+            r#"INSERT INTO audit_logs (
+                id, timestamp, principal_id, user_id, action,
+                resource_type, resource_id, workspace_id, project_id, environment_id,
+                result, reason, details, client_ip
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            id,
+            timestamp,
+            principal_id,
+            user_id,
+            action,
+            event.resource_type,
+            event.resource_id,
+            workspace_id,
+            project_id,
+            environment_id,
+            result,
+            event.reason,
+            details,
+            event.client_ip
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AuditLogError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    async fn query(&self, filter: AuditLogFilter) -> Result<Vec<AuditEvent>, AuditLogError> {
+        // Build the query dynamically based on filters
+        // For simplicity, we'll use a base query and filter in Rust for complex cases
+        // In production, you'd want to build proper parameterized queries
+
+        let limit = filter.limit.unwrap_or(100) as i64;
+        let offset = filter.offset.unwrap_or(0) as i64;
+
+        // Convert filter parameters to strings
+        let principal_id = filter.principal_id.map(|p| p.0.to_string());
+        let user_id = filter.user_id.map(|u| u.0.to_string());
+        let workspace_id = filter.workspace_id.map(|w| w.0.to_string());
+        let project_id = filter.project_id.map(|p| p.0.to_string());
+        let environment_id = filter.environment_id.map(|e| e.0.to_string());
+        let action = filter.action.map(|a| a.to_string());
+        let result = filter.result.map(|r| r.to_string());
+        let from = filter.from.map(|f| f.to_rfc3339());
+        let to = filter.to.map(|t| t.to_rfc3339());
+
+        let rows = sqlx::query!(
+            r#"SELECT id, timestamp, principal_id, user_id, action,
+                      resource_type, resource_id, workspace_id, project_id, environment_id,
+                      result, reason, details, client_ip
+               FROM audit_logs
+               WHERE (? IS NULL OR principal_id = ?)
+                 AND (? IS NULL OR user_id = ?)
+                 AND (? IS NULL OR workspace_id = ?)
+                 AND (? IS NULL OR project_id = ?)
+                 AND (? IS NULL OR environment_id = ?)
+                 AND (? IS NULL OR action = ?)
+                 AND (? IS NULL OR result = ?)
+                 AND (? IS NULL OR timestamp >= ?)
+                 AND (? IS NULL OR timestamp < ?)
+               ORDER BY timestamp DESC
+               LIMIT ? OFFSET ?"#,
+            principal_id,
+            principal_id,
+            user_id,
+            user_id,
+            workspace_id,
+            workspace_id,
+            project_id,
+            project_id,
+            environment_id,
+            environment_id,
+            action,
+            action,
+            result,
+            result,
+            from,
+            from,
+            to,
+            to,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| AuditLogError::Database(e.to_string()))?;
+
+        let mut events = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id =
+                Uuid::parse_str(&row.id).map_err(|e| AuditLogError::Database(e.to_string()))?;
+            let principal_id = Uuid::parse_str(&row.principal_id)
+                .map_err(|e| AuditLogError::Database(e.to_string()))?;
+            let user_id = row
+                .user_id
+                .map(|u| Uuid::parse_str(&u))
+                .transpose()
+                .map_err(|e| AuditLogError::Database(e.to_string()))?;
+            let workspace_id = row
+                .workspace_id
+                .map(|w| Uuid::parse_str(&w))
+                .transpose()
+                .map_err(|e| AuditLogError::Database(e.to_string()))?;
+            let project_id = row
+                .project_id
+                .map(|p| Uuid::parse_str(&p))
+                .transpose()
+                .map_err(|e| AuditLogError::Database(e.to_string()))?;
+            let environment_id = row
+                .environment_id
+                .map(|e| Uuid::parse_str(&e))
+                .transpose()
+                .map_err(|e| AuditLogError::Database(e.to_string()))?;
+            let timestamp = DateTime::parse_from_rfc3339(&row.timestamp)
+                .map_err(|e| AuditLogError::Database(e.to_string()))?
+                .with_timezone(&Utc);
+            let action: AuditAction = row
+                .action
+                .parse()
+                .map_err(|e: String| AuditLogError::Database(e))?;
+            let result: AuditResult = row
+                .result
+                .parse()
+                .map_err(|e: String| AuditLogError::Database(e))?;
+            let details = row
+                .details
+                .map(|d| serde_json::from_str(&d))
+                .transpose()
+                .map_err(|e| AuditLogError::Database(e.to_string()))?;
+
+            events.push(AuditEvent {
+                id: AuditLogId(id),
+                timestamp,
+                principal_id,
+                user_id,
+                action,
+                resource_type: row.resource_type,
+                resource_id: row.resource_id,
+                workspace_id,
+                project_id,
+                environment_id,
+                result,
+                reason: row.reason,
+                details,
+                client_ip: row.client_ip,
+            });
+        }
+
+        Ok(events)
+    }
+
+    async fn get(&self, id: AuditLogId) -> Result<AuditEvent, AuditLogError> {
+        let id_str = id.0.to_string();
+
+        let row = sqlx::query!(
+            r#"SELECT id, timestamp, principal_id, user_id, action,
+                      resource_type, resource_id, workspace_id, project_id, environment_id,
+                      result, reason, details, client_ip
+               FROM audit_logs WHERE id = ?"#,
+            id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AuditLogError::Database(e.to_string()))?;
+
+        let row = row.ok_or(AuditLogError::NotFound(id))?;
+
+        let uuid_id =
+            Uuid::parse_str(&row.id).map_err(|e| AuditLogError::Database(e.to_string()))?;
+        let principal_id = Uuid::parse_str(&row.principal_id)
+            .map_err(|e| AuditLogError::Database(e.to_string()))?;
+        let user_id = row
+            .user_id
+            .map(|u| Uuid::parse_str(&u))
+            .transpose()
+            .map_err(|e| AuditLogError::Database(e.to_string()))?;
+        let workspace_id = row
+            .workspace_id
+            .map(|w| Uuid::parse_str(&w))
+            .transpose()
+            .map_err(|e| AuditLogError::Database(e.to_string()))?;
+        let project_id = row
+            .project_id
+            .map(|p| Uuid::parse_str(&p))
+            .transpose()
+            .map_err(|e| AuditLogError::Database(e.to_string()))?;
+        let environment_id = row
+            .environment_id
+            .map(|e| Uuid::parse_str(&e))
+            .transpose()
+            .map_err(|e| AuditLogError::Database(e.to_string()))?;
+        let timestamp = DateTime::parse_from_rfc3339(&row.timestamp)
+            .map_err(|e| AuditLogError::Database(e.to_string()))?
+            .with_timezone(&Utc);
+        let action: AuditAction = row
+            .action
+            .parse()
+            .map_err(|e: String| AuditLogError::Database(e))?;
+        let result: AuditResult = row
+            .result
+            .parse()
+            .map_err(|e: String| AuditLogError::Database(e))?;
+        let details = row
+            .details
+            .map(|d| serde_json::from_str(&d))
+            .transpose()
+            .map_err(|e| AuditLogError::Database(e.to_string()))?;
+
+        Ok(AuditEvent {
+            id: AuditLogId(uuid_id),
+            timestamp,
+            principal_id,
+            user_id,
+            action,
+            resource_type: row.resource_type,
+            resource_id: row.resource_id,
+            workspace_id,
+            project_id,
+            environment_id,
+            result,
+            reason: row.reason,
+            details,
+            client_ip: row.client_ip,
+        })
+    }
+
+    async fn count(&self, filter: AuditLogFilter) -> Result<u64, AuditLogError> {
+        // Convert filter parameters to strings
+        let principal_id = filter.principal_id.map(|p| p.0.to_string());
+        let user_id = filter.user_id.map(|u| u.0.to_string());
+        let workspace_id = filter.workspace_id.map(|w| w.0.to_string());
+        let project_id = filter.project_id.map(|p| p.0.to_string());
+        let environment_id = filter.environment_id.map(|e| e.0.to_string());
+        let action = filter.action.map(|a| a.to_string());
+        let result = filter.result.map(|r| r.to_string());
+        let from = filter.from.map(|f| f.to_rfc3339());
+        let to = filter.to.map(|t| t.to_rfc3339());
+
+        let row = sqlx::query!(
+            r#"SELECT COUNT(*) as count
+               FROM audit_logs
+               WHERE (? IS NULL OR principal_id = ?)
+                 AND (? IS NULL OR user_id = ?)
+                 AND (? IS NULL OR workspace_id = ?)
+                 AND (? IS NULL OR project_id = ?)
+                 AND (? IS NULL OR environment_id = ?)
+                 AND (? IS NULL OR action = ?)
+                 AND (? IS NULL OR result = ?)
+                 AND (? IS NULL OR timestamp >= ?)
+                 AND (? IS NULL OR timestamp < ?)"#,
+            principal_id,
+            principal_id,
+            user_id,
+            user_id,
+            workspace_id,
+            workspace_id,
+            project_id,
+            project_id,
+            environment_id,
+            environment_id,
+            action,
+            action,
+            result,
+            result,
+            from,
+            from,
+            to,
+            to
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| AuditLogError::Database(e.to_string()))?;
+
+        Ok(row.count as u64)
     }
 }
 

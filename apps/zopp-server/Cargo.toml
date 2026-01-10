@@ -16,6 +16,7 @@ tokio = { workspace = true }
 tokio-stream = { workspace = true }
 prost = { workspace = true }
 futures = { workspace = true }
+zopp-audit = { path = "../../crates/zopp-audit", version = "0.1.1" }
 zopp-proto = { path = "../../crates/zopp-proto", version = "0.1.0" }
 zopp-storage = { path = "../../crates/zopp-storage", version = "0.1.0" }
 zopp-store-postgres = { path = "../../crates/zopp-store-postgres", version = "0.1.0" }

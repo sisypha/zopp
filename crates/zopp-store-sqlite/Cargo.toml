@@ -13,10 +13,12 @@ chrono = { workspace = true }
 dirs = { workspace = true }
 hex = { workspace = true }
 rand_core = { workspace = true }
+serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-native-tls", "migrate", "macros", "chrono"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
+zopp-audit = { path = "../../crates/zopp-audit", version = "0.1.1" }
 zopp-storage = { path = "../../crates/zopp-storage", version = "0.1.0" }
 
 [dev-dependencies]

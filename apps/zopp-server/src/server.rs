@@ -5,6 +5,7 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tonic::Status;
+use zopp_audit::{AuditEvent, AuditLog};
 use zopp_events::EventBus;
 use zopp_storage::{EnvironmentId, Principal, PrincipalId, ProjectId, Store, WorkspaceId};
 use zopp_store_postgres::PostgresStore;
@@ -994,6 +995,104 @@ impl ZoppServer {
             .map_err(|_| Status::unauthenticated("Invalid signature"))?;
 
         Ok(principal)
+    }
+
+    /// Check if principal has at least the required role at the workspace level.
+    /// Simplified version of check_permission for operations that only need workspace access.
+    pub async fn check_permission_workspace_only(
+        &self,
+        principal_id: &PrincipalId,
+        workspace_id: &WorkspaceId,
+        required_role: zopp_storage::Role,
+    ) -> Result<(), Status> {
+        // Get the principal to find their user_id
+        let principal = self
+            .store
+            .get_principal(principal_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get principal: {}", e)))?;
+
+        // Workspace owners always have Admin access
+        if let Some(ref uid) = principal.user_id {
+            let workspace = self
+                .store
+                .get_workspace(workspace_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get workspace: {}", e)))?;
+            if workspace.owner_user_id == *uid {
+                return Ok(());
+            }
+        }
+
+        // Get principal-level workspace permission (if any) - this acts as a ceiling
+        let principal_permission = self
+            .store
+            .get_workspace_permission(workspace_id, principal_id)
+            .await
+            .ok();
+
+        // Get workspace permission
+        let user_id = match principal.user_id {
+            Some(uid) => uid,
+            None => {
+                // Service account: principal permission is their only source
+                return match principal_permission {
+                    Some(role) if role.includes(&required_role) => Ok(()),
+                    Some(_) => Err(Status::permission_denied(
+                        "Insufficient service account permissions",
+                    )),
+                    None => Err(Status::permission_denied(
+                        "No permissions found for service account",
+                    )),
+                };
+            }
+        };
+
+        // Human user - check user + group permissions
+        let mut base_role: Option<zopp_storage::Role> = None;
+
+        if let Ok(role) = self
+            .store
+            .get_user_workspace_permission(workspace_id, &user_id)
+            .await
+        {
+            base_role = Some(role);
+        }
+
+        // Check group permissions
+        if let Ok(groups) = self.store.list_user_groups(&user_id).await {
+            for group in &groups {
+                if let Ok(role) = self
+                    .store
+                    .get_group_workspace_permission(workspace_id, &group.id)
+                    .await
+                {
+                    base_role = Some(self.max_role(base_role, role));
+                }
+            }
+        }
+
+        // Apply principal permission as ceiling (same as check_workspace_permission)
+        let effective_role = match (base_role, principal_permission) {
+            (Some(base), Some(ceiling)) => Some(self.min_role(base, ceiling)),
+            (Some(base), None) => Some(base),
+            (None, Some(_)) => None, // Principal permission alone doesn't grant access
+            (None, None) => None,
+        };
+
+        match effective_role {
+            Some(role) if role.includes(&required_role) => Ok(()),
+            Some(_) => Err(Status::permission_denied("Insufficient permissions")),
+            None => Err(Status::permission_denied("No permissions found")),
+        }
+    }
+
+    /// Record an audit event. Failures are logged but do not fail the operation.
+    pub async fn audit(&self, event: AuditEvent) {
+        if let Err(e) = self.store.record(event).await {
+            // Log the error but don't fail the operation
+            eprintln!("Failed to record audit event: {}", e);
+        }
     }
 }
 
