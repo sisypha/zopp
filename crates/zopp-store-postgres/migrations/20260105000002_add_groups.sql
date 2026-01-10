@@ -3,7 +3,7 @@
 
 -- Groups table (scoped to workspace)
 CREATE TABLE IF NOT EXISTS groups (
-  id UUID PRIMARY KEY,
+  id UUID PRIMARY KEY NOT NULL,
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
