@@ -122,7 +122,7 @@ pub async fn list_invites(
     request: Request<Empty>,
 ) -> Result<Response<InviteList>, Status> {
     let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
-    let req_for_verify = request.get_ref().clone();
+    let req_for_verify = *request.get_ref();
     let principal = server
         .verify_signature_and_get_principal(
             &principal_id,

@@ -955,7 +955,7 @@ impl ZoppServer {
         hasher.update(&body_bytes);
         let expected_hash = hasher.finalize();
 
-        if expected_hash.as_slice() != provided_hash {
+        if &expected_hash[..] != provided_hash {
             return Err(Status::unauthenticated(
                 "Request hash mismatch - body may have been tampered",
             ));
