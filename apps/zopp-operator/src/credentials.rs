@@ -160,6 +160,7 @@ impl OperatorCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_env_var_names() {
@@ -171,7 +172,9 @@ mod tests {
         assert_eq!(env_vars::X25519_PUBLIC_KEY, "ZOPP_X25519_PUBLIC_KEY");
     }
 
+    // Tests that modify environment variables must run serially to avoid race conditions
     #[test]
+    #[serial]
     fn test_from_env_missing_var() {
         // Clear any existing env vars
         std::env::remove_var(env_vars::PRINCIPAL_ID);

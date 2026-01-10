@@ -42,3 +42,4 @@ tracing-subscriber = { workspace = true }
 [dev-dependencies]
 zopp-config = { path = "../../crates/zopp-config", version = "0.1.0" }
 reqwest = { workspace = true }
+serial_test = { workspace = true }

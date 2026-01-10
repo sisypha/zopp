@@ -189,7 +189,17 @@ impl ZoppSecretSyncStatus {
     }
 
     /// Set or update a condition.
-    pub fn set_condition(&mut self, condition: Condition) {
+    ///
+    /// Per Kubernetes convention, `lastTransitionTime` is preserved if the status
+    /// hasn't changed (e.g., still "True" → "True"). It's only updated when the
+    /// status actually transitions (e.g., "True" → "False").
+    pub fn set_condition(&mut self, mut condition: Condition) {
+        // Check if existing condition has same status - preserve lastTransitionTime
+        if let Some(existing) = self.conditions.iter().find(|c| c.type_ == condition.type_) {
+            if existing.status == condition.status {
+                condition.last_transition_time = existing.last_transition_time.clone();
+            }
+        }
         // Remove existing condition of the same type
         self.conditions.retain(|c| c.type_ != condition.type_);
         self.conditions.push(condition);
@@ -269,5 +279,35 @@ mod tests {
         status.set_condition(cond2);
         assert_eq!(status.conditions.len(), 1);
         assert!(status.is_ready());
+    }
+
+    #[test]
+    fn test_set_condition_preserves_last_transition_time_when_status_unchanged() {
+        let mut status = ZoppSecretSyncStatus::new();
+
+        // Set initial condition
+        let mut cond1 = Condition::new("Ready", "True", "SyncSuccess", "Synced 10 secrets");
+        cond1.last_transition_time = "2025-01-01T00:00:00Z".to_string();
+        status.set_condition(cond1);
+
+        let original_time = status
+            .get_condition("Ready")
+            .unwrap()
+            .last_transition_time
+            .clone();
+
+        // Update with same status but different message - should preserve lastTransitionTime
+        let cond2 = Condition::new("Ready", "True", "SyncSuccess", "Synced 15 secrets");
+        status.set_condition(cond2);
+
+        let preserved_time = &status.get_condition("Ready").unwrap().last_transition_time;
+        assert_eq!(preserved_time, &original_time);
+
+        // Update with different status - should update lastTransitionTime
+        let cond3 = Condition::new("Ready", "False", "SyncFailed", "Connection error");
+        status.set_condition(cond3);
+
+        let new_time = &status.get_condition("Ready").unwrap().last_transition_time;
+        assert_ne!(new_time, &original_time);
     }
 }
