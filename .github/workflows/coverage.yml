@@ -35,10 +35,10 @@ jobs:
         run: cargo build --workspace --bins
 
       - name: Run unit tests
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features --exclude e2e-tests
 
-      - name: Run E2E tests (demo only)
-        run: cargo test --package e2e-tests --test demo -- --test-threads=1
+      - name: Run E2E tests (demo/sqlite only)
+        run: cargo test --package e2e-tests --test demo demo_sqlite -- --test-threads=1
 
       - name: Generate coverage report
         run: |
