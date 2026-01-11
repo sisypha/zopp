@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== E2E Test Coverage Collection ==="
+echo "=== Test Coverage Collection ==="
 
 # Check if cargo-llvm-cov is installed
 if ! command -v cargo-llvm-cov &> /dev/null; then
@@ -31,12 +31,13 @@ cargo test --package e2e-tests -- --test-threads=1
 
 # Generate reports
 echo "Generating coverage reports..."
-mkdir -p target/coverage
-cargo llvm-cov report --lcov --output-path target/coverage/e2e-coverage.lcov
-cargo llvm-cov report --html --output-dir target/coverage/html
-cargo llvm-cov report
+mkdir -p coverage
+cargo llvm-cov report --lcov --output-path coverage/lcov.info
+cargo llvm-cov report --html --output-dir coverage/html
+cargo llvm-cov report | tee coverage/summary.txt
 
 echo ""
 echo "=== Coverage reports generated ==="
-echo "  LCOV: target/coverage/e2e-coverage.lcov"
-echo "  HTML: target/coverage/html/index.html"
+echo "  LCOV: coverage/lcov.info"
+echo "  HTML: coverage/html/index.html"
+echo "  Summary: coverage/summary.txt"
