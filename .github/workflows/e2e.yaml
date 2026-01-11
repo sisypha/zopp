@@ -177,20 +177,22 @@ jobs:
           EOF
 
           # Create/update gh-pages branch
-          git fetch origin gh-pages:gh-pages 2>/dev/null || git checkout --orphan gh-pages
-          git checkout gh-pages
-
-          # Clear old coverage files but keep other content
-          rm -rf coverage/
+          if git fetch origin gh-pages:gh-pages 2>/dev/null; then
+            git checkout gh-pages
+          else
+            # Create orphan branch for first-time setup
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+          fi
 
           # Copy new coverage report to coverage/ subdirectory
           git checkout ${{ github.sha }} -- coverage/
-          mkdir -p coverage_new
-          mv coverage/html/* coverage_new/ 2>/dev/null || true
+          mkdir -p coverage_tmp
+          mv coverage/html/* coverage_tmp/ 2>/dev/null || true
           mv coverage/coverage-baseline.txt ./
           mv coverage/badge.json ./
           rm -rf coverage/
-          mv coverage_new coverage/
+          mv coverage_tmp coverage/
 
           # Commit and push
           git add -A
