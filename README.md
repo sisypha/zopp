@@ -11,6 +11,7 @@ zopp is the open-source, self-hostable, CLI-first secrets manager that keeps you
 [![Build](https://github.com/faiscadev/zopp/actions/workflows/build.yaml/badge.svg)](https://github.com/faiscadev/zopp/actions/workflows/build.yaml)
 [![Test](https://github.com/faiscadev/zopp/actions/workflows/test.yaml/badge.svg)](https://github.com/faiscadev/zopp/actions/workflows/test.yaml)
 [![Security Audit](https://github.com/faiscadev/zopp/actions/workflows/audit.yaml/badge.svg)](https://github.com/faiscadev/zopp/actions/workflows/audit.yaml)
+[![Coverage](https://img.shields.io/endpoint?url=https://faiscadev.github.io/zopp/badge.json)](https://faiscadev.github.io/zopp/)
 
 
 ---

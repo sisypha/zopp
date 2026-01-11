@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -100,7 +102,7 @@ async fn run_demo_test(
         }
         if i == 30 {
             eprintln!("❌ Server failed to start within 6 seconds");
-            let _ = server.kill();
+            common::graceful_shutdown(&mut server);
             return Err("Server not ready".into());
         }
     }
@@ -551,8 +553,7 @@ async fn run_demo_test(
 
     // Cleanup
     println!("🧹 Cleaning up...");
-    let _ = server.kill();
-    let _ = server.wait();
+    common::graceful_shutdown(&mut server);
     println!("✓ Server stopped\n");
 
     println!("✅ E2E Test Passed!");

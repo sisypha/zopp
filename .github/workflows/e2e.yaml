@@ -1,0 +1,198 @@
+name: E2E Tests & Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run tests with coverage
+        run: ./scripts/e2e-coverage.sh
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          # Extract line coverage from the TOTAL row (second-to-last percentage)
+          COVERAGE=$(grep "^TOTAL" coverage/summary.txt | awk '{for(i=1;i<=NF;i++) if($i ~ /%$/) last=$i} END{print last}' | tr -d '%')
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "Current coverage: $COVERAGE%"
+
+      - name: Fetch baseline coverage
+        id: baseline
+        run: |
+          # Try to fetch baseline from gh-pages branch
+          BASELINE=$(curl -sf "https://raw.githubusercontent.com/${{ github.repository }}/gh-pages/coverage-baseline.txt" || echo "0")
+          echo "percentage=$BASELINE" >> $GITHUB_OUTPUT
+          echo "Baseline coverage: $BASELINE%"
+
+      - name: Check coverage regression
+        if: github.event_name == 'pull_request'
+        run: |
+          CURRENT="${{ steps.coverage.outputs.percentage }}"
+          BASELINE="${{ steps.baseline.outputs.percentage }}"
+
+          echo "Current: $CURRENT%, Baseline: $BASELINE%"
+
+          # Use bc for floating point comparison
+          if (( $(echo "$CURRENT < $BASELINE" | bc -l) )); then
+            echo "::error::Coverage decreased from $BASELINE% to $CURRENT%"
+            exit 1
+          else
+            DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
+            echo "Coverage change: +$DIFF%"
+          fi
+
+      - name: Post coverage comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const current = '${{ steps.coverage.outputs.percentage }}';
+            const baseline = '${{ steps.baseline.outputs.percentage }}';
+            const diff = (parseFloat(current) - parseFloat(baseline)).toFixed(2);
+            const sign = diff >= 0 ? '+' : '';
+            const emoji = diff >= 0 ? ':white_check_mark:' : ':warning:';
+
+            const body = `## ${emoji} Coverage Report
+
+            | Metric | Value |
+            |--------|-------|
+            | **Current** | ${current}% |
+            | **Baseline** | ${baseline}% |
+            | **Change** | ${sign}${diff}% |
+
+            <details>
+            <summary>View full report</summary>
+
+            Download the \`coverage-report\` artifact or view on [GitHub Pages](https://${{ github.repository_owner }}.github.io/${context.repo.repo}/coverage/) after merge.
+            </details>`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c => c.body.includes('Coverage Report') && c.user.type === 'Bot');
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+
+      - name: Deploy coverage to GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          COVERAGE="${{ steps.coverage.outputs.percentage }}"
+
+          # Save coverage percentage for baseline
+          echo "$COVERAGE" > coverage/coverage-baseline.txt
+
+          # Generate badge JSON for shields.io
+          # Color: red < 50, yellow < 80, green >= 80
+          if (( $(echo "$COVERAGE < 50" | bc -l) )); then
+            COLOR="red"
+          elif (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            COLOR="yellow"
+          else
+            COLOR="brightgreen"
+          fi
+
+          cat > coverage/badge.json << EOF
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${COVERAGE}%",
+            "color": "${COLOR}"
+          }
+          EOF
+
+          # Create/update gh-pages branch
+          git fetch origin gh-pages:gh-pages 2>/dev/null || git checkout --orphan gh-pages
+          git checkout gh-pages
+
+          # Clear old coverage files but keep other content
+          rm -rf coverage/
+
+          # Copy new coverage report to coverage/ subdirectory
+          git checkout ${{ github.sha }} -- coverage/
+          mkdir -p coverage_new
+          mv coverage/html/* coverage_new/ 2>/dev/null || true
+          mv coverage/coverage-baseline.txt ./
+          mv coverage/badge.json ./
+          rm -rf coverage/
+          mv coverage_new coverage/
+
+          # Commit and push
+          git add -A
+          git commit -m "Update coverage report for ${{ github.sha }}" || echo "No changes to commit"
+          git push origin gh-pages

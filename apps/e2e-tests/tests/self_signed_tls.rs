@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -79,6 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_addr = format!("0.0.0.0:{}", server_port);
     let health_addr = format!("0.0.0.0:{}", server_health_port);
     let mut server = Command::new(&zopp_server_bin)
+        .env_remove("DATABASE_URL") // Ensure we use SQLite via --db, not inherited Postgres
         .env("RUST_LOG", "info")
         .args([
             "--db",
@@ -109,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if i == 30 {
             eprintln!("❌ Server failed to start within 6 seconds");
-            let _ = server.kill();
+            common::graceful_shutdown(&mut server);
             return Err("Server not ready".into());
         }
     }
@@ -120,6 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 3: Create server invite
     println!("🎫 Step 3: Creating server invite...");
     let output = Command::new(&zopp_server_bin)
+        .env_remove("DATABASE_URL") // Ensure we use SQLite via --db
         .args([
             "--db",
             db_path.to_str().unwrap(),
@@ -132,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .output()?;
 
     if !output.status.success() {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to create server invite".into());
     }
 
@@ -165,7 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(log_contents) = fs::read_to_string(&server_log) {
             eprintln!("{}", log_contents);
         }
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Alice failed to join".into());
     }
     println!("✓ Alice joined successfully via TLS\n");
@@ -186,7 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .output()?;
     if !output.status.success() {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to create workspace".into());
     }
 
@@ -205,7 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .output()?;
     if !output.status.success() {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to create project".into());
     }
 
@@ -226,7 +230,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .output()?;
     if !output.status.success() {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to create environment".into());
     }
     println!("✓ Workspace/project/environment created\n");
@@ -253,7 +257,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .output()?;
     if !output.status.success() {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to set secret".into());
     }
     println!("✓ Secret set successfully\n");
@@ -279,12 +283,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .output()?;
     if !output.status.success() {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to get secret".into());
     }
     let secret_value = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if secret_value != "postgresql://localhost/prod" {
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err(format!(
             "Secret mismatch: expected 'postgresql://localhost/prod', got '{}'",
             secret_value
@@ -309,7 +313,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if !status.success() {
         eprintln!("❌ kind cluster creation failed");
-        let _ = server.kill();
+        common::graceful_shutdown(&mut server);
         return Err("Failed to create kind cluster".into());
     }
     println!("✓ kind cluster created\n");
@@ -380,8 +384,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Ok(log_contents) = fs::read_to_string(&server_log) {
                 eprintln!("{}", log_contents);
             }
-            let _ = operator.kill();
-            let _ = server.kill();
+            common::graceful_shutdown(&mut operator);
+            common::graceful_shutdown(&mut server);
             cleanup_kind(cluster_name)?;
             return Err("Secret not synced correctly".into());
         }
@@ -390,8 +394,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Cleanup
     println!("🧹 Cleaning up...");
-    let _ = operator.kill();
-    let _ = server.kill();
+    common::graceful_shutdown(&mut operator);
+    common::graceful_shutdown(&mut server);
     cleanup_kind(cluster_name)?;
 
     println!("\n✅ Self-Signed TLS E2E Test Passed!");

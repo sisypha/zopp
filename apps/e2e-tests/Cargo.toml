@@ -14,6 +14,9 @@ sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
 kube = { workspace = true }
 k8s-openapi = { workspace = true }
 
+# For graceful shutdown (coverage collection)
+nix = { version = "0.29", features = ["signal"] }
+
 [[test]]
 name = "demo"
 path = "tests/demo.rs"
