@@ -51,15 +51,17 @@ jobs:
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
           cargo build --workspace --bins
-
-      - name: Run unit tests with coverage
-        run: cargo llvm-cov --workspace --all-features --no-report
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
 
       - name: Run E2E tests with coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
+          cargo llvm-cov clean --workspace
           cargo test --package e2e-tests --test demo -- --test-threads=1
           cargo test --package e2e-tests --test rbac -- --test-threads=1
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
 
       - name: Generate coverage report
         run: |
