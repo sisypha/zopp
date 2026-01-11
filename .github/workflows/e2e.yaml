@@ -49,23 +49,15 @@ jobs:
 
       - name: Run E2E tests with coverage
         run: |
-          # Setup coverage environment
-          source <(cargo llvm-cov show-env --export-prefix)
-          export CARGO_TARGET_DIR=$PWD/target/llvm-cov-target
           cargo llvm-cov clean --workspace
-
-          # Build instrumented binaries
-          cargo build --workspace --bins
-
-          # Run e2e tests (they spawn the binaries)
-          cargo test --package e2e-tests --test demo -- --test-threads=1
-          cargo test --package e2e-tests --test rbac -- --test-threads=1
-
+          # cargo llvm-cov test sets CARGO_TARGET_DIR internally for subprocess
+          cargo llvm-cov test --no-report --package e2e-tests --test demo -- --test-threads=1
+          cargo llvm-cov test --no-report --package e2e-tests --test rbac -- --test-threads=1
           # Generate reports
           mkdir -p coverage
-          cargo llvm-cov report --target-dir $CARGO_TARGET_DIR --lcov --output-path coverage/lcov.info
-          cargo llvm-cov report --target-dir $CARGO_TARGET_DIR --html --output-dir coverage/html
-          cargo llvm-cov report --target-dir $CARGO_TARGET_DIR | tee coverage/summary.txt
+          cargo llvm-cov report --lcov --output-path coverage/lcov.info
+          cargo llvm-cov report --html --output-dir coverage/html
+          cargo llvm-cov report | tee coverage/summary.txt
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
 
