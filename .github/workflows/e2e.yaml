@@ -117,7 +117,7 @@ jobs:
             <details>
             <summary>View full report</summary>
 
-            Download the \`coverage-report\` artifact or view on [GitHub Pages](https://${{ github.repository_owner }}.github.io/${context.repo.repo}/coverage/) (after merge)
+            Download the \`coverage-report\` artifact or view on [GitHub Pages](https://${{ github.repository_owner }}.github.io/${context.repo.repo}/coverage/) after merge.
             </details>`;
 
             // Find existing comment
@@ -183,12 +183,14 @@ jobs:
           # Clear old coverage files but keep other content
           rm -rf coverage/
 
-          # Copy new coverage report
+          # Copy new coverage report to coverage/ subdirectory
           git checkout ${{ github.sha }} -- coverage/
-          mv coverage/html/* ./ 2>/dev/null || true
+          mkdir -p coverage_new
+          mv coverage/html/* coverage_new/ 2>/dev/null || true
           mv coverage/coverage-baseline.txt ./
           mv coverage/badge.json ./
           rm -rf coverage/
+          mv coverage_new coverage/
 
           # Commit and push
           git add -A
