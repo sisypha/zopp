@@ -58,8 +58,13 @@ jobs:
       - name: Run E2E tests with coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
+          echo "LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE"
+          echo "CARGO_TARGET_DIR=$CARGO_TARGET_DIR"
           cargo test --package e2e-tests --test demo -- --test-threads=1
           cargo test --package e2e-tests --test rbac -- --test-threads=1
+          echo "=== Looking for profraw files ==="
+          find target -name "*.profraw" -type f 2>/dev/null || true
+          ls -la target/llvm-cov-target/*.profraw 2>/dev/null || true
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
 
