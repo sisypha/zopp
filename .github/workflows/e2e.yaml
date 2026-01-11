@@ -49,10 +49,18 @@ jobs:
 
       - name: Run E2E tests with coverage
         run: |
+          # Setup coverage environment
+          source <(cargo llvm-cov show-env --export-prefix)
+          export CARGO_TARGET_DIR=$PWD/target/llvm-cov-target
           cargo llvm-cov clean --workspace
-          # Build binaries and run e2e tests
-          cargo llvm-cov test --no-report --package e2e-tests --test demo -- --test-threads=1
-          cargo llvm-cov test --no-report --package e2e-tests --test rbac -- --test-threads=1
+
+          # Build instrumented binaries
+          cargo build --workspace --bins
+
+          # Run e2e tests (they spawn the binaries)
+          cargo test --package e2e-tests --test demo -- --test-threads=1
+          cargo test --package e2e-tests --test rbac -- --test-threads=1
+
           # Generate reports
           mkdir -p coverage
           cargo llvm-cov report --lcov --output-path coverage/lcov.info
