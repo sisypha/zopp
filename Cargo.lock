@@ -4347,6 +4347,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "zopp-audit"
+version = "0.1.1"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "uuid",
+ "zopp-storage",
+]
+
+[[package]]
 name = "zopp-cli"
 version = "0.1.1"
 dependencies = [
@@ -4504,6 +4517,7 @@ dependencies = [
  "tonic",
  "tonic-health",
  "uuid",
+ "zopp-audit",
  "zopp-crypto",
  "zopp-events",
  "zopp-events-memory",
@@ -4532,11 +4546,13 @@ dependencies = [
  "chrono",
  "hex",
  "rand_core 0.6.4",
+ "serde_json",
  "sha2",
  "sqlx",
  "thiserror 2.0.17",
  "tokio",
  "uuid",
+ "zopp-audit",
  "zopp-storage",
 ]
 
@@ -4549,9 +4565,11 @@ dependencies = [
  "dirs",
  "hex",
  "rand_core 0.6.4",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.17",
  "tokio",
  "uuid",
+ "zopp-audit",
  "zopp-storage",
 ]

@@ -1,0 +1,17 @@
+[package]
+name = "zopp-audit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Audit logging abstraction for zopp"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
+zopp-storage = { path = "../zopp-storage", version = "0.1.1" }

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use zopp_audit::{AuditEvent, AuditLog, AuditLogError, AuditLogFilter, AuditLogId};
 use zopp_storage::*;
 use zopp_store_postgres::PostgresStore;
 use zopp_store_sqlite::SqliteStore;
@@ -1026,6 +1027,37 @@ impl Store for StoreBackend {
                 s.remove_user_environment_permission(environment_id, user_id)
                     .await
             }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl AuditLog for StoreBackend {
+    async fn record(&self, event: AuditEvent) -> Result<(), AuditLogError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.record(event).await,
+            StoreBackend::Postgres(s) => s.record(event).await,
+        }
+    }
+
+    async fn query(&self, filter: AuditLogFilter) -> Result<Vec<AuditEvent>, AuditLogError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.query(filter).await,
+            StoreBackend::Postgres(s) => s.query(filter).await,
+        }
+    }
+
+    async fn get(&self, id: AuditLogId) -> Result<AuditEvent, AuditLogError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get(id).await,
+            StoreBackend::Postgres(s) => s.get(id).await,
+        }
+    }
+
+    async fn count(&self, filter: AuditLogFilter) -> Result<u64, AuditLogError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.count(filter).await,
+            StoreBackend::Postgres(s) => s.count(filter).await,
         }
     }
 }

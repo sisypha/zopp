@@ -1,0 +1,110 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, timestamp, principal_id, user_id, action,\n                      resource_type, resource_id, workspace_id, project_id, environment_id,\n                      result, reason, details, client_ip\n               FROM audit_logs\n               WHERE ($1::uuid IS NULL OR principal_id = $1)\n                 AND ($2::uuid IS NULL OR user_id = $2)\n                 AND ($3::uuid IS NULL OR workspace_id = $3)\n                 AND ($4::uuid IS NULL OR project_id = $4)\n                 AND ($5::uuid IS NULL OR environment_id = $5)\n                 AND ($6::text IS NULL OR action = $6)\n                 AND ($7::text IS NULL OR result = $7)\n                 AND ($8::timestamptz IS NULL OR timestamp >= $8)\n                 AND ($9::timestamptz IS NULL OR timestamp < $9)\n               ORDER BY timestamp DESC\n               LIMIT $10 OFFSET $11",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "timestamp",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "principal_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "action",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "resource_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "resource_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "environment_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "result",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "details",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 13,
+        "name": "client_ip",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "e9014573153e832100b1b8a53f368c0341ec3136d87eac47490a18a99eb17df2"
+}

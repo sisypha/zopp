@@ -12,7 +12,9 @@
 //! - groups: group CRUD + membership
 //! - group_permissions: group permissions at all levels
 //! - user_permissions: user permissions at all levels
+//! - audit: audit log queries
 
+pub mod audit;
 pub mod auth;
 pub mod environments;
 pub mod group_permissions;
@@ -582,5 +584,28 @@ impl ZoppService for ZoppServer {
         request: Request<RemoveUserEnvironmentPermissionRequest>,
     ) -> Result<Response<Empty>, Status> {
         user_permissions::remove_user_environment_permission(self, request).await
+    }
+
+    // ───────────────────────────────────── Audit Logs ─────────────────────────────────────
+
+    async fn list_audit_logs(
+        &self,
+        request: Request<ListAuditLogsRequest>,
+    ) -> Result<Response<AuditLogList>, Status> {
+        audit::list_audit_logs(self, request).await
+    }
+
+    async fn get_audit_log(
+        &self,
+        request: Request<GetAuditLogRequest>,
+    ) -> Result<Response<AuditLogEntry>, Status> {
+        audit::get_audit_log(self, request).await
+    }
+
+    async fn count_audit_logs(
+        &self,
+        request: Request<CountAuditLogsRequest>,
+    ) -> Result<Response<CountAuditLogsResponse>, Status> {
+        audit::count_audit_logs(self, request).await
     }
 }

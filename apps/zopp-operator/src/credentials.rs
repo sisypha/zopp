@@ -35,11 +35,33 @@ pub mod env_vars {
 }
 
 /// Operator credentials - wraps a standard PrincipalConfig and caches DEKs
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct OperatorCredentials {
     pub principal: PrincipalConfig,
     /// Cached environment DEKs (workspace/project/environment -> DEK bytes)
     dek_cache: Arc<RwLock<HashMap<String, [u8; 32]>>>,
+}
+
+// Manual Debug implementation to avoid exposing private keys in logs
+impl std::fmt::Debug for OperatorCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OperatorCredentials")
+            .field("principal_id", &self.principal.id)
+            .field("principal_name", &self.principal.name)
+            .field("private_key", &"[REDACTED]")
+            .field("public_key", &self.principal.public_key)
+            .field("x25519_private_key", &"[REDACTED]")
+            .field(
+                "x25519_public_key",
+                &self
+                    .principal
+                    .x25519_public_key
+                    .as_deref()
+                    .unwrap_or("[NOT SET]"),
+            )
+            .field("dek_cache_size", &"[LOCKED]")
+            .finish()
+    }
 }
 
 impl OperatorCredentials {

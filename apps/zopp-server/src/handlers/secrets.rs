@@ -4,6 +4,7 @@ use chrono::Utc;
 use futures::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
+use zopp_audit::{AuditAction, AuditEvent, AuditResult};
 use zopp_events::{EventType, SecretChangeEvent};
 use zopp_proto::{
     DeleteSecretRequest, Empty, GetSecretRequest, ListSecretsRequest, Secret, SecretList,
@@ -104,6 +105,25 @@ pub async fn upsert_secret(
     };
     let _ = server.events.publish(&env.id, event).await;
 
+    // Audit log - determine if this was a create or update based on version
+    let action = if new_version == 1 {
+        AuditAction::SecretCreate
+    } else {
+        AuditAction::SecretUpdate
+    };
+    server
+        .audit(
+            AuditEvent::builder(&principal_id, action)
+                .user_id(principal.user_id.as_ref())
+                .resource("secret", &req.key)
+                .workspace_id(Some(&workspace.id))
+                .project_id(Some(&project.id))
+                .environment_id(Some(&env.id))
+                .result(AuditResult::Success)
+                .build(),
+        )
+        .await;
+
     Ok(Response::new(Empty {}))
 }
 
@@ -190,6 +210,20 @@ pub async fn get_secret(
             zopp_storage::StoreError::NotFound => Status::not_found("Secret not found"),
             _ => Status::internal(format!("Failed to get secret: {}", e)),
         })?;
+
+    // Audit log - secret read
+    server
+        .audit(
+            AuditEvent::builder(&principal_id, AuditAction::SecretRead)
+                .user_id(principal.user_id.as_ref())
+                .resource("secret", &req.key)
+                .workspace_id(Some(&workspace.id))
+                .project_id(Some(&project.id))
+                .environment_id(Some(&env.id))
+                .result(AuditResult::Success)
+                .build(),
+        )
+        .await;
 
     Ok(Response::new(Secret {
         key: req.key,
@@ -297,6 +331,21 @@ pub async fn list_secrets(
         });
     }
 
+    // Audit log - secret list
+    server
+        .audit(
+            AuditEvent::builder(&principal_id, AuditAction::SecretList)
+                .user_id(principal.user_id.as_ref())
+                .resource("environment", env.id.0.to_string())
+                .workspace_id(Some(&workspace.id))
+                .project_id(Some(&project.id))
+                .environment_id(Some(&env.id))
+                .result(AuditResult::Success)
+                .details(serde_json::json!({ "count": secrets.len() }))
+                .build(),
+        )
+        .await;
+
     Ok(Response::new(SecretList {
         secrets,
         version: env.version,
@@ -396,6 +445,20 @@ pub async fn delete_secret(
         timestamp: Utc::now().timestamp(),
     };
     let _ = server.events.publish(&env.id, event).await;
+
+    // Audit log - secret delete
+    server
+        .audit(
+            AuditEvent::builder(&principal_id, AuditAction::SecretDelete)
+                .user_id(principal.user_id.as_ref())
+                .resource("secret", &req.key)
+                .workspace_id(Some(&workspace.id))
+                .project_id(Some(&project.id))
+                .environment_id(Some(&env.id))
+                .result(AuditResult::Success)
+                .build(),
+        )
+        .await;
 
     Ok(Response::new(Empty {}))
 }

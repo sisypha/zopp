@@ -4,6 +4,7 @@ members = [
     "apps/zopp-cli",
     "apps/zopp-operator",
     "apps/zopp-server",
+    "crates/zopp-audit",
     "crates/zopp-config",
     "crates/zopp-crypto",
     "crates/zopp-events",
