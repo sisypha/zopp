@@ -50,5 +50,5 @@ jobs:
       - name: Build all binaries
         run: cargo build --bins --locked
 
-      - name: Run all tests
-        run: cargo test --workspace --all-features --locked
+      - name: Run unit and integration tests
+        run: cargo test --workspace --all-features --locked --exclude e2e-tests

@@ -1,4 +1,4 @@
-name: Coverage
+name: E2E Tests & Coverage
 
 on:
   push:
@@ -6,19 +6,43 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  coverage:
+  e2e:
+    name: e2e
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -29,12 +53,13 @@ jobs:
           cargo build --workspace --bins
 
       - name: Run unit tests with coverage
-        run: cargo llvm-cov --workspace --all-features --exclude e2e-tests --exclude zopp-events-postgres --exclude zopp-store-postgres --no-report
+        run: cargo llvm-cov --workspace --all-features --no-report
 
       - name: Run E2E tests with coverage
         run: |
           source <(cargo llvm-cov show-env --export-prefix)
-          cargo test --package e2e-tests --test demo demo_sqlite -- --test-threads=1
+          cargo test --package e2e-tests --test demo -- --test-threads=1
+          cargo test --package e2e-tests --test rbac -- --test-threads=1
 
       - name: Generate coverage report
         run: |
