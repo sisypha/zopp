@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -134,7 +136,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         }
         if i == 30 {
             eprintln!("❌ Server failed to start within 6 seconds");
-            let _ = server.kill();
+            common::graceful_shutdown(&mut server);
             cleanup_kind(cluster_name)?;
             return Err("Server not ready".into());
         }
@@ -590,9 +592,8 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 15: Test 60-second polling safeguard
     println!("⏱️  Step 15: Testing 60-second polling safeguard...");
-    println!("  Killing operator to simulate stream failure...");
-    operator.kill()?;
-    operator.wait()?;
+    println!("  Stopping operator to simulate stream failure...");
+    common::graceful_shutdown(&mut operator);
 
     println!("  Updating secret while operator is down...");
     let output = Command::new(&zopp_bin)
@@ -795,8 +796,7 @@ fn cleanup_all(
     operator: &mut std::process::Child,
     cluster_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _ = operator.kill();
-    let _ = operator.wait();
+    common::graceful_shutdown(operator);
     println!("✓ Operator stopped");
 
     cleanup(server, cluster_name)?;
@@ -808,8 +808,7 @@ fn cleanup(
     server: &mut std::process::Child,
     cluster_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _ = server.kill();
-    let _ = server.wait();
+    common::graceful_shutdown(server);
 
     #[cfg(unix)]
     {

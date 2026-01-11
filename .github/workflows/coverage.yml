@@ -1,0 +1,52 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Setup coverage environment
+        run: |
+          source <(cargo llvm-cov show-env --export-prefix)
+          echo "RUSTFLAGS=$RUSTFLAGS" >> $GITHUB_ENV
+          echo "LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE" >> $GITHUB_ENV
+          echo "CARGO_INCREMENTAL=$CARGO_INCREMENTAL" >> $GITHUB_ENV
+
+      - name: Clean coverage
+        run: cargo llvm-cov clean --workspace
+
+      - name: Build instrumented binaries
+        run: cargo build --workspace --bins
+
+      - name: Run unit tests
+        run: cargo test --workspace --all-features
+
+      - name: Run E2E tests (demo only)
+        run: cargo test --package e2e-tests --test demo -- --test-threads=1
+
+      - name: Generate coverage report
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov report --lcov --output-path coverage/lcov.info
+          cargo llvm-cov report --html --output-dir coverage/html
+          cargo llvm-cov report | tee coverage/summary.txt
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30

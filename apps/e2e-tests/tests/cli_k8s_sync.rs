@@ -1,3 +1,5 @@
+mod common;
+
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -127,7 +129,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
         }
         if i == 30 {
             eprintln!("❌ Server failed to start within 6 seconds");
-            let _ = server.kill();
+            common::graceful_shutdown(&mut server);
             cleanup_kind(cluster_name)?;
             return Err("Server not ready".into());
         }
@@ -667,8 +669,7 @@ fn cleanup(
     server: &mut std::process::Child,
     cluster_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _ = server.kill();
-    let _ = server.wait();
+    common::graceful_shutdown(server);
 
     #[cfg(unix)]
     {

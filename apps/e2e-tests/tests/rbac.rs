@@ -6,6 +6,8 @@
 //! - Permission scopes: workspace, project, environment
 //! - Roles: Admin, Write, Read, None
 
+mod common;
+
 use std::fs;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -1705,8 +1707,7 @@ impl TestEnv {
 impl Drop for TestEnv {
     fn drop(&mut self) {
         if let Some(ref mut server) = self.server_process {
-            let _ = server.kill();
-            let _ = server.wait();
+            common::graceful_shutdown(server);
         }
     }
 }
