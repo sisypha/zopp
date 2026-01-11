@@ -185,10 +185,15 @@ jobs:
           # Create/update gh-pages branch
           if git fetch origin gh-pages:gh-pages 2>/dev/null; then
             git checkout gh-pages
+            # Clean any untracked files from the checkout
+            git clean -fd
           else
             # Create orphan branch for first-time setup
             git checkout --orphan gh-pages
+            # Remove all files from index AND working directory
             git rm -rf . 2>/dev/null || true
+            # Clean untracked files (build artifacts etc)
+            git clean -fdx
           fi
 
           # Copy coverage files to the branch
@@ -198,7 +203,7 @@ jobs:
           cp -r /tmp/coverage-deploy/* coverage/ 2>/dev/null || true
           rm -f coverage/coverage-baseline.txt coverage/badge.json
 
-          # Commit and push
-          git add -A
+          # Commit and push (only add specific files, not everything)
+          git add coverage-baseline.txt badge.json coverage/
           git commit -m "Update coverage report for ${{ github.sha }}" || echo "No changes to commit"
           git push origin gh-pages
