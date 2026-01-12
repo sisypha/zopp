@@ -1545,6 +1545,119 @@ mod tests {
         }
     }
 
+    #[test]
+    fn role_from_str() {
+        assert_eq!(Role::from_str("admin").unwrap(), Role::Admin);
+        assert_eq!(Role::from_str("write").unwrap(), Role::Write);
+        assert_eq!(Role::from_str("read").unwrap(), Role::Read);
+
+        let err = Role::from_str("invalid").unwrap_err();
+        assert_eq!(err.0, "invalid");
+    }
+
+    #[test]
+    fn role_as_str() {
+        assert_eq!(Role::Admin.as_str(), "admin");
+        assert_eq!(Role::Write.as_str(), "write");
+        assert_eq!(Role::Read.as_str(), "read");
+    }
+
+    #[test]
+    fn role_includes() {
+        // Admin includes all
+        assert!(Role::Admin.includes(&Role::Admin));
+        assert!(Role::Admin.includes(&Role::Write));
+        assert!(Role::Admin.includes(&Role::Read));
+
+        // Write includes write and read
+        assert!(!Role::Write.includes(&Role::Admin));
+        assert!(Role::Write.includes(&Role::Write));
+        assert!(Role::Write.includes(&Role::Read));
+
+        // Read includes only read
+        assert!(!Role::Read.includes(&Role::Admin));
+        assert!(!Role::Read.includes(&Role::Write));
+        assert!(Role::Read.includes(&Role::Read));
+    }
+
+    #[test]
+    fn parse_role_error_display() {
+        let err = ParseRoleError("foobar".to_string());
+        assert_eq!(format!("{}", err), "invalid role: foobar");
+        // Also test Error trait is implemented
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn store_error_display() {
+        assert_eq!(format!("{}", StoreError::NotFound), "not found");
+        assert_eq!(format!("{}", StoreError::AlreadyExists), "already exists");
+        assert_eq!(format!("{}", StoreError::Conflict), "conflict");
+        assert_eq!(
+            format!("{}", StoreError::Backend("db error".to_string())),
+            "backend error: db error"
+        );
+    }
+
+    #[test]
+    fn id_types_equality_and_hash() {
+        use std::collections::HashSet;
+
+        let uuid1 = Uuid::new_v4();
+        let uuid2 = Uuid::new_v4();
+
+        // UserId
+        let u1 = UserId(uuid1);
+        let u1_clone = u1.clone();
+        let u2 = UserId(uuid2);
+        assert_eq!(u1, u1_clone);
+        assert_ne!(u1, u2);
+
+        let mut set = HashSet::new();
+        set.insert(u1.clone());
+        assert!(set.contains(&u1));
+
+        // PrincipalId
+        let p1 = PrincipalId(uuid1);
+        let p1_clone = p1.clone();
+        assert_eq!(p1, p1_clone);
+
+        // WorkspaceId
+        let w1 = WorkspaceId(uuid1);
+        let w1_clone = w1.clone();
+        assert_eq!(w1, w1_clone);
+
+        // ProjectId
+        let pr1 = ProjectId(uuid1);
+        let pr1_clone = pr1.clone();
+        assert_eq!(pr1, pr1_clone);
+
+        // EnvironmentId
+        let e1 = EnvironmentId(uuid1);
+        let e1_clone = e1.clone();
+        assert_eq!(e1, e1_clone);
+
+        // GroupId
+        let g1 = GroupId(uuid1);
+        let g1_clone = g1.clone();
+        assert_eq!(g1, g1_clone);
+
+        // InviteId
+        let i1 = InviteId(uuid1);
+        let i1_clone = i1.clone();
+        assert_eq!(i1, i1_clone);
+
+        // ProjectName
+        let pn1 = ProjectName("test".to_string());
+        let pn1_clone = pn1.clone();
+        assert_eq!(pn1, pn1_clone);
+
+        // EnvName
+        let en1 = EnvName("dev".to_string());
+        let en1_clone = en1.clone();
+        assert_eq!(en1, en1_clone);
+    }
+
     #[tokio::test]
     async fn trait_smoke() {
         let s = NoopStore;

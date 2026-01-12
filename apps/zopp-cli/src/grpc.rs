@@ -111,3 +111,63 @@ pub fn add_auth_metadata<T: Message>(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zopp_proto::ListProjectsRequest;
+
+    #[test]
+    fn test_compute_request_hash() {
+        let request = ListProjectsRequest {
+            workspace_name: "test-ws".to_string(),
+        };
+        let hash = compute_request_hash("ListProjects", &request);
+
+        // Hash should be 32 bytes (SHA256)
+        assert_eq!(hash.len(), 32);
+
+        // Same request + method should produce same hash
+        let hash2 = compute_request_hash("ListProjects", &request);
+        assert_eq!(hash, hash2);
+
+        // Different method should produce different hash
+        let hash3 = compute_request_hash("DifferentMethod", &request);
+        assert_ne!(hash, hash3);
+    }
+
+    #[test]
+    fn test_sign_request_with_body() {
+        // Generate a test key (use known test vector)
+        use ed25519_dalek::SigningKey;
+        use rand_core::OsRng;
+
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let private_key_hex = hex::encode(signing_key.to_bytes());
+
+        let request_hash = vec![0u8; 32]; // Dummy hash
+        let method = "TestMethod";
+
+        let result = sign_request_with_body(&private_key_hex, method, &request_hash);
+        assert!(result.is_ok());
+
+        let (timestamp, signature) = result.unwrap();
+
+        // Timestamp should be recent (within last minute)
+        let now = Utc::now().timestamp();
+        assert!((now - timestamp).abs() < 60);
+
+        // Signature should be 64 bytes (Ed25519)
+        assert_eq!(signature.len(), 64);
+    }
+
+    #[test]
+    fn test_sign_request_with_body_invalid_key() {
+        let result = sign_request_with_body("invalid_hex", "TestMethod", &[0u8; 32]);
+        assert!(result.is_err());
+
+        // Valid hex but wrong length
+        let result = sign_request_with_body("abcd", "TestMethod", &[0u8; 32]);
+        assert!(result.is_err());
+    }
+}

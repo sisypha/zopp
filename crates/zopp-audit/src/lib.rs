@@ -632,4 +632,209 @@ mod tests {
         assert_eq!(event.principal_id, deserialized.principal_id);
         assert_eq!(event.action, deserialized.action);
     }
+
+    #[test]
+    fn test_audit_action_roundtrip_all_variants() {
+        let actions = vec![
+            AuditAction::UserJoin,
+            AuditAction::UserRegister,
+            AuditAction::PrincipalCreate,
+            AuditAction::PrincipalRename,
+            AuditAction::PrincipalRemove,
+            AuditAction::PrincipalRevokeAllPermissions,
+            AuditAction::WorkspaceCreate,
+            AuditAction::WorkspaceGrantAccess,
+            AuditAction::WorkspaceRevokeAccess,
+            AuditAction::ProjectCreate,
+            AuditAction::ProjectDelete,
+            AuditAction::EnvironmentCreate,
+            AuditAction::EnvironmentDelete,
+            AuditAction::EnvironmentRotateKey,
+            AuditAction::SecretCreate,
+            AuditAction::SecretUpdate,
+            AuditAction::SecretRead,
+            AuditAction::SecretDelete,
+            AuditAction::SecretList,
+            AuditAction::InviteCreate,
+            AuditAction::InviteConsume,
+            AuditAction::InviteRevoke,
+            AuditAction::PermissionSetWorkspace,
+            AuditAction::PermissionSetProject,
+            AuditAction::PermissionSetEnvironment,
+            AuditAction::PermissionRemoveWorkspace,
+            AuditAction::PermissionRemoveProject,
+            AuditAction::PermissionRemoveEnvironment,
+            AuditAction::UserPermissionSetWorkspace,
+            AuditAction::UserPermissionSetProject,
+            AuditAction::UserPermissionSetEnvironment,
+            AuditAction::UserPermissionRemoveWorkspace,
+            AuditAction::UserPermissionRemoveProject,
+            AuditAction::UserPermissionRemoveEnvironment,
+            AuditAction::GroupCreate,
+            AuditAction::GroupUpdate,
+            AuditAction::GroupDelete,
+            AuditAction::GroupMemberAdd,
+            AuditAction::GroupMemberRemove,
+            AuditAction::GroupPermissionSetWorkspace,
+            AuditAction::GroupPermissionSetProject,
+            AuditAction::GroupPermissionSetEnvironment,
+            AuditAction::GroupPermissionRemoveWorkspace,
+            AuditAction::GroupPermissionRemoveProject,
+            AuditAction::GroupPermissionRemoveEnvironment,
+        ];
+
+        for action in actions {
+            let s = action.to_string();
+            let parsed: AuditAction = s.parse().unwrap();
+            assert_eq!(action, parsed);
+        }
+    }
+
+    #[test]
+    fn test_audit_result_roundtrip_all_variants() {
+        let results = vec![
+            AuditResult::Success,
+            AuditResult::PermissionDenied,
+            AuditResult::NotFound,
+            AuditResult::InvalidRequest,
+            AuditResult::Error,
+        ];
+
+        for result in results {
+            let s = result.to_string();
+            let parsed: AuditResult = s.parse().unwrap();
+            assert_eq!(result, parsed);
+        }
+    }
+
+    #[test]
+    fn test_audit_result_parse_error() {
+        let err = "invalid_result".parse::<AuditResult>().unwrap_err();
+        assert!(err.contains("Unknown audit result"));
+    }
+
+    #[test]
+    fn test_audit_log_id_display_and_parse() {
+        let id = AuditLogId::new();
+        let s = id.to_string();
+        let parsed: AuditLogId = s.parse().unwrap();
+        assert_eq!(id, parsed);
+    }
+
+    #[test]
+    fn test_audit_log_id_default() {
+        let id1 = AuditLogId::default();
+        let id2 = AuditLogId::default();
+        assert_ne!(id1, id2); // Default generates unique IDs
+    }
+
+    #[test]
+    fn test_audit_log_error_display() {
+        let err = AuditLogError::Database("connection failed".to_string());
+        assert_eq!(format!("{}", err), "database error: connection failed");
+
+        let id = AuditLogId::new();
+        let err = AuditLogError::NotFound(id);
+        assert!(format!("{}", err).contains("audit log not found"));
+
+        let err = AuditLogError::InvalidFilter("bad filter".to_string());
+        assert_eq!(format!("{}", err), "invalid filter: bad filter");
+    }
+
+    #[test]
+    fn test_audit_log_filter_builder() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let user_id = UserId(Uuid::new_v4());
+        let workspace_id = WorkspaceId(Uuid::new_v4());
+        let project_id = ProjectId(Uuid::new_v4());
+        let environment_id = EnvironmentId(Uuid::new_v4());
+        let now = Utc::now();
+
+        let filter = AuditLogFilter::new()
+            .principal_id(principal_id.clone())
+            .user_id(user_id.clone())
+            .workspace_id(workspace_id.clone())
+            .project_id(project_id.clone())
+            .environment_id(environment_id.clone())
+            .action(AuditAction::SecretRead)
+            .result(AuditResult::Success)
+            .from(now)
+            .to(now)
+            .limit(100)
+            .offset(10);
+
+        assert_eq!(filter.principal_id.unwrap(), principal_id);
+        assert_eq!(filter.user_id.unwrap(), user_id);
+        assert_eq!(filter.workspace_id.unwrap(), workspace_id);
+        assert_eq!(filter.project_id.unwrap(), project_id);
+        assert_eq!(filter.environment_id.unwrap(), environment_id);
+        assert_eq!(filter.action.unwrap(), AuditAction::SecretRead);
+        assert_eq!(filter.result.unwrap(), AuditResult::Success);
+        assert_eq!(filter.limit.unwrap(), 100);
+        assert_eq!(filter.offset.unwrap(), 10);
+    }
+
+    #[test]
+    fn test_audit_event_builder_full() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let user_id = UserId(Uuid::new_v4());
+        let workspace_id = WorkspaceId(Uuid::new_v4());
+        let project_id = ProjectId(Uuid::new_v4());
+        let environment_id = EnvironmentId(Uuid::new_v4());
+
+        let event = AuditEvent::builder(&principal_id, AuditAction::SecretUpdate)
+            .user_id(Some(&user_id))
+            .resource("secret", "DATABASE_URL")
+            .workspace_id(Some(&workspace_id))
+            .project_id(Some(&project_id))
+            .environment_id(Some(&environment_id))
+            .result(AuditResult::Success)
+            .reason("Secret value changed")
+            .details(serde_json::json!({"old_version": 1, "new_version": 2}))
+            .client_ip("192.168.1.1")
+            .build();
+
+        assert_eq!(event.principal_id, principal_id.0);
+        assert_eq!(event.user_id, Some(user_id.0));
+        assert_eq!(event.workspace_id, Some(workspace_id.0));
+        assert_eq!(event.project_id, Some(project_id.0));
+        assert_eq!(event.environment_id, Some(environment_id.0));
+        assert_eq!(event.reason, Some("Secret value changed".to_string()));
+        assert!(event.details.is_some());
+        assert_eq!(event.client_ip, Some("192.168.1.1".to_string()));
+    }
+
+    #[test]
+    fn test_audit_event_getters() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let user_id = UserId(Uuid::new_v4());
+        let workspace_id = WorkspaceId(Uuid::new_v4());
+        let project_id = ProjectId(Uuid::new_v4());
+        let environment_id = EnvironmentId(Uuid::new_v4());
+
+        let event = AuditEvent::builder(&principal_id, AuditAction::SecretRead)
+            .user_id(Some(&user_id))
+            .workspace_id(Some(&workspace_id))
+            .project_id(Some(&project_id))
+            .environment_id(Some(&environment_id))
+            .build();
+
+        assert_eq!(event.get_principal_id(), principal_id);
+        assert_eq!(event.get_user_id(), Some(user_id));
+        assert_eq!(event.get_workspace_id(), Some(workspace_id));
+        assert_eq!(event.get_project_id(), Some(project_id));
+        assert_eq!(event.get_environment_id(), Some(environment_id));
+    }
+
+    #[test]
+    fn test_audit_event_getters_none() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let event = AuditEvent::builder(&principal_id, AuditAction::SecretRead).build();
+
+        assert_eq!(event.get_principal_id(), principal_id);
+        assert_eq!(event.get_user_id(), None);
+        assert_eq!(event.get_workspace_id(), None);
+        assert_eq!(event.get_project_id(), None);
+        assert_eq!(event.get_environment_id(), None);
+    }
 }

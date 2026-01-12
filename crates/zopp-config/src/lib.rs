@@ -211,4 +211,234 @@ mod tests {
         assert_eq!(current.name, "device2");
         assert_eq!(current.id, "p2");
     }
+
+    #[test]
+    fn test_get_current_principal_fallback_to_first() {
+        let config = CliConfig {
+            user_id: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            principals: vec![PrincipalConfig {
+                id: "p1".to_string(),
+                name: "device1".to_string(),
+                private_key: "key1".to_string(),
+                public_key: "pub1".to_string(),
+                x25519_private_key: None,
+                x25519_public_key: None,
+            }],
+            current_principal: None, // No current set, should fallback to first
+        };
+
+        let current = config.get_current_principal().unwrap();
+        assert_eq!(current.name, "device1");
+    }
+
+    #[test]
+    fn test_get_current_principal_no_principals() {
+        let config = CliConfig {
+            user_id: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            principals: vec![],
+            current_principal: None,
+        };
+
+        let err = config.get_current_principal().unwrap_err();
+        assert!(matches!(err, ConfigError::NoPrincipals));
+    }
+
+    #[test]
+    fn test_get_current_principal_not_found() {
+        let config = CliConfig {
+            user_id: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            principals: vec![PrincipalConfig {
+                id: "p1".to_string(),
+                name: "device1".to_string(),
+                private_key: "key1".to_string(),
+                public_key: "pub1".to_string(),
+                x25519_private_key: None,
+                x25519_public_key: None,
+            }],
+            current_principal: Some("nonexistent".to_string()),
+        };
+
+        let err = config.get_current_principal().unwrap_err();
+        assert!(matches!(err, ConfigError::PrincipalNotFound(_)));
+    }
+
+    #[test]
+    fn test_get_principal() {
+        let config = CliConfig {
+            user_id: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            principals: vec![PrincipalConfig {
+                id: "p1".to_string(),
+                name: "device1".to_string(),
+                private_key: "key1".to_string(),
+                public_key: "pub1".to_string(),
+                x25519_private_key: None,
+                x25519_public_key: None,
+            }],
+            current_principal: None,
+        };
+
+        let p = config.get_principal("device1").unwrap();
+        assert_eq!(p.id, "p1");
+
+        let err = config.get_principal("nonexistent").unwrap_err();
+        assert!(matches!(err, ConfigError::PrincipalNotFound(_)));
+    }
+
+    #[test]
+    fn test_load_from_file_not_found() {
+        let result = CliConfig::load_from("/nonexistent/path/config.json");
+        assert!(matches!(result, Err(ConfigError::NotFound)));
+    }
+
+    #[test]
+    fn test_save_and_load_roundtrip() {
+        let temp_dir = std::env::temp_dir();
+        let config_path = temp_dir.join("zopp_test_config.json");
+
+        let config = CliConfig {
+            user_id: "user-456".to_string(),
+            email: "roundtrip@example.com".to_string(),
+            principals: vec![PrincipalConfig {
+                id: "p1".to_string(),
+                name: "saved-device".to_string(),
+                private_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    .to_string(),
+                public_key: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+                    .to_string(),
+                x25519_private_key: None,
+                x25519_public_key: None,
+            }],
+            current_principal: Some("saved-device".to_string()),
+        };
+
+        // Save
+        config.save_to(&config_path).unwrap();
+
+        // Load
+        let loaded = CliConfig::load_from(&config_path).unwrap();
+        assert_eq!(loaded.user_id, "user-456");
+        assert_eq!(loaded.email, "roundtrip@example.com");
+        assert_eq!(loaded.principals.len(), 1);
+        assert_eq!(loaded.principals[0].name, "saved-device");
+
+        // Cleanup
+        std::fs::remove_file(&config_path).ok();
+    }
+
+    #[test]
+    fn test_load_from_invalid_json() {
+        let temp_dir = std::env::temp_dir();
+        let config_path = temp_dir.join("zopp_test_invalid.json");
+
+        std::fs::write(&config_path, "not valid json").unwrap();
+
+        let result = CliConfig::load_from(&config_path);
+        assert!(matches!(result, Err(ConfigError::Parse(_))));
+
+        std::fs::remove_file(&config_path).ok();
+    }
+
+    #[test]
+    fn test_principal_key_bytes() {
+        // Valid 32-byte hex keys
+        let p = PrincipalConfig {
+            id: "p1".to_string(),
+            name: "test".to_string(),
+            private_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .to_string(),
+            public_key: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+                .to_string(),
+            x25519_private_key: Some(
+                "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+            ),
+            x25519_public_key: Some(
+                "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
+            ),
+        };
+
+        let priv_key = p.get_private_key_bytes().unwrap();
+        assert_eq!(priv_key.len(), 32);
+
+        let pub_key = p.get_public_key_bytes().unwrap();
+        assert_eq!(pub_key.len(), 32);
+
+        let x_priv = p.get_x25519_private_key_bytes().unwrap();
+        assert!(x_priv.is_some());
+        assert_eq!(x_priv.unwrap().len(), 32);
+
+        let x_pub = p.get_x25519_public_key_bytes().unwrap();
+        assert!(x_pub.is_some());
+        assert_eq!(x_pub.unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_principal_key_bytes_none() {
+        let p = PrincipalConfig {
+            id: "p1".to_string(),
+            name: "test".to_string(),
+            private_key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .to_string(),
+            public_key: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+                .to_string(),
+            x25519_private_key: None,
+            x25519_public_key: None,
+        };
+
+        assert!(p.get_x25519_private_key_bytes().unwrap().is_none());
+        assert!(p.get_x25519_public_key_bytes().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_principal_key_bytes_invalid_hex() {
+        let p = PrincipalConfig {
+            id: "p1".to_string(),
+            name: "test".to_string(),
+            private_key: "not_hex".to_string(),
+            public_key: "also_not_hex".to_string(),
+            x25519_private_key: Some("invalid".to_string()),
+            x25519_public_key: Some("invalid".to_string()),
+        };
+
+        assert!(p.get_private_key_bytes().is_err());
+        assert!(p.get_public_key_bytes().is_err());
+        assert!(p.get_x25519_private_key_bytes().is_err());
+        assert!(p.get_x25519_public_key_bytes().is_err());
+    }
+
+    #[test]
+    fn test_principal_key_bytes_wrong_length() {
+        let p = PrincipalConfig {
+            id: "p1".to_string(),
+            name: "test".to_string(),
+            private_key: "0123456789abcdef".to_string(), // Too short
+            public_key: "0123456789abcdef".to_string(),
+            x25519_private_key: Some("0123456789abcdef".to_string()),
+            x25519_public_key: Some("0123456789abcdef".to_string()),
+        };
+
+        assert!(p.get_private_key_bytes().is_err());
+        assert!(p.get_public_key_bytes().is_err());
+        assert!(p.get_x25519_private_key_bytes().is_err());
+        assert!(p.get_x25519_public_key_bytes().is_err());
+    }
+
+    #[test]
+    fn test_config_error_display() {
+        assert_eq!(
+            format!("{}", ConfigError::NotFound),
+            "Config file not found. Run 'zopp join' or 'zopp login' first."
+        );
+        assert_eq!(
+            format!("{}", ConfigError::NoPrincipals),
+            "No principals configured"
+        );
+        assert_eq!(
+            format!("{}", ConfigError::PrincipalNotFound("test".to_string())),
+            "Principal 'test' not found"
+        );
+    }
 }

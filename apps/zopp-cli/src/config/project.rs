@@ -103,3 +103,133 @@ pub fn resolve_context(
 
     Ok((workspace, project, environment))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_project_config_deserialize_toml() {
+        let toml_content = r#"
+[defaults]
+workspace = "my-workspace"
+project = "my-project"
+environment = "dev"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("dev".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_deserialize_yaml() {
+        let yaml_content = r#"
+defaults:
+  workspace: my-workspace
+  project: my-project
+  environment: staging
+"#;
+        let config: ProjectConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("staging".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_deserialize_json() {
+        let json_content = r#"{
+    "defaults": {
+        "workspace": "my-workspace",
+        "project": "my-project",
+        "environment": "prod"
+    }
+}"#;
+        let config: ProjectConfig = serde_json::from_str(json_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("prod".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_partial_defaults() {
+        let toml_content = r#"
+[defaults]
+workspace = "only-workspace"
+"#;
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(
+            config.defaults.workspace,
+            Some("only-workspace".to_string())
+        );
+        assert_eq!(config.defaults.project, None);
+        assert_eq!(config.defaults.environment, None);
+    }
+
+    #[test]
+    fn test_project_config_empty_defaults() {
+        let toml_content = "";
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(config.defaults.workspace, None);
+        assert_eq!(config.defaults.project, None);
+        assert_eq!(config.defaults.environment, None);
+    }
+
+    #[test]
+    fn test_resolve_workspace_from_arg() {
+        let workspace = resolve_workspace(Some(&"arg-workspace".to_string())).unwrap();
+        assert_eq!(workspace, "arg-workspace");
+    }
+
+    #[test]
+    fn test_resolve_workspace_missing_fails() {
+        // When no arg and no config file, should fail
+        let result = resolve_workspace(None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("workspace not specified"));
+    }
+
+    #[test]
+    fn test_resolve_workspace_project_from_args() {
+        let (workspace, project) =
+            resolve_workspace_project(Some(&"ws".to_string()), Some(&"proj".to_string())).unwrap();
+        assert_eq!(workspace, "ws");
+        assert_eq!(project, "proj");
+    }
+
+    #[test]
+    fn test_resolve_workspace_project_missing_project() {
+        let result = resolve_workspace_project(Some(&"ws".to_string()), None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("project not specified"));
+    }
+
+    #[test]
+    fn test_resolve_context_from_args() {
+        let (workspace, project, environment) = resolve_context(
+            Some(&"ws".to_string()),
+            Some(&"proj".to_string()),
+            Some(&"dev".to_string()),
+        )
+        .unwrap();
+        assert_eq!(workspace, "ws");
+        assert_eq!(project, "proj");
+        assert_eq!(environment, "dev");
+    }
+
+    #[test]
+    fn test_resolve_context_missing_environment() {
+        let result = resolve_context(Some(&"ws".to_string()), Some(&"proj".to_string()), None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("environment not specified"));
+    }
+}

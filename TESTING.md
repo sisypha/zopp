@@ -30,18 +30,24 @@ cargo test --package e2e-tests
 
 ## Unit Tests
 
-Location: alongside code in each crate
+Location: alongside code in `crates/` and `apps/`
 
 ### Requirements
 
-- 100% line coverage target
+- 100% line coverage target for all crates and apps
+- Both `crates/` (libraries) and `apps/` (binaries) must have unit tests
+- Apps have testable pure functions (crypto, config parsing, request signing, etc.)
 - Use real implementations when testing trait implementations
 - Only mock to reproduce specific error conditions
 
 ### Running
 
 ```bash
-cargo test --workspace --lib
+# Run all unit tests (excludes e2e-tests)
+cargo test --workspace --exclude e2e-tests
+
+# Generate coverage report
+./scripts/unit-coverage.sh
 ```
 
 ## Mocking Policy

@@ -1,4 +1,4 @@
-name: E2E Tests & Coverage
+name: Tests & Coverage
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
     branches: [main]
 
 concurrency:
-  group: e2e-${{ github.ref }}
+  group: tests-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  e2e:
-    name: e2e
+  unit-coverage:
+    name: unit-coverage
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -50,22 +50,8 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Install kind
-        run: |
-          [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
-          kind version
-
-      - name: Install kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x ./kubectl
-          sudo mv ./kubectl /usr/local/bin/kubectl
-          kubectl version --client
-
-      - name: Run tests with coverage
-        run: ./scripts/e2e-coverage.sh
+      - name: Run unit tests with coverage
+        run: ./scripts/unit-coverage.sh
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
 
@@ -120,7 +106,7 @@ jobs:
             const sign = diff >= 0 ? '+' : '';
             const emoji = diff >= 0 ? ':white_check_mark:' : ':warning:';
 
-            const body = `## ${emoji} Coverage Report
+            const body = `## ${emoji} Unit Test Coverage
 
             | Metric | Value |
             |--------|-------|
@@ -141,7 +127,7 @@ jobs:
               issue_number: context.issue.number,
             });
 
-            const botComment = comments.find(c => c.body.includes('Coverage Report') && c.user.type === 'Bot');
+            const botComment = comments.find(c => c.body.includes('Unit Test Coverage') && c.user.type === 'Bot');
 
             if (botComment) {
               await github.rest.issues.updateComment({
@@ -221,3 +207,56 @@ jobs:
           git add coverage-baseline.txt badge.json coverage/
           git commit -m "Update coverage report for ${{ github.sha }}" || echo "No changes to commit"
           git push origin gh-pages
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install kind
+        run: |
+          [ $(uname -m) = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.25.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x ./kubectl
+          sudo mv ./kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Build binaries
+        run: cargo build --bins
+
+      - name: Run E2E tests
+        run: cargo test --package e2e-tests --no-fail-fast -- --test-threads=4
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
