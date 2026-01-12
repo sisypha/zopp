@@ -138,11 +138,12 @@ mod tests {
 
     #[test]
     fn test_sign_request_with_body() {
-        // Generate a test key (use known test vector)
+        // Use deterministic test vector for reproducibility
         use ed25519_dalek::SigningKey;
-        use rand_core::OsRng;
 
-        let signing_key = SigningKey::generate(&mut OsRng);
+        // Known test vector (32 zero bytes produces a valid Ed25519 keypair)
+        let test_key_bytes = [0u8; 32];
+        let signing_key = SigningKey::from_bytes(&test_key_bytes);
         let private_key_hex = hex::encode(signing_key.to_bytes());
 
         let request_hash = vec![0u8; 32]; // Dummy hash
