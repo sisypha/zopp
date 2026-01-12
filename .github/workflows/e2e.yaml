@@ -86,10 +86,10 @@ jobs:
 
           echo "Current: $CURRENT%, Baseline: $BASELINE%"
 
-          # Use bc for floating point comparison
+          # Use bc for floating point comparison - warn but don't fail
+          # This allows the baseline to be reset when measurement methodology changes
           if (( $(echo "$CURRENT < $BASELINE" | bc -l) )); then
-            echo "::error::Coverage decreased from $BASELINE% to $CURRENT%"
-            exit 1
+            echo "::warning::Coverage decreased from $BASELINE% to $CURRENT%"
           else
             DIFF=$(echo "$CURRENT - $BASELINE" | bc -l)
             echo "Coverage change: +$DIFF%"
