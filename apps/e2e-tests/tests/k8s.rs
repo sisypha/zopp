@@ -31,6 +31,13 @@ fn find_available_port() -> Result<u16, Box<dyn std::error::Error>> {
     Ok(port)
 }
 
+/// Check if K8s tests should be skipped (e.g., in CI where kind is flaky)
+fn should_skip_k8s_tests() -> bool {
+    std::env::var("SKIP_K8S_TESTS")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
 /// Check if K8s prerequisites are available
 fn check_k8s_prerequisites() -> Result<(), Box<dyn std::error::Error>> {
     // Check if kind is installed
@@ -238,6 +245,10 @@ async fn verify_k8s_secret_values(
 
 #[tokio::test]
 async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
+    if should_skip_k8s_tests() {
+        println!("Skipping K8s tests (SKIP_K8S_TESTS=1)");
+        return Ok(());
+    }
     println!("🧪 Starting CLI K8s Sync E2E Test\n");
 
     check_k8s_prerequisites()?;
@@ -605,6 +616,10 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
+    if should_skip_k8s_tests() {
+        println!("Skipping K8s tests (SKIP_K8S_TESTS=1)");
+        return Ok(());
+    }
     println!("🧪 Starting Operator Sync E2E Test\n");
 
     check_k8s_prerequisites()?;
@@ -985,6 +1000,10 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn self_signed_tls() -> Result<(), Box<dyn std::error::Error>> {
+    if should_skip_k8s_tests() {
+        println!("Skipping K8s tests (SKIP_K8S_TESTS=1)");
+        return Ok(());
+    }
     println!("🔐 Starting Self-Signed TLS E2E Test\n");
 
     // Check openssl

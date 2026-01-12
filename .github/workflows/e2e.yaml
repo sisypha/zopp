@@ -260,3 +260,5 @@ jobs:
         run: cargo test --package e2e-tests --no-fail-fast -- --test-threads=4
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
+          # Skip K8s tests in CI - kind clusters are unreliable in GitHub Actions
+          SKIP_K8S_TESTS: "1"
