@@ -1,6 +1,33 @@
 use crate::crypto::fetch_and_decrypt_secrets;
 use crate::grpc::{add_auth_metadata, setup_client};
+use std::collections::BTreeMap;
 use zopp_secrets::SecretContext;
+
+/// Parse .env file content into key-value pairs.
+/// Skips empty lines and comments (lines starting with #).
+pub fn parse_env_content(content: &str) -> Vec<(String, String)> {
+    let mut secrets = Vec::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            secrets.push((key.trim().to_string(), value.trim().to_string()));
+        }
+    }
+    secrets
+}
+
+/// Format secrets as .env file content.
+/// Keys are sorted alphabetically (BTreeMap provides this).
+pub fn format_env_content(secrets: &BTreeMap<String, String>) -> String {
+    secrets
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Helper to create a SecretContext for a given environment
 async fn create_secret_context(
@@ -205,11 +232,7 @@ pub async fn cmd_secret_export(
     }
 
     // Format as .env (BTreeMap is already sorted)
-    let env_content = secret_data
-        .iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let env_content = format_env_content(&secret_data);
 
     // Write to file or stdout
     if let Some(path) = output {
@@ -241,16 +264,7 @@ pub async fn cmd_secret_import(
     };
 
     // Parse .env format (KEY=value, skip comments and empty lines)
-    let mut secrets = Vec::new();
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            secrets.push((key.trim().to_string(), value.trim().to_string()));
-        }
-    }
+    let secrets = parse_env_content(&content);
 
     if secrets.is_empty() {
         return Err("No secrets found in input".into());
@@ -320,4 +334,150 @@ pub async fn cmd_secret_run(
         .status()?;
 
     std::process::exit(status.code().unwrap_or(1));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_env_content_basic() {
+        let content = "KEY1=value1\nKEY2=value2";
+        let result = parse_env_content(content);
+        assert_eq!(
+            result,
+            vec![
+                ("KEY1".to_string(), "value1".to_string()),
+                ("KEY2".to_string(), "value2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_with_comments() {
+        let content = "# This is a comment\nKEY1=value1\n# Another comment\nKEY2=value2";
+        let result = parse_env_content(content);
+        assert_eq!(
+            result,
+            vec![
+                ("KEY1".to_string(), "value1".to_string()),
+                ("KEY2".to_string(), "value2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_with_empty_lines() {
+        let content = "KEY1=value1\n\n\nKEY2=value2\n";
+        let result = parse_env_content(content);
+        assert_eq!(
+            result,
+            vec![
+                ("KEY1".to_string(), "value1".to_string()),
+                ("KEY2".to_string(), "value2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_with_whitespace() {
+        let content = "  KEY1 = value1  \n  KEY2=value2  ";
+        let result = parse_env_content(content);
+        assert_eq!(
+            result,
+            vec![
+                ("KEY1".to_string(), "value1".to_string()),
+                ("KEY2".to_string(), "value2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_with_equals_in_value() {
+        let content = "DATABASE_URL=postgres://user:pass@host/db?ssl=true";
+        let result = parse_env_content(content);
+        assert_eq!(
+            result,
+            vec![(
+                "DATABASE_URL".to_string(),
+                "postgres://user:pass@host/db?ssl=true".to_string()
+            ),]
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_empty() {
+        let content = "";
+        let result = parse_env_content(content);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_env_content_only_comments() {
+        let content = "# comment 1\n# comment 2";
+        let result = parse_env_content(content);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_env_content_invalid_line_no_equals() {
+        let content = "KEY1=value1\ninvalid line without equals\nKEY2=value2";
+        let result = parse_env_content(content);
+        assert_eq!(
+            result,
+            vec![
+                ("KEY1".to_string(), "value1".to_string()),
+                ("KEY2".to_string(), "value2".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_format_env_content_basic() {
+        let mut secrets = BTreeMap::new();
+        secrets.insert("API_KEY".to_string(), "secret123".to_string());
+        secrets.insert("DB_URL".to_string(), "postgres://localhost".to_string());
+
+        let result = format_env_content(&secrets);
+        assert_eq!(result, "API_KEY=secret123\nDB_URL=postgres://localhost");
+    }
+
+    #[test]
+    fn test_format_env_content_empty() {
+        let secrets = BTreeMap::new();
+        let result = format_env_content(&secrets);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_format_env_content_single() {
+        let mut secrets = BTreeMap::new();
+        secrets.insert("ONLY_KEY".to_string(), "only_value".to_string());
+
+        let result = format_env_content(&secrets);
+        assert_eq!(result, "ONLY_KEY=only_value");
+    }
+
+    #[test]
+    fn test_format_env_content_sorted() {
+        let mut secrets = BTreeMap::new();
+        secrets.insert("ZEBRA".to_string(), "z".to_string());
+        secrets.insert("APPLE".to_string(), "a".to_string());
+        secrets.insert("MANGO".to_string(), "m".to_string());
+
+        let result = format_env_content(&secrets);
+        // BTreeMap sorts alphabetically
+        assert_eq!(result, "APPLE=a\nMANGO=m\nZEBRA=z");
+    }
+
+    #[test]
+    fn test_roundtrip_parse_and_format() {
+        let original = "API_KEY=secret123\nDB_URL=postgres://localhost";
+        let parsed = parse_env_content(original);
+
+        let map: BTreeMap<String, String> = parsed.into_iter().collect();
+        let formatted = format_env_content(&map);
+
+        assert_eq!(formatted, original);
+    }
 }
