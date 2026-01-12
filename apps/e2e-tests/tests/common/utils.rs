@@ -78,6 +78,7 @@ pub fn graceful_shutdown(child: &mut std::process::Child) {
 
 /// Extract principal ID from CLI output.
 /// Parses output like "Created principal: ci-bot (ID: abc-123-def)"
+#[allow(dead_code)] // Used by principals.rs and k8s.rs, but not all test modules
 pub fn parse_principal_id(output: &str) -> Option<String> {
     output
         .lines()
