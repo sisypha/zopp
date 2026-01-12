@@ -290,13 +290,12 @@ async fn run_test_audit_filter_by_action(
         ])
         .success()?;
 
-    // Verify we have at least 1 secret.create event
-    // Note: The count may vary based on how audit logging is implemented
+    // Verify we have 2 secret.create events (KEY1 and KEY2)
     if let Some(count_str) = count_output.split(':').next_back() {
         let count: u64 = count_str.trim().parse().unwrap_or(0);
         assert!(
-            count >= 1,
-            "Expected at least 1 secret.create event, got: {}",
+            count >= 2,
+            "Expected at least 2 secret.create events (KEY1 and KEY2), got: {}",
             count
         );
     }

@@ -75,3 +75,16 @@ pub fn graceful_shutdown(child: &mut std::process::Child) {
     let _ = child.kill();
     let _ = child.wait();
 }
+
+/// Extract principal ID from CLI output.
+/// Parses output like "Created principal: ci-bot (ID: abc-123-def)"
+pub fn parse_principal_id(output: &str) -> Option<String> {
+    output
+        .lines()
+        .find(|line| line.contains("(ID:"))
+        .and_then(|line| {
+            let start = line.find("(ID: ")? + 5;
+            let end = line.find(')')?;
+            Some(line[start..end].to_string())
+        })
+}

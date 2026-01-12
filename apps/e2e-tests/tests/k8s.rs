@@ -10,7 +10,7 @@
 
 mod common;
 
-use common::{get_binary_paths, graceful_shutdown};
+use common::{get_binary_paths, graceful_shutdown, parse_principal_id};
 use std::collections::BTreeMap;
 use std::fs;
 use std::net::{TcpListener, TcpStream};
@@ -780,15 +780,8 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let create_output = String::from_utf8_lossy(&output.stdout);
-    let operator_principal_id = create_output
-        .lines()
-        .find(|line| line.contains("created (ID:"))
-        .and_then(|line| {
-            let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
-            Some(line[start..end].to_string())
-        })
-        .ok_or("Failed to parse principal ID")?;
+    let operator_principal_id =
+        parse_principal_id(&create_output).ok_or("Failed to parse principal ID")?;
 
     // Copy service principal credentials
     let alice_config_path = alice_home.join(".zopp/config.json");

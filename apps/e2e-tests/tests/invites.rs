@@ -42,11 +42,13 @@ async fn run_test_invite_list(config: BackendConfig) -> Result<(), Box<dyn std::
     println!("  Test 2: List invites...");
     let output = alice.exec(&["invite", "list"]).success()?;
 
-    // Should show invites - look for indicators that invites are listed
-    // Output format shows "Active workspace invites:" with ID, Token, Expires
+    // Verify invites are listed - each invite shows a "Token:" line
+    // We created 2 invites, so expect at least 2 Token entries
+    let token_count = output.matches("Token:").count();
     assert!(
-        output.contains("Active workspace invites") || output.contains("Token:"),
-        "Should list invites, got: {}",
+        token_count >= 2,
+        "Expected at least 2 invites listed (found {} Token: entries), got: {}",
+        token_count,
         output
     );
 
@@ -75,10 +77,11 @@ async fn run_test_invite_revoke(config: BackendConfig) -> Result<(), Box<dyn std
     // Verify invite is listed
     println!("  Test 2: Verify invite is listed...");
     let output = alice.exec(&["invite", "list"]).success()?;
-    // The list should show at least something related to invites
+    // The list should show at least one invite with a Token: line
     assert!(
-        !output.trim().is_empty() || output.contains("No"),
-        "List should return something"
+        output.contains("Token:"),
+        "Expected invite to be listed with Token: field, got: {}",
+        output
     );
 
     // Revoke the invite

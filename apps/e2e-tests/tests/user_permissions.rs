@@ -210,7 +210,7 @@ async fn run_test_user_project_permission(
         ])
         .success()?;
 
-    // Verify permission is removed
+    // Verify permission is removed via get
     let result = alice.exec(&[
         "permission",
         "user-project-get",
@@ -224,6 +224,16 @@ async fn run_test_user_project_permission(
     assert!(
         result.failed() || result.stdout().to_lowercase().contains("not found"),
         "Should fail to get removed permission"
+    );
+
+    // Verify bob no longer appears in the permission list
+    let list_output = alice
+        .exec(&["permission", "user-project-list", "-w", "acme", "-p", "api"])
+        .success()?;
+    assert!(
+        !list_output.contains(&bob.email()),
+        "Bob should not appear in permission list after removal, got: {}",
+        list_output
     );
 
     println!("test_user_project_permission PASSED");
@@ -336,7 +346,7 @@ async fn run_test_user_env_permission(
         ])
         .success()?;
 
-    // Verify permission is removed
+    // Verify permission is removed via get
     let result = alice.exec(&[
         "permission",
         "user-env-get",
@@ -352,6 +362,25 @@ async fn run_test_user_env_permission(
     assert!(
         result.failed() || result.stdout().to_lowercase().contains("not found"),
         "Should fail to get removed permission"
+    );
+
+    // Verify bob no longer appears in the permission list
+    let list_output = alice
+        .exec(&[
+            "permission",
+            "user-env-list",
+            "-w",
+            "acme",
+            "-p",
+            "api",
+            "-e",
+            "dev",
+        ])
+        .success()?;
+    assert!(
+        !list_output.contains(&bob.email()),
+        "Bob should not appear in permission list after removal, got: {}",
+        list_output
     );
 
     println!("test_user_env_permission PASSED");

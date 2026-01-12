@@ -5,7 +5,7 @@
 #[macro_use]
 mod common;
 
-use common::{BackendConfig, TestHarness};
+use common::{parse_principal_id, BackendConfig, TestHarness};
 
 // Generate tests for all 4 backend combinations
 backend_test!(principals_crud, run_principals_test);
@@ -17,6 +17,7 @@ backend_test!(
     run_principals_grant_workspace_access_test
 );
 backend_test!(principals_current, run_principals_current_test);
+backend_test!(principals_use, run_principals_use_test);
 
 /// Test service principal creation and management
 async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -59,15 +60,7 @@ async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::e
     assert!(output.contains("ci-bot"), "Should contain principal name");
 
     // Extract principal ID from output
-    let principal_id = output
-        .lines()
-        .find(|line| line.contains("(ID:"))
-        .and_then(|line| {
-            let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
-            Some(line[start..end].to_string())
-        })
-        .ok_or("Failed to parse principal ID")?;
+    let principal_id = parse_principal_id(&output).ok_or("Failed to parse principal ID")?;
 
     // Test 2: List principals
     println!("  Test 2: List principals...");
@@ -172,15 +165,7 @@ async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::e
             "acme",
         ])
         .success()?;
-    let deploy_id = output
-        .lines()
-        .find(|line| line.contains("(ID:"))
-        .and_then(|line| {
-            let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
-            Some(line[start..end].to_string())
-        })
-        .ok_or("Failed to parse principal ID")?;
+    let deploy_id = parse_principal_id(&output).ok_or("Failed to parse principal ID")?;
 
     // Grant project permission
     admin
@@ -458,15 +443,7 @@ async fn run_principals_workspace_ops_test(
     let output = admin
         .exec(&["principal", "create", "worker", "--service", "-w", "opsws"])
         .success()?;
-    let worker_id = output
-        .lines()
-        .find(|line| line.contains("(ID:"))
-        .and_then(|line| {
-            let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
-            Some(line[start..end].to_string())
-        })
-        .ok_or("Failed to parse principal ID")?;
+    let worker_id = parse_principal_id(&output).ok_or("Failed to parse principal ID")?;
 
     // Grant permissions
     admin
@@ -543,15 +520,7 @@ async fn run_principals_workspace_ops_test(
             "opsws",
         ])
         .success()?;
-    let temp_id = output
-        .lines()
-        .find(|line| line.contains("(ID:"))
-        .and_then(|line| {
-            let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
-            Some(line[start..end].to_string())
-        })
-        .ok_or("Failed to parse principal ID")?;
+    let temp_id = parse_principal_id(&output).ok_or("Failed to parse principal ID")?;
 
     // Verify it's in service list
     let output = admin
@@ -619,15 +588,7 @@ async fn run_principals_grant_workspace_access_test(
         .success()?;
 
     // Extract the principal ID
-    let bot_id = output
-        .lines()
-        .find(|line| line.contains("(ID:"))
-        .and_then(|line| {
-            let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
-            Some(line[start..end].to_string())
-        })
-        .ok_or("Failed to parse principal ID")?;
+    let bot_id = parse_principal_id(&output).ok_or("Failed to parse principal ID")?;
 
     // Test 3: Grant workspace access to principal that already has access
     // This exercises the grant-principal-access command's error handling path
@@ -671,5 +632,67 @@ async fn run_principals_current_test(
     );
 
     println!("test_principals_current PASSED");
+    Ok(())
+}
+
+/// Test principal use command to switch between principals
+async fn run_principals_use_test(
+    config: BackendConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let harness = TestHarness::new("prin_use", config).await?;
+
+    // Setup - alice registers with first principal
+    let invite = harness.create_server_invite()?;
+    let alice = harness.create_user("alice");
+    let first_principal = "device-one";
+    alice.join(&invite, &alice.email(), first_principal)?;
+
+    // Create a second principal for alice
+    println!("  Test 1: Create second principal...");
+    let second_principal = "device-two";
+    alice
+        .exec(&["principal", "add", second_principal])
+        .success()?;
+
+    // Verify both principals exist
+    let output = alice.exec(&["principal", "list"]).success()?;
+    assert!(
+        output.contains(first_principal),
+        "Should list first principal, got: {}",
+        output
+    );
+    assert!(
+        output.contains(second_principal),
+        "Should list second principal, got: {}",
+        output
+    );
+
+    // Test 2: Switch to second principal
+    println!("  Test 2: Switch to second principal...");
+    alice.exec(&["principal", "use", second_principal]).success()?;
+
+    // Verify current principal changed
+    let output = alice.exec(&["principal", "current"]).success()?;
+    assert!(
+        output.contains(second_principal),
+        "Current principal should be {}, got: {}",
+        second_principal,
+        output
+    );
+
+    // Test 3: Switch back to first principal
+    println!("  Test 3: Switch back to first principal...");
+    alice.exec(&["principal", "use", first_principal]).success()?;
+
+    // Verify current principal changed back
+    let output = alice.exec(&["principal", "current"]).success()?;
+    assert!(
+        output.contains(first_principal),
+        "Current principal should be {}, got: {}",
+        first_principal,
+        output
+    );
+
+    println!("test_principals_use PASSED");
     Ok(())
 }
