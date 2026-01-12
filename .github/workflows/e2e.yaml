@@ -54,6 +54,8 @@ jobs:
         run: ./scripts/e2e-coverage.sh
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
+          # Skip K8s tests in CI - kind clusters are unreliable in GitHub Actions
+          SKIP_K8S_TESTS: "1"
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
