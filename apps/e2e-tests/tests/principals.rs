@@ -16,6 +16,10 @@ backend_test!(
     principals_grant_workspace_access,
     run_principals_grant_workspace_access_test
 );
+backend_test!(
+    principals_current_and_use,
+    run_principals_current_and_use_test
+);
 
 /// Test service principal creation and management
 async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -646,5 +650,38 @@ async fn run_principals_grant_workspace_access_test(
     );
 
     println!("test_principals_grant_workspace_access PASSED");
+    Ok(())
+}
+
+/// Test principal current and use commands
+async fn run_principals_current_and_use_test(
+    config: BackendConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let harness = TestHarness::new("prin_current", config).await?;
+
+    // Setup - alice registers
+    let invite = harness.create_server_invite()?;
+    let alice = harness.create_user("alice");
+    alice.join(&invite, &alice.email(), &alice.principal())?;
+
+    // Test 1: Check current principal
+    println!("  Test 1: Check current principal...");
+    let output = alice.exec(&["principal", "current"]).success()?;
+    assert!(
+        output.contains(&alice.principal()),
+        "Should show current principal name, got: {}",
+        output
+    );
+
+    // Test 2: List principals (should show the one we created)
+    println!("  Test 2: List principals...");
+    let output = alice.exec(&["principal", "list"]).success()?;
+    assert!(
+        output.contains(&alice.principal()),
+        "Should list our principal, got: {}",
+        output
+    );
+
+    println!("test_principals_current_and_use PASSED");
     Ok(())
 }
