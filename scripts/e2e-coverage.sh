@@ -14,23 +14,24 @@ fi
 # - These spawned binaries need to be instrumented and write profraw files
 #
 # Our approach:
-# 1. Use cargo llvm-cov to build instrumented binaries with show-env
-# 2. Run tests which spawn those binaries (binaries inherit LLVM_PROFILE_FILE)
-# 3. Generate report from profraw files
+# 1. Use cargo llvm-cov show-env to get the instrumentation environment
+# 2. Build instrumented binaries to the default target directory
+# 3. Run tests (spawned binaries inherit LLVM_PROFILE_FILE from env)
+# 4. Generate report from collected profraw files
 
 # Clean previous coverage data
 echo "Cleaning previous coverage data..."
 cargo llvm-cov clean --workspace
 
 # Get llvm-cov environment variables and export them
+# This sets RUSTFLAGS, LLVM_PROFILE_FILE, CARGO_LLVM_COV_TARGET_DIR, etc.
 echo "Setting up coverage environment..."
 eval $(cargo llvm-cov show-env --export-prefix)
-export LLVM_PROFILE_FILE="$PWD/target/llvm-cov-target/zopp-%p-%m.profraw"
 
-# Build instrumented binaries to the llvm-cov-target directory
-# Tests look for binaries in target/llvm-cov-target/debug
+# Build instrumented binaries with the coverage environment
+# Binaries go to target/debug (CARGO_LLVM_COV_TARGET_DIR/debug)
 echo "Building instrumented binaries..."
-cargo build --workspace --bins --target-dir target/llvm-cov-target
+cargo build --workspace --bins
 
 # Run E2E tests (spawned binaries inherit coverage env)
 echo "Running E2E tests..."

@@ -607,7 +607,14 @@ async fn run_principals_grant_workspace_access_test(
     // Test 2: Create service principal with workspace access
     println!("  Test 2: Create service principal...");
     let output = alice
-        .exec(&["principal", "create", "test-bot", "--service", "-w", "grantws"])
+        .exec(&[
+            "principal",
+            "create",
+            "test-bot",
+            "--service",
+            "-w",
+            "grantws",
+        ])
         .success()?;
 
     // Extract the principal ID

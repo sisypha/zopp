@@ -10,3 +10,7 @@
 *.db-*
 
 # .sqlx/ directories are committed per-backend for offline compile checks
+
+# Coverage output
+coverage/
+*.profraw

@@ -13,19 +13,13 @@ pub fn get_binary_paths() -> Result<(PathBuf, PathBuf, PathBuf), Box<dyn std::er
         .to_path_buf();
 
     // Check for llvm-cov target directory first, then regular target
-    let target_dir = std::env::var("CARGO_LLVM_COV_TARGET_DIR")
-        .or_else(|_| std::env::var("CARGO_TARGET_DIR"))
-        .unwrap_or_else(|_| workspace_root.join("target").to_str().unwrap().to_string());
-
-    // llvm-cov uses target/llvm-cov-target/debug, regular builds use target/debug
-    let llvm_cov_bin_dir = PathBuf::from(&target_dir)
-        .join("llvm-cov-target")
-        .join("debug");
-    let regular_bin_dir = PathBuf::from(&target_dir).join("debug");
-    let bin_dir = if llvm_cov_bin_dir.exists() {
-        llvm_cov_bin_dir
+    // CARGO_LLVM_COV_TARGET_DIR points directly to the target dir (e.g., /path/to/target)
+    let bin_dir = if let Ok(llvm_cov_target) = std::env::var("CARGO_LLVM_COV_TARGET_DIR") {
+        PathBuf::from(llvm_cov_target).join("debug")
+    } else if let Ok(cargo_target) = std::env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(cargo_target).join("debug")
     } else {
-        regular_bin_dir
+        workspace_root.join("target").join("debug")
     };
 
     let zopp_server_bin = bin_dir.join(if cfg!(windows) {
