@@ -5,8 +5,6 @@ service ZoppService {
   // Auth
   rpc Join(JoinRequest) returns (JoinResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
-  rpc Login(LoginRequest) returns (LoginResponse);
-
   // Workspaces
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (Workspace);
   rpc ListWorkspaces(Empty) returns (WorkspaceList);
@@ -152,18 +150,6 @@ message RegisterRequest {
 }
 
 message RegisterResponse {
-  string user_id = 1;
-  string principal_id = 2;
-}
-
-message LoginRequest {
-  string email = 1;
-  string principal_name = 2;
-  int64 timestamp = 3;
-  bytes signature = 4;  // Sign(private_key, timestamp)
-}
-
-message LoginResponse {
   string user_id = 1;
   string principal_id = 2;
 }

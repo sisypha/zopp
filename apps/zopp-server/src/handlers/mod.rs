@@ -1,7 +1,7 @@
 //! Handler modules for gRPC service implementation
 //!
 //! This module contains handler functions organized by domain:
-//! - auth: join, register, login
+//! - auth: join, register
 //! - workspaces: create, list, get_keys
 //! - invites: create, get, list, revoke
 //! - principals: get, rename, list, service principals, remove, revoke, effective permissions
@@ -47,13 +47,6 @@ impl ZoppService for ZoppServer {
         request: Request<RegisterRequest>,
     ) -> Result<Response<RegisterResponse>, Status> {
         auth::register(self, request).await
-    }
-
-    async fn login(
-        &self,
-        request: Request<LoginRequest>,
-    ) -> Result<Response<LoginResponse>, Status> {
-        auth::login(self, request).await
     }
 
     // ───────────────────────────────────── Workspaces ─────────────────────────────────────

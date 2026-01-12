@@ -12,6 +12,10 @@ backend_test!(principals_crud, run_principals_test);
 backend_test!(principals_rename, run_principals_rename_test);
 backend_test!(principals_service_list, run_principals_service_list_test);
 backend_test!(principals_workspace_ops, run_principals_workspace_ops_test);
+backend_test!(
+    principals_grant_workspace_access,
+    run_principals_grant_workspace_access_test
+);
 
 /// Test service principal creation and management
 async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -576,5 +580,64 @@ async fn run_principals_workspace_ops_test(
     );
 
     println!("test_principals_workspace_ops PASSED");
+    Ok(())
+}
+
+/// Test workspace grant-principal-access command and workspace list
+async fn run_principals_grant_workspace_access_test(
+    config: BackendConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let harness = TestHarness::new("prin_grant_ws", config).await?;
+
+    // Setup - alice creates a workspace
+    let invite = harness.create_server_invite()?;
+    let alice = harness.create_user("alice");
+    alice.join(&invite, &alice.email(), &alice.principal())?;
+    alice.exec(&["workspace", "create", "grantws"]).success()?;
+
+    // Test 1: List workspaces (tests cmd_workspace_list)
+    println!("  Test 1: List workspaces...");
+    let output = alice.exec(&["workspace", "list"]).success()?;
+    assert!(
+        output.contains("grantws"),
+        "Should list grantws workspace, got: {}",
+        output
+    );
+
+    // Test 2: Create service principal with workspace access
+    println!("  Test 2: Create service principal...");
+    let output = alice
+        .exec(&["principal", "create", "test-bot", "--service", "-w", "grantws"])
+        .success()?;
+
+    // Extract the principal ID
+    let bot_id = output
+        .lines()
+        .find(|line| line.contains("(ID:"))
+        .and_then(|line| {
+            let start = line.find("(ID: ")? + 5;
+            let end = line.find(')')?;
+            Some(line[start..end].to_string())
+        })
+        .ok_or("Failed to parse principal ID")?;
+
+    // Test 3: Grant workspace access to principal that already has access
+    // This exercises the grant-principal-access command's error handling path
+    println!("  Test 3: Grant workspace access to existing principal (expect error)...");
+    let result = alice.exec(&[
+        "workspace",
+        "grant-principal-access",
+        "--workspace",
+        "grantws",
+        "--principal",
+        &bot_id,
+    ]);
+    // This should fail because the principal already has access
+    assert!(
+        result.failed(),
+        "Should fail when granting access to principal that already has it"
+    );
+
+    println!("test_principals_grant_workspace_access PASSED");
     Ok(())
 }

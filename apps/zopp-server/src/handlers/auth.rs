@@ -1,11 +1,7 @@
-//! Authentication handlers: join, register, login
+//! Authentication handlers: join, register
 
-use prost::Message;
-use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
-use zopp_proto::{
-    JoinRequest, JoinResponse, LoginRequest, LoginResponse, RegisterRequest, RegisterResponse,
-};
+use zopp_proto::{JoinRequest, JoinResponse, RegisterRequest, RegisterResponse};
 use zopp_storage::{
     CreatePrincipalData, CreatePrincipalParams, CreateUserParams, Store, StoreError,
 };
@@ -257,55 +253,5 @@ pub async fn register(
     Ok(Response::new(RegisterResponse {
         user_id: user_id.0.to_string(),
         principal_id: principal_id.0.to_string(),
-    }))
-}
-
-pub async fn login(
-    server: &ZoppServer,
-    request: Request<LoginRequest>,
-) -> Result<Response<LoginResponse>, Status> {
-    let req = request.into_inner();
-
-    let user = server
-        .store
-        .get_user_by_email(&req.email)
-        .await
-        .map_err(|e| Status::not_found(format!("User not found: {}", e)))?;
-
-    let principals = server
-        .store
-        .list_principals(&user.id)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to list principals: {}", e)))?;
-
-    let principal = principals
-        .iter()
-        .find(|p| p.name == req.principal_name)
-        .ok_or_else(|| {
-            Status::not_found(format!("Principal '{}' not found", req.principal_name))
-        })?;
-
-    // Compute the request hash for signature verification
-    let method = "/zopp.ZoppService/Login";
-    let body_bytes = req.encode_to_vec();
-    let mut hasher = Sha256::new();
-    hasher.update(method.as_bytes());
-    hasher.update(&body_bytes);
-    let request_hash = hasher.finalize().to_vec();
-
-    server
-        .verify_signature_and_get_principal(
-            &principal.id,
-            req.timestamp,
-            &req.signature,
-            method,
-            &req,
-            &request_hash,
-        )
-        .await?;
-
-    Ok(Response::new(LoginResponse {
-        user_id: user.id.0.to_string(),
-        principal_id: principal.id.0.to_string(),
     }))
 }
