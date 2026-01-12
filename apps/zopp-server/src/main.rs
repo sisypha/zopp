@@ -756,4 +756,57 @@ mod tests {
 
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_max_role() {
+        let store = Arc::new(SqliteStore::open_in_memory().await.unwrap());
+        let events: Arc<dyn EventBus> = Arc::new(MemoryEventBus::new());
+        let server = ZoppServer::new_sqlite(store, events);
+
+        use zopp_storage::Role;
+
+        // None + any role = that role
+        assert_eq!(server.max_role(None, Role::Read), Role::Read);
+        assert_eq!(server.max_role(None, Role::Write), Role::Write);
+        assert_eq!(server.max_role(None, Role::Admin), Role::Admin);
+
+        // Read + anything = max
+        assert_eq!(server.max_role(Some(Role::Read), Role::Read), Role::Read);
+        assert_eq!(server.max_role(Some(Role::Read), Role::Write), Role::Write);
+        assert_eq!(server.max_role(Some(Role::Read), Role::Admin), Role::Admin);
+
+        // Write + anything = max
+        assert_eq!(server.max_role(Some(Role::Write), Role::Read), Role::Write);
+        assert_eq!(server.max_role(Some(Role::Write), Role::Write), Role::Write);
+        assert_eq!(server.max_role(Some(Role::Write), Role::Admin), Role::Admin);
+
+        // Admin + anything = Admin
+        assert_eq!(server.max_role(Some(Role::Admin), Role::Read), Role::Admin);
+        assert_eq!(server.max_role(Some(Role::Admin), Role::Write), Role::Admin);
+        assert_eq!(server.max_role(Some(Role::Admin), Role::Admin), Role::Admin);
+    }
+
+    #[tokio::test]
+    async fn test_min_role() {
+        let store = Arc::new(SqliteStore::open_in_memory().await.unwrap());
+        let events: Arc<dyn EventBus> = Arc::new(MemoryEventBus::new());
+        let server = ZoppServer::new_sqlite(store, events);
+
+        use zopp_storage::Role;
+
+        // Read is minimum
+        assert_eq!(server.min_role(Role::Read, Role::Read), Role::Read);
+        assert_eq!(server.min_role(Role::Read, Role::Write), Role::Read);
+        assert_eq!(server.min_role(Role::Read, Role::Admin), Role::Read);
+
+        // Write + Read = Read
+        assert_eq!(server.min_role(Role::Write, Role::Read), Role::Read);
+        assert_eq!(server.min_role(Role::Write, Role::Write), Role::Write);
+        assert_eq!(server.min_role(Role::Write, Role::Admin), Role::Write);
+
+        // Admin + anything = that thing
+        assert_eq!(server.min_role(Role::Admin, Role::Read), Role::Read);
+        assert_eq!(server.min_role(Role::Admin, Role::Write), Role::Write);
+        assert_eq!(server.min_role(Role::Admin, Role::Admin), Role::Admin);
+    }
 }

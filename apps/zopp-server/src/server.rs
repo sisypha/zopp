@@ -212,7 +212,11 @@ impl ZoppServer {
     }
 
     /// Return the higher of two roles (Admin > Write > Read)
-    fn max_role(&self, a: Option<zopp_storage::Role>, b: zopp_storage::Role) -> zopp_storage::Role {
+    pub(crate) fn max_role(
+        &self,
+        a: Option<zopp_storage::Role>,
+        b: zopp_storage::Role,
+    ) -> zopp_storage::Role {
         match a {
             None => b,
             Some(current) => {
@@ -226,7 +230,11 @@ impl ZoppServer {
     }
 
     /// Return the lower of two roles (Read < Write < Admin)
-    fn min_role(&self, a: zopp_storage::Role, b: zopp_storage::Role) -> zopp_storage::Role {
+    pub(crate) fn min_role(
+        &self,
+        a: zopp_storage::Role,
+        b: zopp_storage::Role,
+    ) -> zopp_storage::Role {
         if a.includes(&b) {
             b
         } else {
