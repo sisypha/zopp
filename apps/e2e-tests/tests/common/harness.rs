@@ -104,8 +104,6 @@ pub struct TestHarness {
     pub zopp_bin: PathBuf,
     /// Path to zopp-server binary
     pub zopp_server_bin: PathBuf,
-    /// Path to zopp-operator binary (used by K8s tests)
-    pub zopp_operator_bin: PathBuf,
     /// Server process
     server_process: Option<Child>,
     /// Server port
@@ -134,7 +132,7 @@ impl TestHarness {
         }
 
         // Get binary paths from shared function
-        let (zopp_server_bin, zopp_bin, zopp_operator_bin) = super::get_binary_paths()?;
+        let (zopp_server_bin, zopp_bin, _) = super::get_binary_paths()?;
 
         // Create test directory
         let test_id = std::process::id();
@@ -184,7 +182,6 @@ impl TestHarness {
             test_dir,
             zopp_bin,
             zopp_server_bin,
-            zopp_operator_bin,
             server_process: None,
             port,
             health_port,
