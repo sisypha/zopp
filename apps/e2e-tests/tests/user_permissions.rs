@@ -210,6 +210,22 @@ async fn run_test_user_project_permission(
         ])
         .success()?;
 
+    // Verify permission is removed
+    let result = alice.exec(&[
+        "permission",
+        "user-project-get",
+        "-w",
+        "acme",
+        "-p",
+        "api",
+        "--email",
+        &bob.email(),
+    ]);
+    assert!(
+        result.failed() || result.stdout().to_lowercase().contains("not found"),
+        "Should fail to get removed permission"
+    );
+
     println!("test_user_project_permission PASSED");
     Ok(())
 }
@@ -319,6 +335,24 @@ async fn run_test_user_env_permission(
             &bob.email(),
         ])
         .success()?;
+
+    // Verify permission is removed
+    let result = alice.exec(&[
+        "permission",
+        "user-env-get",
+        "-w",
+        "acme",
+        "-p",
+        "api",
+        "-e",
+        "dev",
+        "--email",
+        &bob.email(),
+    ]);
+    assert!(
+        result.failed() || result.stdout().to_lowercase().contains("not found"),
+        "Should fail to get removed permission"
+    );
 
     println!("test_user_env_permission PASSED");
     Ok(())
