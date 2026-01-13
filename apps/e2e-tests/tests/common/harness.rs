@@ -487,7 +487,7 @@ fn check_postgres_available() -> Result<(), Box<dyn std::error::Error>> {
         .strip_prefix("postgres://")
         .and_then(|s| s.split('/').next())
         .and_then(|s| s.split('@').next_back())
-        .expect("Failed to parse host:port from DATABASE_URL - expected postgres://user:pass@host:port/db format");
+        .expect("Failed to parse host:port from TEST_POSTGRES_ADMIN_URL - expected postgres://user:pass@host:port/db format");
 
     if TcpStream::connect(host_port).is_err() {
         return Err(format!(
