@@ -103,3 +103,110 @@ pub fn resolve_context(
 
     Ok((workspace, project, environment))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_project_config_deserialization_toml() {
+        let toml_content = r#"
+        [defaults]
+        workspace = "my-workspace"
+        project = "my-project"
+        environment = "production"
+        "#;
+
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("production".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_deserialization_yaml() {
+        let yaml_content = r#"
+        defaults:
+          workspace: my-workspace
+          project: my-project
+          environment: staging
+        "#;
+
+        let config: ProjectConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("staging".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_deserialization_json() {
+        let json_content = r#"{
+            "defaults": {
+                "workspace": "json-workspace",
+                "project": "json-project",
+                "environment": "dev"
+            }
+        }"#;
+
+        let config: ProjectConfig = serde_json::from_str(json_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("json-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("json-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("dev".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_partial_defaults() {
+        let toml_content = r#"
+        [defaults]
+        workspace = "only-workspace"
+        "#;
+
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("only-workspace".to_string()));
+        assert!(config.defaults.project.is_none());
+        assert!(config.defaults.environment.is_none());
+    }
+
+    #[test]
+    fn test_project_config_empty_defaults() {
+        let toml_content = r#"
+        [defaults]
+        "#;
+
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert!(config.defaults.workspace.is_none());
+        assert!(config.defaults.project.is_none());
+        assert!(config.defaults.environment.is_none());
+    }
+
+    #[test]
+    fn test_project_defaults_is_default() {
+        let defaults = ProjectDefaults::default();
+        assert!(defaults.workspace.is_none());
+        assert!(defaults.project.is_none());
+        assert!(defaults.environment.is_none());
+    }
+
+    #[test]
+    fn test_project_config_no_defaults_section() {
+        // Empty config should work since defaults is optional
+        let toml_content = "";
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert!(config.defaults.workspace.is_none());
+    }
+
+    #[test]
+    fn test_project_config_debug() {
+        let config = ProjectConfig {
+            defaults: ProjectDefaults {
+                workspace: Some("ws".to_string()),
+                project: Some("proj".to_string()),
+                environment: Some("env".to_string()),
+            },
+        };
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("ws"));
+        assert!(debug_str.contains("proj"));
+        assert!(debug_str.contains("env"));
+    }
+}

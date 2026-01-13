@@ -13,3 +13,6 @@ futures = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 zopp-storage = { path = "../zopp-storage", version = "0.1.0" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

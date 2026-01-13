@@ -1584,4 +1584,232 @@ mod tests {
         let _ = s.list_projects(&ws).await.unwrap();
         let _ = s.get_project(&project_id).await;
     }
+
+    // ───────────────────────────────────── Role Tests ─────────────────────────────────────
+
+    #[test]
+    fn test_role_includes_admin() {
+        // Admin includes all roles
+        assert!(Role::Admin.includes(&Role::Admin));
+        assert!(Role::Admin.includes(&Role::Write));
+        assert!(Role::Admin.includes(&Role::Read));
+    }
+
+    #[test]
+    fn test_role_includes_write() {
+        // Write includes Write and Read, but not Admin
+        assert!(!Role::Write.includes(&Role::Admin));
+        assert!(Role::Write.includes(&Role::Write));
+        assert!(Role::Write.includes(&Role::Read));
+    }
+
+    #[test]
+    fn test_role_includes_read() {
+        // Read only includes Read
+        assert!(!Role::Read.includes(&Role::Admin));
+        assert!(!Role::Read.includes(&Role::Write));
+        assert!(Role::Read.includes(&Role::Read));
+    }
+
+    #[test]
+    fn test_role_as_str() {
+        assert_eq!(Role::Admin.as_str(), "admin");
+        assert_eq!(Role::Write.as_str(), "write");
+        assert_eq!(Role::Read.as_str(), "read");
+    }
+
+    #[test]
+    fn test_role_parse() {
+        assert_eq!("admin".parse::<Role>().unwrap(), Role::Admin);
+        assert_eq!("write".parse::<Role>().unwrap(), Role::Write);
+        assert_eq!("read".parse::<Role>().unwrap(), Role::Read);
+    }
+
+    #[test]
+    fn test_role_parse_invalid() {
+        assert!("invalid".parse::<Role>().is_err());
+        assert!("Admin".parse::<Role>().is_err()); // Case sensitive
+        assert!("ADMIN".parse::<Role>().is_err());
+        assert!("".parse::<Role>().is_err());
+    }
+
+    #[test]
+    fn test_role_roundtrip() {
+        for role in [Role::Admin, Role::Write, Role::Read] {
+            let s = role.as_str();
+            let parsed: Role = s.parse().unwrap();
+            assert_eq!(role, parsed);
+        }
+    }
+
+    #[test]
+    fn test_role_is_copy() {
+        let role = Role::Admin;
+        let copied = role; // Copy, not move
+        assert_eq!(role, copied); // Original still valid
+    }
+
+    // ───────────────────────────────────── Typed ID Tests ─────────────────────────────────────
+
+    #[test]
+    fn test_user_id_debug() {
+        let uuid = Uuid::new_v4();
+        let user_id = UserId(uuid);
+        assert!(format!("{:?}", user_id).contains(&uuid.to_string()));
+    }
+
+    #[test]
+    fn test_principal_id_debug() {
+        let uuid = Uuid::new_v4();
+        let principal_id = PrincipalId(uuid);
+        assert!(format!("{:?}", principal_id).contains(&uuid.to_string()));
+    }
+
+    #[test]
+    fn test_workspace_id_debug() {
+        let uuid = Uuid::new_v4();
+        let workspace_id = WorkspaceId(uuid);
+        assert!(format!("{:?}", workspace_id).contains(&uuid.to_string()));
+    }
+
+    #[test]
+    fn test_project_id_debug() {
+        let uuid = Uuid::new_v4();
+        let project_id = ProjectId(uuid);
+        assert!(format!("{:?}", project_id).contains(&uuid.to_string()));
+    }
+
+    #[test]
+    fn test_environment_id_debug() {
+        let uuid = Uuid::new_v4();
+        let env_id = EnvironmentId(uuid);
+        assert!(format!("{:?}", env_id).contains(&uuid.to_string()));
+    }
+
+    #[test]
+    fn test_group_id_debug() {
+        let uuid = Uuid::new_v4();
+        let group_id = GroupId(uuid);
+        assert!(format!("{:?}", group_id).contains(&uuid.to_string()));
+    }
+
+    #[test]
+    fn test_typed_ids_equality() {
+        let uuid = Uuid::new_v4();
+        let user_id1 = UserId(uuid);
+        let user_id2 = UserId(uuid);
+        assert_eq!(user_id1, user_id2);
+
+        let different_uuid = Uuid::new_v4();
+        let user_id3 = UserId(different_uuid);
+        assert_ne!(user_id1, user_id3);
+    }
+
+    #[test]
+    fn test_typed_ids_clone() {
+        let uuid = Uuid::new_v4();
+        let user_id = UserId(uuid);
+        let cloned = user_id.clone();
+        assert_eq!(user_id, cloned);
+    }
+
+    #[test]
+    fn test_typed_ids_inner_access() {
+        let uuid = Uuid::new_v4();
+        let user_id = UserId(uuid);
+        assert_eq!(user_id.0, uuid);
+
+        let principal_id = PrincipalId(uuid);
+        assert_eq!(principal_id.0, uuid);
+
+        let workspace_id = WorkspaceId(uuid);
+        assert_eq!(workspace_id.0, uuid);
+
+        let project_id = ProjectId(uuid);
+        assert_eq!(project_id.0, uuid);
+
+        let env_id = EnvironmentId(uuid);
+        assert_eq!(env_id.0, uuid);
+
+        let group_id = GroupId(uuid);
+        assert_eq!(group_id.0, uuid);
+    }
+
+    #[test]
+    fn test_typed_ids_hash() {
+        use std::collections::HashSet;
+
+        let uuid = Uuid::new_v4();
+        let user_id1 = UserId(uuid);
+        let user_id2 = UserId(uuid);
+
+        let mut set = HashSet::new();
+        set.insert(user_id1);
+        assert!(set.contains(&user_id2));
+    }
+
+    // ───────────────────────────────────── StoreError Tests ─────────────────────────────────────
+
+    #[test]
+    fn test_store_error_display() {
+        let not_found = StoreError::NotFound;
+        assert_eq!(not_found.to_string(), "not found");
+
+        let already_exists = StoreError::AlreadyExists;
+        assert_eq!(already_exists.to_string(), "already exists");
+
+        let conflict = StoreError::Conflict;
+        assert_eq!(conflict.to_string(), "conflict");
+
+        let backend = StoreError::Backend("db failure".to_string());
+        assert!(backend.to_string().contains("backend error"));
+        assert!(backend.to_string().contains("db failure"));
+    }
+
+    #[test]
+    fn test_parse_role_error_display() {
+        let err = ParseRoleError("unknown".to_string());
+        assert!(err.to_string().contains("unknown"));
+    }
+
+    // ───────────────────────────────────── Name Wrapper Tests ─────────────────────────────────────
+
+    #[test]
+    fn test_env_name_inner_access() {
+        let name = EnvName("production".to_string());
+        assert_eq!(name.0, "production");
+    }
+
+    #[test]
+    fn test_project_name_inner_access() {
+        let name = ProjectName("backend".to_string());
+        assert_eq!(name.0, "backend");
+    }
+
+    #[test]
+    fn test_env_name_equality() {
+        let name1 = EnvName("production".to_string());
+        let name2 = EnvName("production".to_string());
+        let name3 = EnvName("staging".to_string());
+        assert_eq!(name1, name2);
+        assert_ne!(name1, name3);
+    }
+
+    #[test]
+    fn test_project_name_equality() {
+        let name1 = ProjectName("backend".to_string());
+        let name2 = ProjectName("backend".to_string());
+        let name3 = ProjectName("frontend".to_string());
+        assert_eq!(name1, name2);
+        assert_ne!(name1, name3);
+    }
+
+    #[test]
+    fn test_invite_id_debug_and_equality() {
+        let uuid = Uuid::new_v4();
+        let invite_id1 = InviteId(uuid);
+        let invite_id2 = InviteId(uuid);
+        assert_eq!(invite_id1, invite_id2);
+        assert!(format!("{:?}", invite_id1).contains(&uuid.to_string()));
+    }
 }
