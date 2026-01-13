@@ -219,12 +219,12 @@ mod tests {
         let mut stream = bus.subscribe(&env_id).await.unwrap();
 
         // Publish multiple events
-        for i in 1..=3 {
+        for i in 1i64..=3 {
             let event = SecretChangeEvent {
                 event_type: EventType::Updated,
                 key: format!("KEY_{}", i),
                 version: i,
-                timestamp: i as i64,
+                timestamp: i,
             };
             bus.publish(&env_id, event).await.unwrap();
         }
