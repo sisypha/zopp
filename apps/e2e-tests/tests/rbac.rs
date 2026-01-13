@@ -1732,6 +1732,57 @@ impl TestEnv {
             .output()
             .expect("Failed to execute group set-env-permission")
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Audit Commands
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    fn audit_list(&self, user: &User, workspace: &str) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "audit",
+                "list",
+                "-w",
+                workspace,
+            ])
+            .output()
+            .expect("Failed to execute audit list")
+    }
+
+    fn audit_count(&self, user: &User, workspace: &str) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "audit",
+                "count",
+                "-w",
+                workspace,
+            ])
+            .output()
+            .expect("Failed to execute audit count")
+    }
+
+    #[allow(dead_code)]
+    fn audit_get(&self, user: &User, workspace: &str, id: &str) -> Output {
+        Command::new(&self.zopp_bin)
+            .env("HOME", &user.home)
+            .args([
+                "--server",
+                &self.server_url,
+                "audit",
+                "get",
+                "-w",
+                workspace,
+                id,
+            ])
+            .output()
+            .expect("Failed to execute audit get")
+    }
 }
 
 impl Drop for TestEnv {
@@ -6368,5 +6419,104 @@ async fn test_workspace_remove_cleans_up_permissions() -> Result<(), Box<dyn std
     println!("✓ Service principal cannot write (confirms old permissions were cleaned up)");
 
     println!("\n✅ test_workspace_remove_cleans_up_permissions PASSED");
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Test: Audit Log Access Requires Admin
+// ═══════════════════════════════════════════════════════════════════════════
+// This test verifies that audit log commands require Admin role on the workspace.
+// Read/Write roles should be denied access to audit logs.
+
+#[tokio::test]
+async fn test_audit_requires_admin() -> Result<(), Box<dyn std::error::Error>> {
+    let port = find_available_port()?;
+    let env = TestEnv::setup("audit_rbac", port).await?;
+
+    let alice = env.create_user("alice");
+    let bob = env.create_user("bob");
+    let charlie = env.create_user("charlie");
+
+    // Alice creates workspace and performs some operations to generate audit logs
+    let invite = env.create_server_invite()?;
+    env.join_server(&alice, &invite)?;
+    env.create_workspace(&alice, "acme")?;
+    env.create_project(&alice, "acme", "api")?;
+    env.create_environment(&alice, "acme", "api", "dev")?;
+
+    // Set a secret to generate audit entry
+    let output = env.secret_set(&alice, "acme", "api", "dev", "TEST_KEY", "test-value");
+    assert!(output.status.success(), "Failed to set secret");
+    println!("✓ Setup complete: workspace with audit entries created");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 1: Admin (workspace owner) CAN access audit logs
+    // ─────────────────────────────────────────────────────────────────────────
+    let output = env.audit_list(&alice, "acme");
+    assert_success(&output, "Admin can list audit logs");
+    println!("✓ Admin (Alice) can list audit logs");
+
+    let output = env.audit_count(&alice, "acme");
+    assert_success(&output, "Admin can count audit logs");
+    println!("✓ Admin (Alice) can count audit logs");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 2: User with WRITE role CANNOT access audit logs
+    // ─────────────────────────────────────────────────────────────────────────
+    let bob_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&bob, &bob_invite)?;
+    env.set_user_permission(&alice, "acme", &bob.email, "write")?;
+    println!("✓ Bob has WRITE permission on workspace");
+
+    let output = env.audit_list(&bob, "acme");
+    assert_denied(&output, "Write role cannot list audit logs");
+    println!("✓ Write role (Bob) denied listing audit logs");
+
+    let output = env.audit_count(&bob, "acme");
+    assert_denied(&output, "Write role cannot count audit logs");
+    println!("✓ Write role (Bob) denied counting audit logs");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 3: User with READ role CANNOT access audit logs
+    // ─────────────────────────────────────────────────────────────────────────
+    let charlie_invite = env.create_workspace_invite(&alice, "acme")?;
+    env.join_server(&charlie, &charlie_invite)?;
+    env.set_user_permission(&alice, "acme", &charlie.email, "read")?;
+    println!("✓ Charlie has READ permission on workspace");
+
+    let output = env.audit_list(&charlie, "acme");
+    assert_denied(&output, "Read role cannot list audit logs");
+    println!("✓ Read role (Charlie) denied listing audit logs");
+
+    let output = env.audit_count(&charlie, "acme");
+    assert_denied(&output, "Read role cannot count audit logs");
+    println!("✓ Read role (Charlie) denied counting audit logs");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 4: User with no workspace permission CANNOT access audit logs
+    // ─────────────────────────────────────────────────────────────────────────
+    // Remove Charlie's permission to test with no permission
+    env.remove_user_permission(&alice, "acme", &charlie.email)?;
+    println!("✓ Removed Charlie's permission");
+
+    let output = env.audit_list(&charlie, "acme");
+    assert_denied(&output, "No permission cannot list audit logs");
+    println!("✓ No permission (Charlie) denied listing audit logs");
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Test 5: Promote user to ADMIN, then they CAN access audit logs
+    // ─────────────────────────────────────────────────────────────────────────
+    env.set_user_permission(&alice, "acme", &bob.email, "admin")?;
+    println!("✓ Promoted Bob to ADMIN");
+
+    let output = env.audit_list(&bob, "acme");
+    assert_success(&output, "Promoted admin can list audit logs");
+    println!("✓ Promoted admin (Bob) can list audit logs");
+
+    let output = env.audit_count(&bob, "acme");
+    assert_success(&output, "Promoted admin can count audit logs");
+    println!("✓ Promoted admin (Bob) can count audit logs");
+
+    println!("\n✅ test_audit_requires_admin PASSED");
     Ok(())
 }

@@ -40,11 +40,8 @@ zopp audit list [OPTIONS] -w <WORKSPACE>
 |--------|----------|-------------|
 | `-w, --workspace <WORKSPACE>` | Yes | Workspace name |
 | `--limit <LIMIT>` | No | Maximum entries to return (default: 50) |
-| `--offset <OFFSET>` | No | Number of entries to skip |
 | `--action <ACTION>` | No | Filter by action type |
-| `--principal <PRINCIPAL>` | No | Filter by principal ID |
-| `--since <TIMESTAMP>` | No | Filter entries after this time |
-| `--until <TIMESTAMP>` | No | Filter entries before this time |
+| `--result <RESULT>` | No | Filter by result (success/denied) |
 | `-h, --help` | No | Print help |
 
 ### Action Types
@@ -66,10 +63,19 @@ zopp audit list [OPTIONS] -w <WORKSPACE>
 ```bash
 $ zopp audit list -w mycompany --limit 10
 
-TIMESTAMP            ACTION          PRINCIPAL      RESOURCE
-2024-01-10 14:30:00  secret.read     alice@...      backend/prod/DATABASE_URL
-2024-01-10 14:25:00  secret.write    bob@...        backend/dev/API_KEY
-2024-01-10 14:20:00  permission.grant admin@...     user:charlie@...
+Audit logs (10 of 247 total):
+
+ID:        550e8400-e29b-41d4-a716-446655440000
+Timestamp: 2024-01-10T14:30:00Z
+Action:    secret.read
+Resource:  secret (backend/prod/DATABASE_URL)
+Result:    success
+
+ID:        550e8400-e29b-41d4-a716-446655440001
+Timestamp: 2024-01-10T14:25:00Z
+Action:    secret.write
+Resource:  secret (backend/dev/API_KEY)
+Result:    success
 ```
 
 ---
@@ -99,13 +105,17 @@ zopp audit get -w <WORKSPACE> <ENTRY_ID>
 ```bash
 $ zopp audit get -w mycompany 550e8400-e29b-41d4-a716-446655440000
 
-Entry ID: 550e8400-e29b-41d4-a716-446655440000
-Timestamp: 2024-01-10T14:30:00Z
-Action: secret.read
-Principal: alice@example.com (550e8400-...)
-Resource: backend/production/DATABASE_URL
-IP Address: 192.168.1.100
-User Agent: zopp-cli/1.0.0
+ID:           550e8400-e29b-41d4-a716-446655440000
+Timestamp:    2024-01-10T14:30:00Z
+Principal ID: 660e8400-e29b-41d4-a716-446655440000
+User ID:      770e8400-e29b-41d4-a716-446655440000
+Action:       secret.read
+Resource:     secret (backend/production/DATABASE_URL)
+Workspace:    880e8400-e29b-41d4-a716-446655440000
+Project:      990e8400-e29b-41d4-a716-446655440000
+Environment:  aa0e8400-e29b-41d4-a716-446655440000
+Result:       success
+Client IP:    192.168.1.100
 ```
 
 ---
@@ -124,13 +134,11 @@ zopp audit count [OPTIONS] -w <WORKSPACE>
 |--------|----------|-------------|
 | `-w, --workspace <WORKSPACE>` | Yes | Workspace name |
 | `--action <ACTION>` | No | Filter by action type |
-| `--principal <PRINCIPAL>` | No | Filter by principal ID |
-| `--since <TIMESTAMP>` | No | Filter entries after this time |
-| `--until <TIMESTAMP>` | No | Filter entries before this time |
+| `--result <RESULT>` | No | Filter by result (success/denied) |
 
 ### Example
 
 ```bash
-$ zopp audit count -w mycompany --action secret.read --since 2024-01-01
-Count: 1,247
+$ zopp audit count -w mycompany --action secret.read
+Total audit log entries: 1247
 ```

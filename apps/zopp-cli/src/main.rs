@@ -8,8 +8,9 @@ mod grpc;
 mod k8s;
 
 use cli::{
-    Cli, Command, DiffCommand, EnvironmentCommand, GroupCommand, InviteCommand, PermissionCommand,
-    PrincipalCommand, ProjectCommand, SecretCommand, SyncCommand, WorkspaceCommand,
+    AuditCommand, Cli, Command, DiffCommand, EnvironmentCommand, GroupCommand, InviteCommand,
+    PermissionCommand, PrincipalCommand, ProjectCommand, SecretCommand, SyncCommand,
+    WorkspaceCommand,
 };
 use commands::*;
 use config::{resolve_context, resolve_workspace, resolve_workspace_project};
@@ -917,6 +918,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     workspace.as_deref(),
                     &project,
                     &environment,
+                )
+                .await?;
+            }
+        },
+        Command::Audit { audit_cmd } => match audit_cmd {
+            AuditCommand::List {
+                workspace,
+                action,
+                result,
+                limit,
+            } => {
+                cmd_audit_list(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    action.as_deref(),
+                    result.as_deref(),
+                    Some(limit),
+                )
+                .await?;
+            }
+            AuditCommand::Get { workspace, id } => {
+                cmd_audit_get(&cli.server, cli.tls_ca_cert.as_deref(), &workspace, &id).await?;
+            }
+            AuditCommand::Count {
+                workspace,
+                action,
+                result,
+            } => {
+                cmd_audit_count(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &workspace,
+                    action.as_deref(),
+                    result.as_deref(),
                 )
                 .await?;
             }

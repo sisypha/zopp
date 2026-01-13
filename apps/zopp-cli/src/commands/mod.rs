@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod diff;
 pub mod environment;
 pub mod group;
@@ -10,6 +11,7 @@ pub mod secret;
 pub mod sync;
 pub mod workspace;
 
+pub use audit::{cmd_audit_count, cmd_audit_get, cmd_audit_list};
 pub use diff::cmd_diff_k8s;
 pub use environment::{
     cmd_environment_create, cmd_environment_delete, cmd_environment_get, cmd_environment_list,
