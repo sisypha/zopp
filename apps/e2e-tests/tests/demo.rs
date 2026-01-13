@@ -72,7 +72,7 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
     harness.create_zopp_toml("acme", "api", "development")?;
     println!("✓ Created zopp.toml with defaults\n");
 
-    // Step 6: Alice creates workspace invite for Bob
+    // Step 6: Alice creates workspace invite for Bob (DEMO.md Step 4)
     println!("🎟️  Step 6: Alice creates workspace invite for Bob...");
     let workspace_invite = alice
         .exec_in(
@@ -82,13 +82,13 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
         .success()?;
     println!("✓ Workspace invite: {}\n", workspace_invite);
 
-    // Step 7: Bob joins using workspace invite
+    // Step 7: Bob joins using workspace invite (DEMO.md Steps 5-6 combined)
     println!("👨 Step 7: Bob joins using Alice's workspace invite...");
     bob.join(&workspace_invite, &bob.email(), &bob.principal())?;
     println!("✓ Bob joined workspace 'acme'\n");
 
-    // Step 7b: Alice grants Bob write permission
-    println!("🔑 Step 7b: Alice grants Bob write permission...");
+    // Step 8: Alice grants Bob write permission (DEMO.md Step 7)
+    println!("🔑 Step 8: Alice grants Bob write permission...");
     alice
         .exec(&[
             "permission",
@@ -103,8 +103,8 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
         .success()?;
     println!("✓ Bob granted write permission on workspace 'acme'\n");
 
-    // Step 8: Bob writes secret
-    println!("🔐 Step 8: Bob writes secret 'FLUXMAIL_API_TOKEN'...");
+    // Step 9: Bob writes secret (DEMO.md Step 8)
+    println!("🔐 Step 9: Bob writes secret 'FLUXMAIL_API_TOKEN'...");
     let secret_value = "fxt_8k2m9p4x7n1q5w3e6r8t0y2u4i6o8p0a";
     bob.exec_in(
         harness.test_dir(),
@@ -113,8 +113,8 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
     .success()?;
     println!("✓ Secret written by Bob\n");
 
-    // Step 9: Alice reads Bob's secret
-    println!("🔓 Step 9: Alice reads Bob's secret...");
+    // Step 10: Alice reads Bob's secret (DEMO.md Step 9)
+    println!("🔓 Step 10: Alice reads Bob's secret...");
     let retrieved_value = alice
         .exec_in(harness.test_dir(), &["secret", "get", "FLUXMAIL_API_TOKEN"])
         .success()?;
@@ -127,8 +127,8 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
     println!("  Expected: {}", secret_value);
     println!("  Got:      {}\n", retrieved_value);
 
-    // Step 10: Alice writes secret
-    println!("🔐 Step 10: Alice writes secret 'PAYFLOW_MERCHANT_ID'...");
+    // Step 11: Alice writes secret (DEMO.md Step 10)
+    println!("🔐 Step 11: Alice writes secret 'PAYFLOW_MERCHANT_ID'...");
     let secret_value2 = "mch_9x8v7c6b5n4m3";
     alice
         .exec_in(
@@ -138,8 +138,8 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
         .success()?;
     println!("✓ Secret written by Alice\n");
 
-    // Step 11: Bob reads Alice's secret
-    println!("🔓 Step 11: Bob reads Alice's secret...");
+    // Step 12: Bob reads Alice's secret (DEMO.md Step 11)
+    println!("🔓 Step 12: Bob reads Alice's secret...");
     let retrieved_value2 = bob
         .exec_in(
             harness.test_dir(),
@@ -155,8 +155,8 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
     println!("  Expected: {}", secret_value2);
     println!("  Got:      {}\n", retrieved_value2);
 
-    // Step 12: Export secrets to .env file
-    println!("📤 Step 12: Alice exports secrets to .env file...");
+    // Step 13: Export secrets to .env file (DEMO.md Step 12)
+    println!("📤 Step 13: Alice exports secrets to .env file...");
     let env_file = harness.test_dir().join("development.env");
     alice
         .exec_in(
@@ -169,15 +169,15 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
     assert!(env_contents.contains("FLUXMAIL_API_TOKEN="));
     assert!(env_contents.contains("PAYFLOW_MERCHANT_ID="));
 
-    // Step 13: Create production environment
-    println!("🌍 Step 13: Alice creates production environment...");
+    // Step 14: Create production environment (DEMO.md Step 13)
+    println!("🌍 Step 14: Alice creates production environment...");
     alice
         .exec_in(harness.test_dir(), &["environment", "create", "production"])
         .success()?;
     println!("✓ Environment 'production' created\n");
 
-    // Step 14: Import secrets to production
-    println!("📥 Step 14: Alice imports secrets to production (using -e flag override)...");
+    // Step 15: Import secrets to production (DEMO.md Step 14)
+    println!("📥 Step 15: Alice imports secrets to production (using -e flag override)...");
     alice
         .exec_in(
             harness.test_dir(),
@@ -193,8 +193,8 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
         .success()?;
     println!("✓ Secrets imported to production\n");
 
-    // Step 15: Verify imported secret
-    println!("🔍 Step 15: Verify imported secret in production (using -e flag override)...");
+    // Step 16: Verify imported secret (DEMO.md Step 15)
+    println!("🔍 Step 16: Verify imported secret in production (using -e flag override)...");
     let imported = alice
         .exec_in(
             harness.test_dir(),
@@ -208,9 +208,9 @@ async fn run_demo_test(config: BackendConfig) -> Result<(), Box<dyn std::error::
     );
     println!("✓ Import/export roundtrip verified!\n");
 
-    // Step 16: Secret injection via run command
+    // Step 17: Secret injection via run command (DEMO.md Step 16)
     println!(
-        "🏃 Step 16: Alice injects secrets from production and runs command (using -e override)..."
+        "🏃 Step 17: Alice injects secrets from production and runs command (using -e override)..."
     );
     let injected_value = alice
         .exec_in(
