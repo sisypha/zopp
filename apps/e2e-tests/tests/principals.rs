@@ -11,8 +11,7 @@ use common::{parse_principal_id, BackendConfig, TestHarness};
 backend_test!(principals_crud, run_principals_test);
 backend_test!(principals_rename, run_principals_rename_test);
 backend_test!(principals_service_list, run_principals_service_list_test);
-// TODO: principals_workspace_ops test disabled - revoke-all command is broken
-// backend_test!(principals_workspace_ops, run_principals_workspace_ops_test);
+backend_test!(principals_workspace_ops, run_principals_workspace_ops_test);
 backend_test!(
     principals_grant_workspace_access,
     run_principals_grant_workspace_access_test
@@ -425,8 +424,6 @@ async fn run_principals_service_list_test(
 }
 
 /// Test principal workspace operations: workspace-remove, revoke-all
-/// NOTE: This test is currently disabled because revoke-all is broken
-#[allow(dead_code)]
 async fn run_principals_workspace_ops_test(
     config: BackendConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
