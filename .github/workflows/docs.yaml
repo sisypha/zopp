@@ -40,7 +40,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: docs
-          path: docs/dist
+          path: docs/build
           retention-days: 1
 
   deploy:
@@ -85,7 +85,7 @@ jobs:
           cp /tmp/backup/badge.json . 2>/dev/null || true
           cp /tmp/backup/coverage-baseline.txt . 2>/dev/null || true
 
-          # Copy docs (Starlight outputs to dist/)
+          # Copy docs (Docusaurus outputs to build/)
           cp -r /tmp/docs/* .
 
           # Create root redirect to docs
