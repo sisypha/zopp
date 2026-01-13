@@ -199,7 +199,20 @@ zopp join inv_4f8a2b3c1de56f789a0b1c2d3e4f56789a0b1c2d3e4f56789a0b1c2d3e4f5678 \
 10. Server stored Bob's wrapped KEK: `(workspace_id, bob_principal_id, ephemeral_pub, kek_wrapped, kek_nonce)`
 11. **Server never saw KEK plaintext - it was re-wrapped client-side**
 
-## Step 7: Bob Writes a Secret (Auto-Encryption)
+## Step 7: Alice Grants Bob Write Permission
+
+Before Bob can write secrets, Alice needs to grant him write permission on the workspace.
+
+```bash
+# Terminal 3 (Alice) - Grant Bob write permission
+zopp permission user-set -w acme --email bob@example.com --role write
+```
+
+**What happened:**
+- Alice granted Bob the "write" role at the workspace level
+- Bob can now read and write secrets in this workspace
+
+## Step 8: Bob Writes a Secret (Auto-Encryption)
 
 Bob can now write secrets to the development environment (using defaults from zopp.toml)!
 
@@ -216,7 +229,7 @@ zopp secret set "FLUXMAIL_API_TOKEN" "fxt_8k2m9p4x7n1q5w3e6r8t0y2u4i6o8p0a"
 5. Bob's CLI sent `(workspace, project, env, key, nonce, ciphertext)` to server
 6. Server stored encrypted blob - **never saw plaintext**
 
-## Step 8: Alice Reads Bob's Secret (Auto-Decryption)
+## Step 9: Alice Reads Bob's Secret (Auto-Decryption)
 
 Alice can read the secret Bob just wrote!
 
@@ -237,14 +250,14 @@ zopp secret get "FLUXMAIL_API_TOKEN"
 6. Alice's CLI printed plaintext value
 7. **Server never saw any plaintext**
 
-## Step 9: Alice Writes More Secrets
+## Step 10: Alice Writes More Secrets
 
 ```bash
 # Terminal 3 (Alice) - Write another secret
 zopp secret set "PAYFLOW_MERCHANT_ID" "mch_9x8v7c6b5n4m3"
 ```
 
-## Step 10: Bob Reads Alice's Secret
+## Step 11: Bob Reads Alice's Secret
 
 ```bash
 # Terminal 4 (Bob) - Read Alice's secret
@@ -262,7 +275,7 @@ zopp secret get "PAYFLOW_MERCHANT_ID"
 - Both can encrypt/decrypt secrets
 - **Server sees ZERO plaintext at any point**
 
-## Step 11: Alice Exports Secrets to .env File
+## Step 12: Alice Exports Secrets to .env File
 
 Alice can export all secrets from development (using zopp.toml defaults):
 
@@ -285,7 +298,7 @@ cat development.env
 - Formatted as sorted KEY=value lines and wrote to file
 - **File contains plaintext - keep it secure!**
 
-## Step 12: Alice Creates Production Environment
+## Step 13: Alice Creates Production Environment
 
 Now Alice creates production and imports the secrets there (using `-e` flag to override zopp.toml):
 
@@ -304,7 +317,7 @@ zopp environment create production -e production
 - Server stored the wrapped production DEK
 - **Production has different encryption key than development**
 
-## Step 13: Alice Imports Secrets to Production
+## Step 14: Alice Imports Secrets to Production
 
 ```bash
 # Terminal 3 (Alice) - Import secrets to production (override with -e flag)
@@ -321,7 +334,7 @@ zopp secret import -e production --input development.env
 - Alice's CLI sent encrypted blobs to server
 - **Same plaintext values, different encryption (different environment = different DEK)**
 
-## Step 14: Verify Imported Secrets in Production
+## Step 15: Verify Imported Secrets in Production
 
 ```bash
 # Terminal 3 (Alice) - Read imported secret from production (override with -e flag)
@@ -338,7 +351,7 @@ zopp secret get FLUXMAIL_API_TOKEN -e production
 - **Server never saw plaintext during the transfer - only encrypted blobs in each environment**
 - **Flags override zopp.toml defaults when needed!**
 
-## Step 15: Run Command with Injected Secrets
+## Step 16: Run Command with Injected Secrets
 
 Alice can run any command with secrets automatically injected as environment variables:
 

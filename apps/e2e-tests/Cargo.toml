@@ -17,23 +17,42 @@ k8s-openapi = { workspace = true }
 # For graceful shutdown (coverage collection)
 nix = { version = "0.29", features = ["signal"] }
 
+# For backend_test! macro name generation
+paste = "1.0"
+
 [[test]]
 name = "demo"
 path = "tests/demo.rs"
 
 [[test]]
-name = "cli_k8s_sync"
-path = "tests/cli_k8s_sync.rs"
-
-[[test]]
-name = "operator_sync"
-path = "tests/operator_sync.rs"
-
-[[test]]
-name = "self_signed_tls"
-path = "tests/self_signed_tls.rs"
+name = "k8s"
+path = "tests/k8s.rs"
 harness = false
 
 [[test]]
 name = "rbac"
 path = "tests/rbac.rs"
+
+[[test]]
+name = "environments"
+path = "tests/environments.rs"
+
+[[test]]
+name = "projects"
+path = "tests/projects.rs"
+
+[[test]]
+name = "invites"
+path = "tests/invites.rs"
+
+[[test]]
+name = "groups"
+path = "tests/groups.rs"
+
+[[test]]
+name = "user_permissions"
+path = "tests/user_permissions.rs"
+
+[[test]]
+name = "principals"
+path = "tests/principals.rs"

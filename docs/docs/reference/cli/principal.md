@@ -204,7 +204,7 @@ zopp principal workspace-remove -w <WORKSPACE> -p <PRINCIPAL>
 
 ## principal revoke-all
 
-Revoke all permissions for a principal in a workspace, but keep their workspace access.
+Revoke all permissions for a principal in a workspace (workspace, project, and environment level). The principal remains a workspace member but has no permission roles. Use `workspace-remove` to completely remove a principal from a workspace.
 
 ```bash
 zopp principal revoke-all -w <WORKSPACE> -p <PRINCIPAL>
