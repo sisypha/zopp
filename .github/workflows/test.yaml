@@ -99,9 +99,10 @@ jobs:
           script: |
             const current = '${{ steps.coverage.outputs.percentage }}';
             const baseline = '${{ steps.baseline.outputs.percentage }}';
-            const diff = (parseFloat(current) - parseFloat(baseline)).toFixed(2);
-            const sign = diff >= 0 ? '+' : '';
-            const emoji = diff >= 0 ? ':white_check_mark:' : ':warning:';
+            const numericDiff = parseFloat(current) - parseFloat(baseline);
+            const diff = numericDiff.toFixed(2);
+            const sign = numericDiff >= 0 ? '+' : '';
+            const emoji = numericDiff >= 0 ? ':white_check_mark:' : ':warning:';
 
             const body = `## ${emoji} Coverage Report
 
