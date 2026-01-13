@@ -3,5 +3,9 @@
 pub mod harness;
 pub mod utils;
 
+// Re-export for tests that use the new infrastructure
+// Note: rbac.rs doesn't use harness, so allow unused imports there
+#[allow(unused_imports)]
 pub use harness::*;
+#[allow(unused_imports)]
 pub use utils::*;
