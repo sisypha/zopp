@@ -327,6 +327,22 @@ pub async fn remove_principal_from_workspace(
             Status::internal(format!("Failed to remove environment permissions: {}", e))
         })?;
 
+    // Remove workspace-level permission
+    match server
+        .store
+        .remove_workspace_permission(&workspace.id, &target_principal_id)
+        .await
+    {
+        Ok(()) => {}
+        Err(zopp_storage::StoreError::NotFound) => {} // No workspace permission to remove
+        Err(e) => {
+            return Err(Status::internal(format!(
+                "Failed to remove workspace permission: {}",
+                e
+            )))
+        }
+    }
+
     // Remove the principal from the workspace
     server
         .store
