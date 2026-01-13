@@ -111,6 +111,16 @@ Sensitive data is handled carefully:
 
 zopp has not yet undergone a formal security audit. The cryptographic design follows established best practices and uses standard, well-audited libraries.
 
+## Future Considerations
+
+### Post-Quantum Cryptography
+
+Current algorithms (Ed25519, X25519) are vulnerable to quantum computers. When PQC standards mature:
+- Key encapsulation: ML-KEM (Kyber)
+- Signatures: ML-DSA (Dilithium) or SLH-DSA (SPHINCS+)
+
+zopp's architecture allows upgrading algorithms without changing the security model.
+
 ## Next Steps
 
 - [Architecture](/security/architecture) - How these primitives are used
