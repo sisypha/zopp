@@ -240,18 +240,22 @@ impl TestHarness {
         let server = cmd.spawn()?;
         self.server_process = Some(server);
 
-        // Wait for server to be ready (12 seconds timeout for slow CI machines)
-        let client_addr = format!("127.0.0.1:{}", self.port);
+        // Wait for server to be ready using the /readyz endpoint (12 seconds timeout)
+        // This ensures the gRPC service is fully registered, not just TCP accepting
+        let readiness_url = format!("http://127.0.0.1:{}/readyz", self.health_port);
+        let client = reqwest::Client::new();
         for i in 1..=60 {
             sleep(Duration::from_millis(200)).await;
-            if TcpStream::connect(&client_addr).is_ok() {
-                return Ok(());
+            if let Ok(resp) = client.get(&readiness_url).send().await {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
             }
             if i == 60 {
                 if let Some(ref mut server) = self.server_process {
                     graceful_shutdown(server);
                 }
-                return Err("Server failed to start within 12 seconds".into());
+                return Err("Server failed to become ready within 12 seconds".into());
             }
         }
 
