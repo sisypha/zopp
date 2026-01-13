@@ -876,6 +876,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ Operator started\n");
 
     // Wait for operator health check
+    let mut operator_healthy = false;
     for _ in 1..=20 {
         sleep(Duration::from_millis(100)).await;
         if let Ok(resp) = reqwest::get(&format!(
@@ -885,9 +886,15 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         .await
         {
             if resp.status().is_success() {
+                operator_healthy = true;
                 break;
             }
         }
+    }
+    if !operator_healthy {
+        graceful_shutdown(&mut operator);
+        graceful_shutdown(&mut server);
+        return Err("Operator health check failed after 20 attempts".into());
     }
 
     // Wait for initial sync

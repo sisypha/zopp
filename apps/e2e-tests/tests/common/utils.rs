@@ -85,7 +85,8 @@ pub fn parse_principal_id(output: &str) -> Option<String> {
         .find(|line| line.contains("(ID:"))
         .and_then(|line| {
             let start = line.find("(ID: ")? + 5;
-            let end = line.find(')')?;
+            // Search for ')' starting from `start` to avoid matching earlier parentheses
+            let end = start + line[start..].find(')')?;
             Some(line[start..end].to_string())
         })
 }

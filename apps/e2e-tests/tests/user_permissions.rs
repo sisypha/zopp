@@ -104,7 +104,7 @@ async fn run_test_user_workspace_permission(
         ])
         .success()?;
 
-    // Verify permission is removed
+    // Verify permission is removed via get
     let result = alice.exec(&[
         "permission",
         "user-get",
@@ -116,6 +116,16 @@ async fn run_test_user_workspace_permission(
     assert!(
         result.failed() || result.stdout().to_lowercase().contains("not found"),
         "Should fail to get removed permission"
+    );
+
+    // Verify bob no longer appears in the permission list
+    let list_output = alice
+        .exec(&["permission", "user-list", "-w", "acme"])
+        .success()?;
+    assert!(
+        !list_output.contains(&bob.email()),
+        "Bob should not appear in permission list after removal, got: {}",
+        list_output
     );
 
     println!("test_user_workspace_permission PASSED");
