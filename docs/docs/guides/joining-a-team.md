@@ -147,9 +147,35 @@ zopp invite create -w acme-corp --expires-hours 48
 
 You can use zopp from multiple devices. There are three ways to set up a new device:
 
-### Option 1: Export/Import (Recommended)
+### Option 1: Self-Invite (Recommended)
 
-Transfer your existing principal to a new device:
+Create a self-invite that only you can use. This is the easiest way to add a new device—just copy a token:
+
+```bash
+# On your existing device (or via SSH) - create a self-invite
+zopp invite create-self -w acme-corp --plain
+# Returns: inv_xxx...
+```
+
+Copy the token to your new device (paste in chat, email to yourself, etc.), then:
+
+```bash
+# On your new device
+zopp join inv_xxx... you@company.com --principal my-new-laptop
+```
+
+:::tip Pre-create invites before traveling
+Create a self-invite before you leave, so you can set up your new device without needing access to your old one.
+:::
+
+:::info Self-invites vs regular invites
+- **Self-invite**: Any workspace member can create one (read/write/admin role). Can only be used by the same user.
+- **Regular invite**: Requires admin role. Can be used by anyone.
+:::
+
+### Option 2: Export/Import
+
+Transfer your existing principal to a new device via encrypted file. Use this when you need offline transfer or want to use the exact same principal identity:
 
 ```bash
 # On your existing device - export your principal
@@ -164,28 +190,6 @@ Transfer the `principal.enc` file to your new device (via USB, secure messaging,
 zopp principal import -i principal.enc
 # Enter the passphrase to decrypt
 ```
-
-### Option 2: Self-Invite
-
-Create a self-invite that only you can use. This is useful when you can't easily transfer the encrypted export file (e.g., setting up a new work laptop via remote SSH to your existing machine, or pre-creating an invite before traveling):
-
-```bash
-# On your existing device (or via SSH) - create a self-invite
-zopp invite create-self -w acme-corp --plain
-# Returns: inv_xxx...
-```
-
-Save the invite token somewhere secure. On your new device, use it with your email:
-
-```bash
-# On your new device
-zopp join inv_xxx... you@company.com --principal my-new-laptop
-```
-
-:::info Self-invites vs regular invites
-- **Self-invite**: Any workspace member can create one (read, write, or admin role). Can only be used by the same user.
-- **Regular invite**: Requires admin role. Can be used by anyone.
-:::
 
 ### Option 3: Create a New Principal Locally
 
