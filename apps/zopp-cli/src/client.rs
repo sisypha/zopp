@@ -6,13 +6,15 @@
 use async_trait::async_trait;
 use tonic::{Request, Response, Status};
 use zopp_proto::{
+    AuditLogEntry, AuditLogList, CountAuditLogsRequest, CountAuditLogsResponse,
     CreateEnvironmentRequest, CreateGroupRequest, CreateInviteRequest, CreateProjectRequest,
     CreateWorkspaceRequest, DeleteEnvironmentRequest, DeleteGroupRequest, DeleteProjectRequest,
-    DeleteSecretRequest, Empty, Environment, EnvironmentList, GetEnvironmentRequest,
-    GetInviteRequest, GetPrincipalRequest, GetProjectRequest, GetSecretRequest,
-    GetWorkspaceKeysRequest, Group, GroupList, InviteToken, ListEnvironmentsRequest,
-    ListGroupsRequest, ListProjectsRequest, ListSecretsRequest, Principal, Project, ProjectList,
-    Secret, SecretList, UpsertSecretRequest, Workspace, WorkspaceKeys, WorkspaceList,
+    DeleteSecretRequest, Empty, Environment, EnvironmentList, GetAuditLogRequest,
+    GetEnvironmentRequest, GetInviteRequest, GetPrincipalRequest, GetProjectRequest,
+    GetSecretRequest, GetWorkspaceKeysRequest, Group, GroupList, InviteToken, ListAuditLogsRequest,
+    ListEnvironmentsRequest, ListGroupsRequest, ListProjectsRequest, ListSecretsRequest, Principal,
+    Project, ProjectList, Secret, SecretList, UpsertSecretRequest, Workspace, WorkspaceKeys,
+    WorkspaceList,
 };
 
 #[cfg(test)]
@@ -156,6 +158,26 @@ pub trait GroupClient: Send + Sync {
         &mut self,
         request: Request<DeleteGroupRequest>,
     ) -> Result<Response<Empty>, Status>;
+}
+
+/// Trait for audit-related operations.
+#[cfg_attr(test, automock)]
+#[async_trait]
+pub trait AuditClient: Send + Sync {
+    async fn list_audit_logs(
+        &mut self,
+        request: Request<ListAuditLogsRequest>,
+    ) -> Result<Response<AuditLogList>, Status>;
+
+    async fn get_audit_log(
+        &mut self,
+        request: Request<GetAuditLogRequest>,
+    ) -> Result<Response<AuditLogEntry>, Status>;
+
+    async fn count_audit_logs(
+        &mut self,
+        request: Request<CountAuditLogsRequest>,
+    ) -> Result<Response<CountAuditLogsResponse>, Status>;
 }
 
 // Implementation for the real gRPC client
@@ -327,6 +349,30 @@ impl GroupClient for ZoppServiceClient<Channel> {
         request: Request<DeleteGroupRequest>,
     ) -> Result<Response<Empty>, Status> {
         self.delete_group(request).await
+    }
+}
+
+#[async_trait]
+impl AuditClient for ZoppServiceClient<Channel> {
+    async fn list_audit_logs(
+        &mut self,
+        request: Request<ListAuditLogsRequest>,
+    ) -> Result<Response<AuditLogList>, Status> {
+        self.list_audit_logs(request).await
+    }
+
+    async fn get_audit_log(
+        &mut self,
+        request: Request<GetAuditLogRequest>,
+    ) -> Result<Response<AuditLogEntry>, Status> {
+        self.get_audit_log(request).await
+    }
+
+    async fn count_audit_logs(
+        &mut self,
+        request: Request<CountAuditLogsRequest>,
+    ) -> Result<Response<CountAuditLogsResponse>, Status> {
+        self.count_audit_logs(request).await
     }
 }
 
