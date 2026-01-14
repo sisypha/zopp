@@ -603,7 +603,11 @@ pub async fn cmd_principal_import(input: Option<&Path>) -> Result<(), Box<dyn st
     };
 
     // Check if principal already exists
-    if config.principals.iter().any(|p| p.id == export.principal.id) {
+    if config
+        .principals
+        .iter()
+        .any(|p| p.id == export.principal.id)
+    {
         return Err(format!(
             "Principal '{}' (ID: {}) already exists in config",
             export.principal.name, export.principal.id
@@ -646,18 +650,25 @@ pub async fn cmd_principal_import(input: Option<&Path>) -> Result<(), Box<dyn st
 
     println!("✓ Principal '{}' imported successfully", final_name);
     println!("  Server URL from export: {}", export.server_url);
-    println!("  Use with: zopp --server {} workspace list", export.server_url);
+    println!(
+        "  Use with: zopp --server {} workspace list",
+        export.server_url
+    );
 
     Ok(())
 }
 
 /// Derive encryption key from passphrase using Argon2id (lighter params for export)
-fn derive_export_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], Box<dyn std::error::Error>> {
+fn derive_export_key(
+    passphrase: &str,
+    salt: &[u8],
+) -> Result<[u8; 32], Box<dyn std::error::Error>> {
     use argon2::{Algorithm, Argon2, Params, Version};
 
     // Use lighter params for export (still secure, but faster)
     // 64 MiB memory, 3 iterations
-    let params = Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
+    let params =
+        Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
     let mut key = [0u8; 32];
