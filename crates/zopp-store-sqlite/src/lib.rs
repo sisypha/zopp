@@ -130,10 +130,11 @@ impl Store for SqliteStore {
             };
 
             // Add user to workspaces (user-level membership)
+            // Use INSERT OR IGNORE to handle the case where user is already a member
             for workspace_id in &params.workspace_ids {
                 let ws_id = workspace_id.0.to_string();
                 sqlx::query!(
-                    "INSERT INTO workspace_members(workspace_id, user_id) VALUES(?, ?)",
+                    "INSERT OR IGNORE INTO workspace_members(workspace_id, user_id) VALUES(?, ?)",
                     ws_id,
                     actual_user_id_str
                 )
@@ -367,14 +368,17 @@ impl Store for SqliteStore {
             .as_ref()
             .map(|id| id.0.to_string());
 
+        let for_user_id_str = params.for_user_id.as_ref().map(|id| id.0.to_string());
+
         sqlx::query!(
-            "INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce) VALUES(?, ?, ?, ?, ?, ?)",
+            "INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce, for_user_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
             invite_id_str,
             params.token,
             params.expires_at,
             created_by_user_id_str,
             params.kek_encrypted,
-            params.kek_nonce
+            params.kek_nonce,
+            for_user_id_str
         )
         .execute(&self.pool)
         .await
@@ -414,6 +418,7 @@ impl Store for SqliteStore {
             updated_at: row.updated_at,
             expires_at: params.expires_at,
             created_by_user_id: params.created_by_user_id.clone(),
+            for_user_id: params.for_user_id.clone(),
         })
     }
 
@@ -423,7 +428,7 @@ impl Store for SqliteStore {
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>",
-               created_by_user_id, revoked, kek_encrypted, kek_nonce
+               created_by_user_id, revoked, kek_encrypted, kek_nonce, for_user_id
                FROM invites WHERE token = ?"#,
             token
         )
@@ -442,6 +447,12 @@ impl Store for SqliteStore {
                     Uuid::try_parse(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?;
                 let created_by_user_id = row
                     .created_by_user_id
+                    .as_ref()
+                    .map(|id| Uuid::try_parse(id).map(UserId))
+                    .transpose()
+                    .map_err(|e| StoreError::Backend(e.to_string()))?;
+                let for_user_id = row
+                    .for_user_id
                     .as_ref()
                     .map(|id| Uuid::try_parse(id).map(UserId))
                     .transpose()
@@ -474,6 +485,7 @@ impl Store for SqliteStore {
                     updated_at: row.updated_at,
                     expires_at: row.expires_at,
                     created_by_user_id,
+                    for_user_id,
                 })
             }
         }
@@ -488,7 +500,7 @@ impl Store for SqliteStore {
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>",
-               created_by_user_id, revoked, kek_encrypted, kek_nonce
+               created_by_user_id, revoked, kek_encrypted, kek_nonce, for_user_id
                FROM invites
                WHERE revoked = 0 AND (
                    (? IS NOT NULL AND created_by_user_id = ?) OR
@@ -507,6 +519,12 @@ impl Store for SqliteStore {
             let id = Uuid::try_parse(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?;
             let created_by_user_id = row
                 .created_by_user_id
+                .as_ref()
+                .map(|id| Uuid::try_parse(id).map(UserId))
+                .transpose()
+                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let for_user_id = row
+                .for_user_id
                 .as_ref()
                 .map(|id| Uuid::try_parse(id).map(UserId))
                 .transpose()
@@ -538,6 +556,7 @@ impl Store for SqliteStore {
                 updated_at: row.updated_at,
                 expires_at: row.expires_at,
                 created_by_user_id,
+                for_user_id,
             });
         }
         Ok(invites)
@@ -3749,6 +3768,7 @@ mod tests {
                 kek_nonce: Some(vec![0u8; 24]),
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
                 created_by_user_id: Some(user_id.clone()),
+                for_user_id: None,
             })
             .await
             .unwrap();

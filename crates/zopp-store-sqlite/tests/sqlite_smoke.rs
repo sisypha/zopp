@@ -699,6 +699,7 @@ async fn invite_crud_operations() {
             kek_nonce: Some(vec![9; 24]),
             expires_at,
             created_by_user_id: Some(user_id.clone()),
+            for_user_id: None,
         })
         .await
         .unwrap();
@@ -725,6 +726,7 @@ async fn invite_crud_operations() {
             kek_nonce: None,
             expires_at: Utc::now() + Duration::days(1),
             created_by_user_id: None,
+            for_user_id: None,
         })
         .await
         .unwrap();

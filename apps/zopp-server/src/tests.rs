@@ -1095,6 +1095,7 @@ async fn test_server_invite_joins_user_without_creating_workspace() {
             kek_nonce: None,
             expires_at: Utc::now() + chrono::Duration::hours(24),
             created_by_user_id: None,
+            for_user_id: None,
         })
         .await
         .unwrap();
@@ -3979,6 +3980,7 @@ mod handler_tests {
                 kek_nonce: Some(vec![0u8; 24]),
                 created_by_user_id: None,
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                for_user_id: None,
             })
             .await
             .unwrap();
@@ -4424,6 +4426,7 @@ mod handler_tests {
                 kek_nonce: Some(vec![0u8; 24]),
                 created_by_user_id: Some(owner_user_id.clone()),
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                for_user_id: None,
             })
             .await
             .unwrap();
@@ -4467,6 +4470,7 @@ mod handler_tests {
                 kek_nonce: Some(vec![0u8; 24]),
                 created_by_user_id: None,
                 expires_at: chrono::Utc::now() - chrono::Duration::hours(1), // Expired
+                for_user_id: None,
             })
             .await
             .unwrap();
@@ -4571,6 +4575,7 @@ mod handler_tests {
                 kek_nonce: Some(vec![0u8; 24]),
                 created_by_user_id: Some(user_id.clone()),
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                for_user_id: None,
             })
             .await
             .unwrap();
@@ -14171,6 +14176,7 @@ mod handler_tests {
                 kek_nonce: None,
                 expires_at: expired_at,
                 created_by_user_id: Some(user_id),
+                for_user_id: None,
             })
             .await
             .unwrap();
@@ -16858,6 +16864,7 @@ mod handler_tests {
                 kek_nonce: None,
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
                 created_by_user_id: Some(user_id.clone()),
+                for_user_id: None,
             })
             .await
             .unwrap();
@@ -16938,6 +16945,7 @@ mod handler_tests {
                 kek_nonce: None,
                 expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
                 created_by_user_id: Some(user_id.clone()),
+                for_user_id: None,
             })
             .await
             .unwrap();

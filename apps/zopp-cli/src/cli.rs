@@ -369,8 +369,20 @@ pub enum SecretCommand {
 
 #[derive(Subcommand)]
 pub enum InviteCommand {
-    /// Create a workspace invite
+    /// Create a workspace invite (requires admin)
     Create {
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: Option<String>,
+        /// Hours until invite expires (default: 168 = 7 days)
+        #[arg(long, default_value = "168")]
+        expires_hours: i64,
+        /// Output only the invite code (for scripts)
+        #[arg(long)]
+        plain: bool,
+    },
+    /// Create a self-invite for adding a new device (any workspace role)
+    CreateSelf {
         /// Workspace name
         #[arg(long, short = 'w')]
         workspace: Option<String>,

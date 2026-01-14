@@ -129,6 +129,7 @@ async fn cmd_invite_create(
             kek_nonce: None,
             expires_at,
             created_by_user_id: None,
+            for_user_id: None,
         })
         .await?;
 

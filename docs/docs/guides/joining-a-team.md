@@ -145,7 +145,7 @@ zopp invite create -w acme-corp --expires-hours 48
 
 ## Multiple Devices
 
-You can use zopp from multiple devices. There are two ways to set up a new device:
+You can use zopp from multiple devices. There are three ways to set up a new device:
 
 ### Option 1: Export/Import (Recommended)
 
@@ -165,7 +165,29 @@ zopp principal import -i principal.enc
 # Enter the passphrase to decrypt
 ```
 
-### Option 2: Create a New Principal
+### Option 2: Self-Invite
+
+Create a self-invite that only you can use. This is useful when you don't have physical access to your existing device (e.g., adding a new work laptop without your personal laptop nearby):
+
+```bash
+# On your existing device - create a self-invite
+zopp invite create-self -w acme-corp --plain
+# Returns: inv_xxx...
+```
+
+On your new device, use the invite with your email:
+
+```bash
+# On your new device
+zopp join inv_xxx... you@company.com --principal my-new-laptop
+```
+
+:::info Self-invites vs regular invites
+- **Self-invite**: Any workspace member can create one (read, write, or admin role). Can only be used by the same user.
+- **Regular invite**: Requires admin role. Can be used by anyone.
+:::
+
+### Option 3: Create a New Principal Locally
 
 If you have access to an existing device, you can create a new principal that automatically inherits workspace access:
 
@@ -177,7 +199,7 @@ zopp principal create desktop
 zopp principal list
 ```
 
-The new principal's keys are saved locally. To use it on a different device, use export/import as shown above.
+The new principal's keys are saved locally. To use it on a different device, use export/import or self-invite as shown above.
 
 ### Managing Principals
 

@@ -15,6 +15,7 @@ service ZoppService {
 
   // Invites
   rpc CreateInvite(CreateInviteRequest) returns (InviteToken);
+  rpc CreateSelfInvite(CreateSelfInviteRequest) returns (InviteToken);  // For adding new device
   rpc GetInvite(GetInviteRequest) returns (InviteToken);  // Unauthenticated - for joining
   rpc ListInvites(Empty) returns (InviteList);
   rpc RevokeInvite(RevokeInviteRequest) returns (Empty);
@@ -223,6 +224,7 @@ message InviteToken {
   bytes kek_encrypted = 6;           // Workspace KEK encrypted with invite secret
   bytes kek_nonce = 7;               // 24-byte nonce for KEK encryption
   string invite_secret = 8;          // Secret to decrypt KEK (only returned on create, hex-encoded)
+  optional string user_id = 9;       // If set, only this user can use the invite (self-invite)
 }
 
 message GetInviteRequest {
@@ -235,6 +237,15 @@ message InviteList {
 
 message RevokeInviteRequest {
   string token = 1;                  // Hex-encoded SHA256 hash of invite secret
+}
+
+// Self-invite for adding a new device (same user only)
+message CreateSelfInviteRequest {
+  string workspace_name = 1;         // Workspace to create invite for
+  int64 expires_at = 2;              // Expiration timestamp
+  string token = 3;                  // Hex-encoded SHA256 hash of invite secret
+  bytes kek_encrypted = 4;           // Workspace KEK encrypted with invite secret
+  bytes kek_nonce = 5;               // 24-byte nonce for KEK encryption
 }
 
 // Principal messages

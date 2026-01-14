@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce\n               FROM invites WHERE token = $1",
+  "query": "SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce, for_user_id\n               FROM invites WHERE token = $1",
   "describe": {
     "columns": [
       {
@@ -47,6 +47,11 @@
         "ordinal": 8,
         "name": "kek_nonce",
         "type_info": "Bytea"
+      },
+      {
+        "ordinal": 9,
+        "name": "for_user_id",
+        "type_info": "Uuid"
       }
     ],
     "parameters": {
@@ -63,8 +68,9 @@
       true,
       false,
       true,
+      true,
       true
     ]
   },
-  "hash": "7dbcdfe7b2f7c200d8060fdc78ec61569d79c9b153f6a3f3c64a473c3bbe859e"
+  "hash": "e50c991de523bb88dfb5b30565259c19e263b08624247c69fbfc1d5cc5627b6d"
 }

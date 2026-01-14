@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce, for_user_id) VALUES(?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "6130b0d16b04d99414ce9d7cfa5d2d1bc484d325c70b07a97deec0b5fdb9e06d"
+}

@@ -460,6 +460,13 @@ impl CommandResult {
             .to_string()
     }
 
+    /// Get stderr as string
+    pub fn stderr(&self) -> String {
+        String::from_utf8_lossy(&self.output.stderr)
+            .trim()
+            .to_string()
+    }
+
     /// Check if the command failed (for negative tests)
     pub fn failed(&self) -> bool {
         !self.output.status.success()

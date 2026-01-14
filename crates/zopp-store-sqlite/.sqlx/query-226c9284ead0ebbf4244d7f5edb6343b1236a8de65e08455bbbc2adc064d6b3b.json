@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO workspace_members(workspace_id, user_id) VALUES(?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "226c9284ead0ebbf4244d7f5edb6343b1236a8de65e08455bbbc2adc064d6b3b"
+}
