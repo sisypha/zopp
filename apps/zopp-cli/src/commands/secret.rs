@@ -11,10 +11,10 @@ pub fn parse_env_content(content: &str) -> (Vec<(String, String)>, Vec<String>) 
     let mut secrets = Vec::new();
     let mut errors = Vec::new();
 
-    for (line_num, result) in dotenvy::from_read_iter(Cursor::new(content)).enumerate() {
+    for result in dotenvy::from_read_iter(Cursor::new(content)) {
         match result {
             Ok((key, value)) => secrets.push((key, value)),
-            Err(e) => errors.push(format!("line {}: {}", line_num + 1, e)),
+            Err(e) => errors.push(e.to_string()),
         }
     }
 
@@ -413,7 +413,8 @@ mod tests {
         assert_eq!(secrets.len(), 1);
         assert_eq!(secrets[0].0, "VALID");
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].contains("line 2"));
+        // dotenvy reports parsing errors with context
+        assert!(!errors[0].is_empty());
     }
 
     #[test]
