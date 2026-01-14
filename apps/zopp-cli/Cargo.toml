@@ -37,6 +37,8 @@ kube = { workspace = true }
 k8s-openapi = { workspace = true }
 base64 = { workspace = true }
 url = { workspace = true }
+rpassword = "7"
+argon2 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }

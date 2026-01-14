@@ -1,11 +1,36 @@
 use crate::config::{get_current_principal, load_config, save_config, PrincipalConfig};
 use crate::grpc::{add_auth_metadata, connect};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use ed25519_dalek::SigningKey;
+use rand_core::RngCore;
+use serde::{Deserialize, Serialize};
+use std::io::Read;
+use std::path::Path;
 use zopp_proto::{
     Empty, GetWorkspaceKeysRequest, GrantPrincipalWorkspaceAccessRequest,
     ListWorkspaceServicePrincipalsRequest, RegisterRequest, RemovePrincipalFromWorkspaceRequest,
     RenamePrincipalRequest, RevokeAllPrincipalPermissionsRequest, Role,
 };
+
+/// Exported principal format (JSON before encryption)
+#[derive(Serialize, Deserialize)]
+struct ExportedPrincipal {
+    version: u32,
+    server_url: String,
+    email: String,
+    user_id: String,
+    principal: ExportedPrincipalData,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ExportedPrincipalData {
+    id: String,
+    name: String,
+    private_key: String,
+    public_key: String,
+    x25519_private_key: Option<String>,
+    x25519_public_key: Option<String>,
+}
 
 pub async fn cmd_principal_list() -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
@@ -433,4 +458,212 @@ pub async fn cmd_principal_revoke_all(
         response.permissions_revoked, principal_id, workspace
     );
     Ok(())
+}
+
+/// Export a principal to an encrypted file
+pub async fn cmd_principal_export(
+    server: &str,
+    name: &str,
+    output: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+
+    // Find the principal to export
+    let principal = config
+        .principals
+        .iter()
+        .find(|p| p.name == name)
+        .ok_or_else(|| format!("Principal '{}' not found", name))?;
+
+    // Prompt for passphrase
+    let passphrase = rpassword::prompt_password("Enter passphrase to encrypt export: ")?;
+    if passphrase.len() < 8 {
+        return Err("Passphrase must be at least 8 characters".into());
+    }
+    let passphrase_confirm = rpassword::prompt_password("Confirm passphrase: ")?;
+    if passphrase != passphrase_confirm {
+        return Err("Passphrases do not match".into());
+    }
+
+    // Create export structure
+    let export = ExportedPrincipal {
+        version: 1,
+        server_url: server.to_string(),
+        email: config.email.clone(),
+        user_id: config.user_id.clone(),
+        principal: ExportedPrincipalData {
+            id: principal.id.clone(),
+            name: principal.name.clone(),
+            private_key: principal.private_key.clone(),
+            public_key: principal.public_key.clone(),
+            x25519_private_key: principal.x25519_private_key.clone(),
+            x25519_public_key: principal.x25519_public_key.clone(),
+        },
+    };
+
+    // Serialize to JSON
+    let json = serde_json::to_string(&export)?;
+
+    // Generate salt and derive key
+    let mut salt = [0u8; 16];
+    rand_core::OsRng.fill_bytes(&mut salt);
+
+    let key = derive_export_key(&passphrase, &salt)?;
+    let dek = zopp_crypto::Dek::from_bytes(&key)?;
+
+    // Encrypt with AEAD
+    let aad = b"zopp-principal-export-v1";
+    let (nonce, ciphertext) = zopp_crypto::encrypt(json.as_bytes(), &dek, aad)?;
+
+    // Combine: salt || nonce || ciphertext
+    let mut output_bytes = Vec::new();
+    output_bytes.extend_from_slice(&salt);
+    output_bytes.extend_from_slice(&nonce.0);
+    output_bytes.extend_from_slice(&ciphertext.0);
+
+    // Base64 encode
+    let encoded = BASE64.encode(&output_bytes);
+
+    // Write to file or stdout
+    if let Some(path) = output {
+        std::fs::write(path, &encoded)?;
+        eprintln!("✓ Principal '{}' exported to {}", name, path.display());
+    } else {
+        println!("{}", encoded);
+        eprintln!("✓ Principal '{}' exported", name);
+    }
+
+    eprintln!("  Import on another device with: zopp principal import -i <file>");
+
+    Ok(())
+}
+
+/// Import a principal from an encrypted file
+pub async fn cmd_principal_import(input: Option<&Path>) -> Result<(), Box<dyn std::error::Error>> {
+    // Read from file or stdin
+    let encoded = if let Some(path) = input {
+        std::fs::read_to_string(path)?
+    } else {
+        eprintln!("Paste the exported principal (base64), then press Enter:");
+        let mut buf = String::new();
+        std::io::stdin().read_to_string(&mut buf)?;
+        buf.trim().to_string()
+    };
+
+    // Base64 decode
+    let bytes = BASE64
+        .decode(encoded.trim())
+        .map_err(|_| "Invalid base64 encoding")?;
+
+    if bytes.len() < 16 + 24 + 16 {
+        // salt + nonce + min ciphertext (with tag)
+        return Err("Invalid export file: too short".into());
+    }
+
+    // Extract components
+    let salt = &bytes[0..16];
+    let nonce_bytes = &bytes[16..40];
+    let ciphertext = &bytes[40..];
+
+    let mut nonce_array = [0u8; 24];
+    nonce_array.copy_from_slice(nonce_bytes);
+    let nonce = zopp_crypto::Nonce(nonce_array);
+
+    // Prompt for passphrase
+    let passphrase = rpassword::prompt_password("Enter passphrase to decrypt: ")?;
+
+    // Derive key and decrypt
+    let key = derive_export_key(&passphrase, salt)?;
+    let dek = zopp_crypto::Dek::from_bytes(&key)?;
+
+    let aad = b"zopp-principal-export-v1";
+    let plaintext = zopp_crypto::decrypt(ciphertext, &nonce, &dek, aad)
+        .map_err(|_| "Decryption failed - wrong passphrase?")?;
+
+    // Parse JSON
+    let export: ExportedPrincipal =
+        serde_json::from_slice(&plaintext).map_err(|_| "Invalid export format")?;
+
+    if export.version != 1 {
+        return Err(format!("Unsupported export version: {}", export.version).into());
+    }
+
+    // Load or create config
+    let mut config = match load_config() {
+        Ok(c) => c,
+        Err(_) => {
+            // Create new config with this principal
+            crate::config::CliConfig {
+                user_id: export.user_id.clone(),
+                email: export.email.clone(),
+                principals: vec![],
+                current_principal: None,
+            }
+        }
+    };
+
+    // Check if principal already exists
+    if config.principals.iter().any(|p| p.id == export.principal.id) {
+        return Err(format!(
+            "Principal '{}' (ID: {}) already exists in config",
+            export.principal.name, export.principal.id
+        )
+        .into());
+    }
+
+    // Check if name conflicts
+    let final_name = if config
+        .principals
+        .iter()
+        .any(|p| p.name == export.principal.name)
+    {
+        let new_name = format!("{}-imported", export.principal.name);
+        eprintln!(
+            "Note: Principal name '{}' already exists, importing as '{}'",
+            export.principal.name, new_name
+        );
+        new_name
+    } else {
+        export.principal.name.clone()
+    };
+
+    // Add principal
+    config.principals.push(PrincipalConfig {
+        id: export.principal.id.clone(),
+        name: final_name.clone(),
+        private_key: export.principal.private_key,
+        public_key: export.principal.public_key,
+        x25519_private_key: export.principal.x25519_private_key,
+        x25519_public_key: export.principal.x25519_public_key,
+    });
+
+    // Set as current if it's the only one
+    if config.principals.len() == 1 {
+        config.current_principal = Some(final_name.clone());
+    }
+
+    save_config(&config)?;
+
+    println!("✓ Principal '{}' imported successfully", final_name);
+    println!("  Server URL from export: {}", export.server_url);
+    println!("  Use with: zopp --server {} workspace list", export.server_url);
+
+    Ok(())
+}
+
+/// Derive encryption key from passphrase using Argon2id (lighter params for export)
+fn derive_export_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], Box<dyn std::error::Error>> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+
+    // Use lighter params for export (still secure, but faster)
+    // 64 MiB memory, 3 iterations
+    let params = Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let mut key = [0u8; 32];
+    argon2
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .map_err(|e| format!("Key derivation failed: {}", e))?;
+
+    Ok(key)
 }

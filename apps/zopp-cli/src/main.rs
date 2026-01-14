@@ -113,6 +113,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
             }
+            PrincipalCommand::Export { name, output } => {
+                cmd_principal_export(&cli.server, &name, output.as_deref()).await?;
+            }
+            PrincipalCommand::Import { input } => {
+                cmd_principal_import(input.as_deref()).await?;
+            }
         },
         Command::Project { project_cmd } => match project_cmd {
             ProjectCommand::List { workspace } => {

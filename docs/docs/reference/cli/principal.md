@@ -22,6 +22,8 @@ zopp principal <COMMAND>
 | `use` | Switch to a different principal |
 | `rename` | Rename a principal |
 | `delete` | Delete a principal |
+| `export` | Export a principal to an encrypted file |
+| `import` | Import a principal from an encrypted file |
 | `service-list` | List service principals in a workspace |
 | `workspace-remove` | Remove a principal from a workspace |
 | `revoke-all` | Revoke all permissions for a principal |
@@ -163,6 +165,76 @@ zopp principal delete <NAME>
 
 :::warning
 Deleting a principal permanently revokes its access to all workspaces. This cannot be undone.
+:::
+
+---
+
+## principal export
+
+Export a principal to an encrypted file for transfer to another device.
+
+```bash
+zopp principal export <NAME> [-o <OUTPUT>]
+```
+
+### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | Yes | Principal name to export |
+
+### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `-o, --output <FILE>` | No | Output file path (prints to stdout if not specified) |
+| `-h, --help` | No | Print help |
+
+### Example
+
+```bash
+# Export to a file
+$ zopp principal export laptop -o principal.enc
+Enter passphrase to encrypt export: ********
+Confirm passphrase: ********
+✓ Principal 'laptop' exported to principal.enc
+  Import on another device with: zopp principal import -i <file>
+```
+
+:::tip
+The export is encrypted with a passphrase using Argon2id key derivation and XChaCha20-Poly1305. Use a strong passphrase and transfer the file securely.
+:::
+
+---
+
+## principal import
+
+Import a principal from an encrypted file.
+
+```bash
+zopp principal import [-i <INPUT>]
+```
+
+### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `-i, --input <FILE>` | No | Input file path (reads from stdin if not specified) |
+| `-h, --help` | No | Print help |
+
+### Example
+
+```bash
+# Import from a file
+$ zopp principal import -i principal.enc
+Enter passphrase to decrypt: ********
+✓ Principal 'laptop' imported successfully
+  Server URL from export: https://zopp.example.com:50051
+  Use with: zopp --server https://zopp.example.com:50051 workspace list
+```
+
+:::note
+If a principal with the same name already exists, the imported principal will be renamed with an `-imported` suffix.
 :::
 
 ---

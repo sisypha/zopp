@@ -33,9 +33,9 @@ pub use permission::{
     cmd_user_permission_remove, cmd_user_permission_set,
 };
 pub use principal::{
-    cmd_principal_create, cmd_principal_current, cmd_principal_delete, cmd_principal_list,
-    cmd_principal_rename, cmd_principal_revoke_all, cmd_principal_service_list, cmd_principal_use,
-    cmd_principal_workspace_remove,
+    cmd_principal_create, cmd_principal_current, cmd_principal_delete, cmd_principal_export,
+    cmd_principal_import, cmd_principal_list, cmd_principal_rename, cmd_principal_revoke_all,
+    cmd_principal_service_list, cmd_principal_use, cmd_principal_workspace_remove,
 };
 pub use project::{cmd_project_create, cmd_project_delete, cmd_project_get, cmd_project_list};
 pub use secret::{

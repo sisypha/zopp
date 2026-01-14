@@ -145,11 +145,52 @@ zopp invite create -w acme-corp --expires-hours 48
 
 ## Multiple Devices
 
-You can use zopp from multiple devices. Each device gets its own principal (identity):
+You can use zopp from multiple devices. There are two ways to set up a new device:
 
-1. On your new device, run `zopp join` with a new invite
-2. Each device has separate keys stored locally
-3. Your admin can see all your devices with `zopp principal service-list`
+### Option 1: Export/Import (Recommended)
+
+Transfer your existing principal to a new device:
+
+```bash
+# On your existing device - export your principal
+zopp principal export laptop -o principal.enc
+# Enter a passphrase to encrypt the export
+```
+
+Transfer the `principal.enc` file to your new device (via USB, secure messaging, etc.), then:
+
+```bash
+# On your new device - import the principal
+zopp principal import -i principal.enc
+# Enter the passphrase to decrypt
+```
+
+### Option 2: Create a New Principal
+
+If you have access to an existing device, you can create a new principal that automatically inherits workspace access:
+
+```bash
+# On your existing device
+zopp principal create desktop
+
+# List all your principals
+zopp principal list
+```
+
+The new principal's keys are saved locally. To use it on a different device, use export/import as shown above.
+
+### Managing Principals
+
+```bash
+# Switch between principals on the same device
+zopp principal use desktop
+
+# See which principal is active
+zopp principal current
+
+# List all principals
+zopp principal list
+```
 
 When you leave the team or lose a device, your admin can revoke access to that specific principal without affecting your other devices.
 

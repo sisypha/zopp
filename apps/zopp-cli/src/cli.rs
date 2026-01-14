@@ -181,6 +181,20 @@ pub enum PrincipalCommand {
         #[arg(long)]
         principal: String,
     },
+    /// Export a principal to a file (encrypted with passphrase)
+    Export {
+        /// Principal name to export
+        name: String,
+        /// Output file path (defaults to stdout if not specified)
+        #[arg(long, short = 'o')]
+        output: Option<PathBuf>,
+    },
+    /// Import a principal from a file
+    Import {
+        /// Input file path (defaults to stdin if not specified)
+        #[arg(long, short = 'i')]
+        input: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
