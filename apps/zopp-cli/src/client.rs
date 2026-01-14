@@ -7,12 +7,12 @@ use async_trait::async_trait;
 use tonic::{Request, Response, Status};
 use zopp_proto::{
     CreateEnvironmentRequest, CreateGroupRequest, CreateInviteRequest, CreateProjectRequest,
-    CreateWorkspaceRequest, DeleteEnvironmentRequest, DeleteGroupRequest, DeleteSecretRequest,
-    Empty, Environment, EnvironmentList, GetEnvironmentRequest, GetInviteRequest,
-    GetPrincipalRequest, GetSecretRequest, GetWorkspaceKeysRequest, Group, GroupList, InviteToken,
-    ListEnvironmentsRequest, ListGroupsRequest, ListProjectsRequest, ListSecretsRequest, Principal,
-    Project, ProjectList, Secret, SecretList, UpsertSecretRequest, Workspace, WorkspaceKeys,
-    WorkspaceList,
+    CreateWorkspaceRequest, DeleteEnvironmentRequest, DeleteGroupRequest, DeleteProjectRequest,
+    DeleteSecretRequest, Empty, Environment, EnvironmentList, GetEnvironmentRequest,
+    GetInviteRequest, GetPrincipalRequest, GetProjectRequest, GetSecretRequest,
+    GetWorkspaceKeysRequest, Group, GroupList, InviteToken, ListEnvironmentsRequest,
+    ListGroupsRequest, ListProjectsRequest, ListSecretsRequest, Principal, Project, ProjectList,
+    Secret, SecretList, UpsertSecretRequest, Workspace, WorkspaceKeys, WorkspaceList,
 };
 
 #[cfg(test)]
@@ -47,10 +47,20 @@ pub trait ProjectClient: Send + Sync {
         request: Request<CreateProjectRequest>,
     ) -> Result<Response<Project>, Status>;
 
+    async fn get_project(
+        &mut self,
+        request: Request<GetProjectRequest>,
+    ) -> Result<Response<Project>, Status>;
+
     async fn list_projects(
         &mut self,
         request: Request<ListProjectsRequest>,
     ) -> Result<Response<ProjectList>, Status>;
+
+    async fn delete_project(
+        &mut self,
+        request: Request<DeleteProjectRequest>,
+    ) -> Result<Response<Empty>, Status>;
 }
 
 /// Trait for environment-related operations.
@@ -185,11 +195,25 @@ impl ProjectClient for ZoppServiceClient<Channel> {
         self.create_project(request).await
     }
 
+    async fn get_project(
+        &mut self,
+        request: Request<GetProjectRequest>,
+    ) -> Result<Response<Project>, Status> {
+        self.get_project(request).await
+    }
+
     async fn list_projects(
         &mut self,
         request: Request<ListProjectsRequest>,
     ) -> Result<Response<ProjectList>, Status> {
         self.list_projects(request).await
+    }
+
+    async fn delete_project(
+        &mut self,
+        request: Request<DeleteProjectRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        self.delete_project(request).await
     }
 }
 

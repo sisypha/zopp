@@ -79,6 +79,65 @@ pub async fn cmd_project_create(
     Ok(())
 }
 
+/// Inner implementation for project get that accepts a trait-bounded client.
+pub async fn project_get_inner<C>(
+    client: &mut C,
+    principal: &PrincipalConfig,
+    workspace_name: &str,
+    project_name: &str,
+) -> Result<Project, Box<dyn std::error::Error>>
+where
+    C: crate::client::ProjectClient,
+{
+    let mut request = tonic::Request::new(zopp_proto::GetProjectRequest {
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+    });
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetProject")?;
+
+    let response = client.get_project(request).await?.into_inner();
+    Ok(response)
+}
+
+/// Print project details.
+pub fn print_project_details(project: &Project) {
+    println!("Project: {}", project.name);
+    println!("  ID: {}", project.id);
+    println!("  Workspace ID: {}", project.workspace_id);
+    println!(
+        "  Created: {}",
+        chrono::DateTime::from_timestamp(project.created_at, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string())
+    );
+    println!(
+        "  Updated: {}",
+        chrono::DateTime::from_timestamp(project.updated_at, 0)
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string())
+    );
+}
+
+/// Inner implementation for project delete that accepts a trait-bounded client.
+pub async fn project_delete_inner<C>(
+    client: &mut C,
+    principal: &PrincipalConfig,
+    workspace_name: &str,
+    project_name: &str,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    C: crate::client::ProjectClient,
+{
+    let mut request = tonic::Request::new(zopp_proto::DeleteProjectRequest {
+        workspace_name: workspace_name.to_string(),
+        project_name: project_name.to_string(),
+    });
+    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/DeleteProject")?;
+
+    client.delete_project(request).await?;
+    Ok(())
+}
+
 pub async fn cmd_project_get(
     server: &str,
     tls_ca_cert: Option<&std::path::Path>,
@@ -87,29 +146,9 @@ pub async fn cmd_project_get(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
-    let mut request = tonic::Request::new(zopp_proto::GetProjectRequest {
-        workspace_name: workspace_name.to_string(),
-        project_name: project_name.to_string(),
-    });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetProject")?;
-
-    let response = client.get_project(request).await?.into_inner();
-
-    println!("Project: {}", response.name);
-    println!("  ID: {}", response.id);
-    println!("  Workspace ID: {}", response.workspace_id);
-    println!(
-        "  Created: {}",
-        chrono::DateTime::from_timestamp(response.created_at, 0)
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_else(|| "Unknown".to_string())
-    );
-    println!(
-        "  Updated: {}",
-        chrono::DateTime::from_timestamp(response.updated_at, 0)
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_else(|| "Unknown".to_string())
-    );
+    let project =
+        project_get_inner(&mut client, &principal, workspace_name, project_name).await?;
+    print_project_details(&project);
 
     Ok(())
 }
@@ -122,13 +161,7 @@ pub async fn cmd_project_delete(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
 
-    let mut request = tonic::Request::new(zopp_proto::DeleteProjectRequest {
-        workspace_name: workspace_name.to_string(),
-        project_name: project_name.to_string(),
-    });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteProject")?;
-
-    client.delete_project(request).await?;
+    project_delete_inner(&mut client, &principal, workspace_name, project_name).await?;
 
     println!("Project '{}' deleted", project_name);
 
@@ -293,5 +326,123 @@ mod tests {
             ],
         };
         print_project_list(&projects);
+    }
+
+    #[tokio::test]
+    async fn test_project_get_inner_success() {
+        let mut mock = MockProjectClient::new();
+
+        mock.expect_get_project().returning(|_| {
+            Ok(Response::new(Project {
+                id: "proj-id".to_string(),
+                workspace_id: "ws-1".to_string(),
+                name: "my-project".to_string(),
+                created_at: 1704067200, // 2024-01-01 00:00:00 UTC
+                updated_at: 1704067200,
+            }))
+        });
+
+        let principal = create_test_principal();
+        let result =
+            project_get_inner(&mut mock, &principal, "my-workspace", "my-project").await;
+
+        assert!(result.is_ok());
+        let project = result.unwrap();
+        assert_eq!(project.name, "my-project");
+        assert_eq!(project.id, "proj-id");
+    }
+
+    #[tokio::test]
+    async fn test_project_get_inner_not_found() {
+        let mut mock = MockProjectClient::new();
+
+        mock.expect_get_project()
+            .returning(|_| Err(Status::not_found("Project not found")));
+
+        let principal = create_test_principal();
+        let result =
+            project_get_inner(&mut mock, &principal, "my-workspace", "nonexistent").await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_project_get_inner_permission_denied() {
+        let mut mock = MockProjectClient::new();
+
+        mock.expect_get_project()
+            .returning(|_| Err(Status::permission_denied("Not authorized")));
+
+        let principal = create_test_principal();
+        let result =
+            project_get_inner(&mut mock, &principal, "my-workspace", "my-project").await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_project_delete_inner_success() {
+        let mut mock = MockProjectClient::new();
+
+        mock.expect_delete_project()
+            .returning(|_| Ok(Response::new(zopp_proto::Empty {})));
+
+        let principal = create_test_principal();
+        let result =
+            project_delete_inner(&mut mock, &principal, "my-workspace", "project-to-delete").await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_project_delete_inner_not_found() {
+        let mut mock = MockProjectClient::new();
+
+        mock.expect_delete_project()
+            .returning(|_| Err(Status::not_found("Project not found")));
+
+        let principal = create_test_principal();
+        let result =
+            project_delete_inner(&mut mock, &principal, "my-workspace", "nonexistent").await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_project_delete_inner_permission_denied() {
+        let mut mock = MockProjectClient::new();
+
+        mock.expect_delete_project()
+            .returning(|_| Err(Status::permission_denied("Not authorized")));
+
+        let principal = create_test_principal();
+        let result =
+            project_delete_inner(&mut mock, &principal, "my-workspace", "some-project").await;
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_print_project_details() {
+        let project = Project {
+            id: "proj-id".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "my-project".to_string(),
+            created_at: 1704067200, // 2024-01-01 00:00:00 UTC
+            updated_at: 1704067200,
+        };
+        print_project_details(&project);
+    }
+
+    #[test]
+    fn test_print_project_details_unknown_timestamps() {
+        let project = Project {
+            id: "proj-id".to_string(),
+            workspace_id: "ws-1".to_string(),
+            name: "my-project".to_string(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        print_project_details(&project);
     }
 }
