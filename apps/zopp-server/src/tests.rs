@@ -9144,4 +9144,556 @@ mod handler_tests {
         assert!(result.is_ok());
     }
 
+    // ================== Audit handler tests - invalid filter formats ==================
+
+    #[tokio::test]
+    async fn handler_list_audit_logs_invalid_result_filter() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/ListAuditLogs",
+            zopp_proto::ListAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                result: Some("invalid_result".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.list_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_list_audit_logs_invalid_from_timestamp() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/ListAuditLogs",
+            zopp_proto::ListAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                from_timestamp: Some("not-a-valid-timestamp".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.list_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_list_audit_logs_invalid_to_timestamp() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/ListAuditLogs",
+            zopp_proto::ListAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                to_timestamp: Some("not-a-valid-timestamp".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.list_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_count_audit_logs_invalid_principal_id_filter() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CountAuditLogs",
+            zopp_proto::CountAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                principal_id: Some("not-a-uuid".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.count_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_count_audit_logs_invalid_user_id_filter() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CountAuditLogs",
+            zopp_proto::CountAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                user_id: Some("not-a-uuid".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.count_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_count_audit_logs_invalid_action_filter() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CountAuditLogs",
+            zopp_proto::CountAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                action: Some("invalid_action".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.count_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_count_audit_logs_invalid_result_filter() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CountAuditLogs",
+            zopp_proto::CountAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                result: Some("invalid_result".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let result = server.count_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_get_audit_log_invalid_id() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/GetAuditLog",
+            zopp_proto::GetAuditLogRequest {
+                workspace_name: "ws".to_string(),
+                audit_log_id: "not-a-uuid".to_string(),
+            },
+        );
+
+        let result = server.get_audit_log(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn handler_get_audit_log_not_found() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/GetAuditLog",
+            zopp_proto::GetAuditLogRequest {
+                workspace_name: "ws".to_string(),
+                audit_log_id: uuid::Uuid::now_v7().to_string(),
+            },
+        );
+
+        let result = server.get_audit_log(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn handler_get_audit_log_permission_denied() {
+        let server = create_test_server().await;
+        let (owner_id, _, _) = create_test_user(&server, "owner@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &owner_id, "ws").await;
+
+        // Create another user with only Read permission (not Admin)
+        let (other_user_id, other_principal_id, other_signing_key) =
+            create_test_user(&server, "other@example.com", "laptop").await;
+        add_user_to_workspace(&server, &ws_id, &other_user_id, Role::Read).await;
+        add_principal_to_workspace(&server, &ws_id, &other_principal_id).await;
+
+        let request = create_signed_request(
+            &other_principal_id,
+            &other_signing_key,
+            "/zopp.ZoppService/GetAuditLog",
+            zopp_proto::GetAuditLogRequest {
+                workspace_name: "ws".to_string(),
+                audit_log_id: uuid::Uuid::now_v7().to_string(),
+            },
+        );
+
+        let result = server.get_audit_log(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn handler_list_audit_logs_workspace_not_found() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/ListAuditLogs",
+            zopp_proto::ListAuditLogsRequest {
+                workspace_name: "nonexistent".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let result = server.list_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn handler_count_audit_logs_workspace_not_found() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CountAuditLogs",
+            zopp_proto::CountAuditLogsRequest {
+                workspace_name: "nonexistent".to_string(),
+                ..Default::default()
+            },
+        );
+
+        let result = server.count_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn handler_get_audit_log_workspace_not_found() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/GetAuditLog",
+            zopp_proto::GetAuditLogRequest {
+                workspace_name: "nonexistent".to_string(),
+                audit_log_id: uuid::Uuid::now_v7().to_string(),
+            },
+        );
+
+        let result = server.get_audit_log(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    // ================== Service principal audit access tests ==================
+
+    #[tokio::test]
+    async fn handler_list_audit_logs_as_service_principal_with_admin() {
+        let server = create_test_server().await;
+        let (owner_id, _, _) = create_test_user(&server, "owner@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &owner_id, "ws").await;
+
+        // Create service principal with Admin permission
+        let (service_principal_id, service_signing_key) =
+            create_service_principal(&server, "my-service").await;
+        add_principal_to_workspace(&server, &ws_id, &service_principal_id).await;
+        server
+            .store
+            .set_workspace_permission(&ws_id, &service_principal_id, Role::Admin)
+            .await
+            .unwrap();
+
+        let request = create_signed_request(
+            &service_principal_id,
+            &service_signing_key,
+            "/zopp.ZoppService/ListAuditLogs",
+            zopp_proto::ListAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                ..Default::default()
+            },
+        );
+
+        // Service principal with Admin should be able to list audit logs
+        let result = server.list_audit_logs(request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn handler_count_audit_logs_as_service_principal_without_admin() {
+        let server = create_test_server().await;
+        let (owner_id, _, _) = create_test_user(&server, "owner@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &owner_id, "ws").await;
+
+        // Create service principal with only Read permission
+        let (service_principal_id, service_signing_key) =
+            create_service_principal(&server, "my-service").await;
+        add_principal_to_workspace(&server, &ws_id, &service_principal_id).await;
+        server
+            .store
+            .set_workspace_permission(&ws_id, &service_principal_id, Role::Read)
+            .await
+            .unwrap();
+
+        let request = create_signed_request(
+            &service_principal_id,
+            &service_signing_key,
+            "/zopp.ZoppService/CountAuditLogs",
+            zopp_proto::CountAuditLogsRequest {
+                workspace_name: "ws".to_string(),
+                ..Default::default()
+            },
+        );
+
+        // Service principal with Read should NOT be able to count audit logs (requires Admin)
+        let result = server.count_audit_logs(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    // ================== More handler error path tests ==================
+
+    #[tokio::test]
+    async fn handler_create_environment_missing_project() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CreateEnvironment",
+            zopp_proto::CreateEnvironmentRequest {
+                workspace_name: "ws".to_string(),
+                project_name: "nonexistent".to_string(),
+                name: "dev".to_string(),
+                dek_wrapped: vec![0u8; 32],
+                dek_nonce: vec![0u8; 24],
+            },
+        );
+
+        let result = server.create_environment(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn handler_list_env_permissions_success() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        let proj_id = create_test_project(&server, &ws_id, "proj").await;
+        let _env_id = create_test_environment(&server, &proj_id, "dev").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/ListEnvironmentPermissions",
+            zopp_proto::ListEnvironmentPermissionsRequest {
+                workspace_name: "ws".to_string(),
+                project_name: "proj".to_string(),
+                environment_name: "dev".to_string(),
+            },
+        );
+
+        let result = server.list_environment_permissions(request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn handler_get_workspace_keys_nonexistent_ws() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/GetWorkspaceKeys",
+            zopp_proto::GetWorkspaceKeysRequest {
+                workspace_name: "nonexistent".to_string(),
+            },
+        );
+
+        let result = server.get_workspace_keys(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn handler_create_project_duplicate_name() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        let _proj_id = create_test_project(&server, &ws_id, "proj").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        // Try to create project with same name
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CreateProject",
+            zopp_proto::CreateProjectRequest {
+                workspace_name: "ws".to_string(),
+                name: "proj".to_string(),
+            },
+        );
+
+        let result = server.create_project(request).await;
+        assert!(result.is_err());
+        // Should be an error (either AlreadyExists or Conflict)
+    }
+
+    #[tokio::test]
+    async fn handler_create_environment_duplicate_name() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        let proj_id = create_test_project(&server, &ws_id, "proj").await;
+        let _env_id = create_test_environment(&server, &proj_id, "dev").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        // Try to create environment with same name
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CreateEnvironment",
+            zopp_proto::CreateEnvironmentRequest {
+                workspace_name: "ws".to_string(),
+                project_name: "proj".to_string(),
+                name: "dev".to_string(),
+                dek_wrapped: vec![0u8; 32],
+                dek_nonce: vec![0u8; 24],
+            },
+        );
+
+        let result = server.create_environment(request).await;
+        assert!(result.is_err());
+        // Should be an error (either AlreadyExists or Conflict)
+    }
+
+    #[tokio::test]
+    async fn handler_delete_project_nonexistent() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/DeleteProject",
+            zopp_proto::DeleteProjectRequest {
+                workspace_name: "ws".to_string(),
+                project_name: "nonexistent".to_string(),
+            },
+        );
+
+        let result = server.delete_project(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn handler_get_project_nonexistent() {
+        let server = create_test_server().await;
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "user@example.com", "laptop").await;
+        let ws_id = create_test_workspace(&server, &user_id, "ws").await;
+        add_principal_to_workspace(&server, &ws_id, &principal_id).await;
+
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/GetProject",
+            zopp_proto::GetProjectRequest {
+                workspace_name: "ws".to_string(),
+                project_name: "nonexistent".to_string(),
+            },
+        );
+
+        let result = server.get_project(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
 }
