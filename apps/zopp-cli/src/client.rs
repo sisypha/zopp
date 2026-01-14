@@ -6,12 +6,13 @@
 use async_trait::async_trait;
 use tonic::{Request, Response, Status};
 use zopp_proto::{
-    CreateEnvironmentRequest, CreateInviteRequest, CreateProjectRequest, CreateWorkspaceRequest,
-    DeleteEnvironmentRequest, DeleteSecretRequest, Empty, Environment, EnvironmentList,
-    GetEnvironmentRequest, GetInviteRequest, GetPrincipalRequest, GetSecretRequest,
-    GetWorkspaceKeysRequest, InviteToken, ListEnvironmentsRequest, ListProjectsRequest,
-    ListSecretsRequest, Principal, Project, ProjectList, Secret, SecretList, UpsertSecretRequest,
-    Workspace, WorkspaceKeys, WorkspaceList,
+    CreateEnvironmentRequest, CreateGroupRequest, CreateInviteRequest, CreateProjectRequest,
+    CreateWorkspaceRequest, DeleteEnvironmentRequest, DeleteGroupRequest, DeleteSecretRequest,
+    Empty, Environment, EnvironmentList, GetEnvironmentRequest, GetInviteRequest,
+    GetPrincipalRequest, GetSecretRequest, GetWorkspaceKeysRequest, Group, GroupList, InviteToken,
+    ListEnvironmentsRequest, ListGroupsRequest, ListProjectsRequest, ListSecretsRequest, Principal,
+    Project, ProjectList, Secret, SecretList, UpsertSecretRequest, Workspace, WorkspaceKeys,
+    WorkspaceList,
 };
 
 #[cfg(test)]
@@ -125,6 +126,26 @@ pub trait InviteClient: Send + Sync {
         &mut self,
         request: Request<GetInviteRequest>,
     ) -> Result<Response<InviteToken>, Status>;
+}
+
+/// Trait for group-related operations.
+#[cfg_attr(test, automock)]
+#[async_trait]
+pub trait GroupClient: Send + Sync {
+    async fn create_group(
+        &mut self,
+        request: Request<CreateGroupRequest>,
+    ) -> Result<Response<Group>, Status>;
+
+    async fn list_groups(
+        &mut self,
+        request: Request<ListGroupsRequest>,
+    ) -> Result<Response<GroupList>, Status>;
+
+    async fn delete_group(
+        &mut self,
+        request: Request<DeleteGroupRequest>,
+    ) -> Result<Response<Empty>, Status>;
 }
 
 // Implementation for the real gRPC client
@@ -261,6 +282,30 @@ impl InviteClient for ZoppServiceClient<Channel> {
     }
 }
 
+#[async_trait]
+impl GroupClient for ZoppServiceClient<Channel> {
+    async fn create_group(
+        &mut self,
+        request: Request<CreateGroupRequest>,
+    ) -> Result<Response<Group>, Status> {
+        self.create_group(request).await
+    }
+
+    async fn list_groups(
+        &mut self,
+        request: Request<ListGroupsRequest>,
+    ) -> Result<Response<GroupList>, Status> {
+        self.list_groups(request).await
+    }
+
+    async fn delete_group(
+        &mut self,
+        request: Request<DeleteGroupRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        self.delete_group(request).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,7 +331,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mock_secret_client() {
+    async fn test_mock_secret_client_not_found() {
         let mut mock = MockSecretClient::new();
 
         mock.expect_get_secret()
@@ -302,6 +347,126 @@ mod tests {
         let result = mock.get_secret(request).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn test_mock_secret_client_get_success() {
+        let mut mock = MockSecretClient::new();
+
+        mock.expect_get_secret().returning(|_| {
+            Ok(Response::new(Secret {
+                key: "API_KEY".to_string(),
+                nonce: vec![1, 2, 3],
+                ciphertext: vec![4, 5, 6],
+            }))
+        });
+
+        let request = Request::new(GetSecretRequest {
+            workspace_name: "ws".to_string(),
+            project_name: "proj".to_string(),
+            environment_name: "dev".to_string(),
+            key: "API_KEY".to_string(),
+        });
+
+        let result = mock.get_secret(request).await;
+        assert!(result.is_ok());
+        let response = result.unwrap().into_inner();
+        assert_eq!(response.key, "API_KEY");
+    }
+
+    #[tokio::test]
+    async fn test_mock_secret_client_upsert() {
+        let mut mock = MockSecretClient::new();
+
+        mock.expect_upsert_secret()
+            .returning(|_| Ok(Response::new(Empty {})));
+
+        let request = Request::new(UpsertSecretRequest {
+            workspace_name: "ws".to_string(),
+            project_name: "proj".to_string(),
+            environment_name: "dev".to_string(),
+            key: "NEW_SECRET".to_string(),
+            nonce: vec![1, 2, 3],
+            ciphertext: vec![4, 5, 6],
+        });
+
+        let result = mock.upsert_secret(request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_secret_client_list() {
+        let mut mock = MockSecretClient::new();
+
+        mock.expect_list_secrets().returning(|_| {
+            Ok(Response::new(SecretList {
+                secrets: vec![
+                    Secret {
+                        key: "API_KEY".to_string(),
+                        nonce: vec![],
+                        ciphertext: vec![],
+                    },
+                    Secret {
+                        key: "DB_PASSWORD".to_string(),
+                        nonce: vec![],
+                        ciphertext: vec![],
+                    },
+                ],
+                version: 1,
+            }))
+        });
+
+        let request = Request::new(ListSecretsRequest {
+            workspace_name: "ws".to_string(),
+            project_name: "proj".to_string(),
+            environment_name: "dev".to_string(),
+        });
+
+        let result = mock.list_secrets(request).await;
+        assert!(result.is_ok());
+        let response = result.unwrap().into_inner();
+        assert_eq!(response.secrets.len(), 2);
+        assert_eq!(response.secrets[0].key, "API_KEY");
+        assert_eq!(response.secrets[1].key, "DB_PASSWORD");
+    }
+
+    #[tokio::test]
+    async fn test_mock_secret_client_delete() {
+        let mut mock = MockSecretClient::new();
+
+        mock.expect_delete_secret()
+            .returning(|_| Ok(Response::new(Empty {})));
+
+        let request = Request::new(DeleteSecretRequest {
+            workspace_name: "ws".to_string(),
+            project_name: "proj".to_string(),
+            environment_name: "dev".to_string(),
+            key: "SECRET_TO_DELETE".to_string(),
+        });
+
+        let result = mock.delete_secret(request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_secret_client_permission_denied() {
+        let mut mock = MockSecretClient::new();
+
+        mock.expect_upsert_secret()
+            .returning(|_| Err(Status::permission_denied("Not authorized")));
+
+        let request = Request::new(UpsertSecretRequest {
+            workspace_name: "ws".to_string(),
+            project_name: "proj".to_string(),
+            environment_name: "dev".to_string(),
+            key: "SECRET".to_string(),
+            nonce: vec![],
+            ciphertext: vec![],
+        });
+
+        let result = mock.upsert_secret(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
     }
 
     #[tokio::test]
@@ -386,5 +551,93 @@ mod tests {
         assert!(result.is_ok());
         let response = result.unwrap().into_inner();
         assert_eq!(response.token, "test-token");
+    }
+
+    #[tokio::test]
+    async fn test_mock_group_client_list() {
+        let mut mock = MockGroupClient::new();
+
+        mock.expect_list_groups().returning(|_| {
+            Ok(Response::new(GroupList {
+                groups: vec![Group {
+                    id: "group-id".to_string(),
+                    workspace_id: "ws-id".to_string(),
+                    name: "developers".to_string(),
+                    description: "Developer team".to_string(),
+                    created_at: "2024-01-01T00:00:00Z".to_string(),
+                    updated_at: "2024-01-01T00:00:00Z".to_string(),
+                }],
+            }))
+        });
+
+        let request = Request::new(ListGroupsRequest {
+            workspace_name: "ws".to_string(),
+        });
+
+        let result = mock.list_groups(request).await;
+        assert!(result.is_ok());
+        let response = result.unwrap().into_inner();
+        assert_eq!(response.groups.len(), 1);
+        assert_eq!(response.groups[0].name, "developers");
+    }
+
+    #[tokio::test]
+    async fn test_mock_group_client_create() {
+        let mut mock = MockGroupClient::new();
+
+        mock.expect_create_group().returning(|_| {
+            Ok(Response::new(Group {
+                id: "new-group-id".to_string(),
+                workspace_id: "ws-id".to_string(),
+                name: "new-group".to_string(),
+                description: "New group".to_string(),
+                created_at: "2024-01-01T00:00:00Z".to_string(),
+                updated_at: "2024-01-01T00:00:00Z".to_string(),
+            }))
+        });
+
+        let request = Request::new(CreateGroupRequest {
+            workspace_name: "ws".to_string(),
+            name: "new-group".to_string(),
+            description: "New group".to_string(),
+        });
+
+        let result = mock.create_group(request).await;
+        assert!(result.is_ok());
+        let response = result.unwrap().into_inner();
+        assert_eq!(response.name, "new-group");
+        assert_eq!(response.id, "new-group-id");
+    }
+
+    #[tokio::test]
+    async fn test_mock_group_client_delete() {
+        let mut mock = MockGroupClient::new();
+
+        mock.expect_delete_group()
+            .returning(|_| Ok(Response::new(Empty {})));
+
+        let request = Request::new(DeleteGroupRequest {
+            workspace_name: "ws".to_string(),
+            group_name: "group-to-delete".to_string(),
+        });
+
+        let result = mock.delete_group(request).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_mock_group_client_not_found() {
+        let mut mock = MockGroupClient::new();
+
+        mock.expect_list_groups()
+            .returning(|_| Err(Status::not_found("Workspace not found")));
+
+        let request = Request::new(ListGroupsRequest {
+            workspace_name: "nonexistent".to_string(),
+        });
+
+        let result = mock.list_groups(request).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
     }
 }
