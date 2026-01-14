@@ -255,11 +255,8 @@ mod tests {
         let proj = String::from("my-project");
         let result = resolve_workspace_project(None, Some(&proj));
         // Either succeeds (if zopp.toml exists) or fails
-        if result.is_err() {
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("workspace not specified"));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("workspace not specified"));
         }
     }
 
@@ -268,11 +265,8 @@ mod tests {
         let ws = String::from("my-workspace");
         let result = resolve_workspace_project(Some(&ws), None);
         // Either succeeds (if zopp.toml exists) or fails
-        if result.is_err() {
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("project not specified"));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("project not specified"));
         }
     }
 
@@ -294,11 +288,8 @@ mod tests {
         let proj = String::from("my-project");
         let env = String::from("production");
         let result = resolve_context(None, Some(&proj), Some(&env));
-        if result.is_err() {
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("workspace not specified"));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("workspace not specified"));
         }
     }
 
@@ -307,11 +298,8 @@ mod tests {
         let ws = String::from("my-workspace");
         let env = String::from("production");
         let result = resolve_context(Some(&ws), None, Some(&env));
-        if result.is_err() {
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("project not specified"));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("project not specified"));
         }
     }
 
@@ -320,11 +308,8 @@ mod tests {
         let ws = String::from("my-workspace");
         let proj = String::from("my-project");
         let result = resolve_context(Some(&ws), Some(&proj), None);
-        if result.is_err() {
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("environment not specified"));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("environment not specified"));
         }
     }
 
