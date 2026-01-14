@@ -4,17 +4,47 @@ use std::collections::BTreeMap;
 use std::io::Cursor;
 use zopp_secrets::SecretContext;
 
-/// Parse .env content into key-value pairs using dotenvy.
-/// Handles quoted values, comments, and edge cases properly.
-/// Returns parsed secrets and any parsing errors encountered.
+/// Parse .env content into key-value pairs.
+/// Handles quoted values, comments, and edge cases properly using dotenvy.
+/// Returns parsed secrets and any parsing errors encountered (with line numbers).
 pub fn parse_env_content(content: &str) -> (Vec<(String, String)>, Vec<String>) {
     let mut secrets = Vec::new();
     let mut errors = Vec::new();
 
+    // Track line numbers manually since dotenvy's iterator skips comments/empty lines
+    let lines: Vec<&str> = content.lines().collect();
+    let mut line_idx = 0;
+
     for result in dotenvy::from_read_iter(Cursor::new(content)) {
         match result {
-            Ok((key, value)) => secrets.push((key, value)),
-            Err(e) => errors.push(e.to_string()),
+            Ok((ref key, value)) => {
+                // Find which line this key came from
+                while line_idx < lines.len() {
+                    let line = lines[line_idx].trim();
+                    line_idx += 1;
+                    if line.starts_with(key) || line.starts_with(&format!("\"{}\"", key)) {
+                        break;
+                    }
+                }
+                secrets.push((key.clone(), value));
+            }
+            Err(e) => {
+                // Find the next non-comment, non-empty line for context
+                let mut found_line = false;
+                while line_idx < lines.len() {
+                    let line = lines[line_idx].trim();
+                    line_idx += 1;
+                    if !line.is_empty() && !line.starts_with('#') {
+                        errors.push(format!("line {}: {}", line_idx, e));
+                        found_line = true;
+                        break;
+                    }
+                }
+                // If we couldn't find the line, report without line number
+                if !found_line {
+                    errors.push(e.to_string());
+                }
+            }
         }
     }
 
@@ -413,8 +443,27 @@ mod tests {
         assert_eq!(secrets.len(), 1);
         assert_eq!(secrets[0].0, "VALID");
         assert_eq!(errors.len(), 1);
-        // dotenvy reports parsing errors with context
-        assert!(!errors[0].is_empty());
+        // Error should include the actual line number (line 2)
+        assert!(
+            errors[0].contains("line 2"),
+            "Error should contain line number"
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_error_line_with_comments() {
+        // Test that line numbers are correct even with comments
+        let content = "# comment\nVALID=value\n# another comment\nINVALID=\"unclosed";
+        let (secrets, errors) = parse_env_content(content);
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].0, "VALID");
+        assert_eq!(errors.len(), 1);
+        // Error should be on line 4, not line 2 (accounting for comments)
+        assert!(
+            errors[0].contains("line 4"),
+            "Error should be on line 4, got: {}",
+            errors[0]
+        );
     }
 
     #[test]
