@@ -11,14 +11,32 @@ zopp is designed to be self-hosted. You maintain full control over your secrets 
 ## Deployment Options
 
 - [Server Deployment](/self-hosting/server) - Deploy the zopp server as a standalone binary or container
+- [Docker Compose](/self-hosting/docker-compose) - Quick setup with Docker Compose (recommended for non-Kubernetes)
 - [Database Setup](/self-hosting/database) - Choose between SQLite (simple) and PostgreSQL (production)
 - [TLS Configuration](/self-hosting/tls) - Secure your deployment with TLS and optional mutual TLS
 
 ## Quick Start
 
+### Docker Compose (Recommended)
+
+The quickest way to get started:
+
+```bash
+# Download compose file
+curl -fsSL https://raw.githubusercontent.com/faiscadev/zopp/main/examples/docker-compose/docker-compose.yml -o docker-compose.yml
+
+# Start zopp
+docker compose up -d
+
+# Create first user invite
+docker compose exec zopp-server zopp-server invite create --expires-hours 48
+```
+
+See [Docker Compose](/self-hosting/docker-compose) for production configuration.
+
 ### Single Server (SQLite)
 
-The simplest deployment for small teams:
+For minimal setups without Docker:
 
 ```bash
 # Download binary

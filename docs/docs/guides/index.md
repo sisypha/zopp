@@ -12,6 +12,15 @@ These guides cover common use cases and best practices for using zopp.
   <div className="col col--6 margin-bottom--lg">
     <div className="card">
       <div className="card__body">
+        <h3>Joining a Team</h3>
+        <p>Just received an invite? Get up and running in under 5 minutes.</p>
+        <a href="/zopp/guides/joining-a-team">Get started</a>
+      </div>
+    </div>
+  </div>
+  <div className="col col--6 margin-bottom--lg">
+    <div className="card">
+      <div className="card__body">
         <h3>Core Concepts</h3>
         <p>Understand workspaces, projects, environments, and the key hierarchy that makes zopp secure.</p>
         <a href="/zopp/guides/core-concepts">Learn the basics</a>

@@ -24,6 +24,7 @@ const sidebars = {
       collapsed: false,
       items: [
         'guides/index',
+        'guides/joining-a-team',
         'guides/core-concepts',
         'guides/team-collaboration',
         'guides/kubernetes-operator',
@@ -68,6 +69,7 @@ const sidebars = {
       items: [
         'self-hosting/index',
         'self-hosting/server',
+        'self-hosting/docker-compose',
         'self-hosting/database',
         'self-hosting/tls',
       ],

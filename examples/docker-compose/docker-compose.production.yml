@@ -1,0 +1,64 @@
+# Docker Compose deployment for zopp (production)
+#
+# Usage:
+#   1. Create TLS certificates in ./certs/
+#   2. Update POSTGRES_PASSWORD with a secure value
+#   3. docker compose -f docker-compose.production.yml up -d
+#
+# Includes TLS, resource limits, and secure defaults.
+
+services:
+  zopp-server:
+    image: ghcr.io/faiscadev/zopp-server:latest
+    ports:
+      - "50051:50051"
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://zopp:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/zopp
+    volumes:
+      - ./certs:/certs:ro
+    command:
+      - serve
+      - --addr=0.0.0.0:50051
+      - --tls-cert=/certs/server.crt
+      - --tls-key=/certs/server.key
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: zopp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: zopp
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zopp -d zopp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:

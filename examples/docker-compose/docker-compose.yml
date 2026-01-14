@@ -1,0 +1,44 @@
+# Docker Compose deployment for zopp
+#
+# Usage:
+#   docker compose up -d
+#   docker compose exec zopp-server zopp-server invite create --expires-hours 48
+#
+# This creates a zopp server with PostgreSQL storage.
+
+services:
+  zopp-server:
+    image: ghcr.io/faiscadev/zopp-server:latest
+    ports:
+      - "50051:50051"
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://zopp:zopp@postgres:5432/zopp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: zopp
+      POSTGRES_PASSWORD: zopp
+      POSTGRES_DB: zopp
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zopp -d zopp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
