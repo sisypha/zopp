@@ -1,22 +1,15 @@
 use crate::crypto::fetch_and_decrypt_secrets;
 use crate::grpc::{add_auth_metadata, setup_client};
 use std::collections::BTreeMap;
+use std::io::Cursor;
 use zopp_secrets::SecretContext;
 
-/// Parse .env content into key-value pairs.
-/// Skips empty lines and comments (lines starting with #).
+/// Parse .env content into key-value pairs using dotenvy.
+/// Handles quoted values, comments, and edge cases properly.
 pub fn parse_env_content(content: &str) -> Vec<(String, String)> {
-    let mut secrets = Vec::new();
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            secrets.push((key.trim().to_string(), value.trim().to_string()));
-        }
-    }
-    secrets
+    dotenvy::from_read_iter(Cursor::new(content))
+        .filter_map(|result| result.ok())
+        .collect()
 }
 
 /// Format secrets as .env content (KEY=value, one per line).
@@ -377,6 +370,15 @@ mod tests {
         let secrets = parse_env_content(content);
         assert_eq!(secrets.len(), 1);
         assert_eq!(secrets[0].1, "postgres://user:pass@host/db?ssl=true");
+    }
+
+    #[test]
+    fn test_parse_env_content_quoted_with_whitespace() {
+        // dotenvy preserves whitespace inside quoted values
+        let content = r#"API_KEY=" secret with spaces ""#;
+        let secrets = parse_env_content(content);
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].1, " secret with spaces ");
     }
 
     #[test]

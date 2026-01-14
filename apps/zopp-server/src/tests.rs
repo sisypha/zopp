@@ -144,28 +144,6 @@ async fn create_test_group(
         .unwrap()
 }
 
-/// Test helper: Create a service principal (no user_id)
-async fn create_test_service_principal(
-    server: &ZoppServer,
-    name: &str,
-) -> (PrincipalId, SigningKey) {
-    let (public_key, signing_key) = generate_keypair();
-    let (x25519_public, _) = generate_x25519_keypair();
-
-    let principal_id = server
-        .store
-        .create_principal(&CreatePrincipalParams {
-            user_id: None, // Service principal has no user
-            name: name.to_string(),
-            public_key,
-            x25519_public_key: Some(x25519_public),
-        })
-        .await
-        .unwrap();
-
-    (principal_id, signing_key)
-}
-
 /// Test helper: Add a principal to a workspace (in workspace_principals table)
 async fn add_principal_to_workspace(
     server: &ZoppServer,
@@ -17536,7 +17514,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-lwsp-sad").await;
+            create_service_principal(&server, "service-lwsp-sad").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         let request = create_signed_request(
@@ -17581,7 +17559,7 @@ mod handler_tests {
         let ws_id = create_test_workspace(&server, &user_id, "ws-rpfw-sd").await;
 
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-rpfw").await;
+            create_service_principal(&server, "service-rpfw").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
         server
             .store
@@ -17702,7 +17680,7 @@ mod handler_tests {
         let ws_id = create_test_workspace(&server, &user_id, "ws-rapp-sd").await;
 
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-rapp").await;
+            create_service_principal(&server, "service-rapp").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
         server
             .store
@@ -17800,7 +17778,7 @@ mod handler_tests {
         let ws_id = create_test_workspace(&server, &user_id, "ws-gep-sd").await;
 
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-gep").await;
+            create_service_principal(&server, "service-gep").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         let request = create_signed_request(
@@ -18006,7 +17984,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-sp-upsert").await;
+            create_service_principal(&server, "service-sp-upsert").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         // Grant Write permission
@@ -18062,7 +18040,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-sp-get").await;
+            create_service_principal(&server, "service-sp-get").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         // Grant Read permission
@@ -18116,7 +18094,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-sp-list").await;
+            create_service_principal(&server, "service-sp-list").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         // Grant Read permission
@@ -18171,7 +18149,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-sp-del").await;
+            create_service_principal(&server, "service-sp-del").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         // Grant Write permission
@@ -18208,7 +18186,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-sp-watch").await;
+            create_service_principal(&server, "service-sp-watch").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         // Grant Read permission
@@ -18243,7 +18221,7 @@ mod handler_tests {
 
         // Create a service principal
         let (service_id, service_signing_key) =
-            create_test_service_principal(&server, "service-sp-nf").await;
+            create_service_principal(&server, "service-sp-nf").await;
         add_principal_to_workspace(&server, &ws_id, &service_id).await;
 
         // Try to get secret in nonexistent workspace

@@ -312,20 +312,10 @@ mod tests {
 
     #[test]
     fn test_find_project_config_does_not_panic() {
-        // This test verifies find_project_config() doesn't panic regardless of environment
-        // The result depends on whether zopp.toml exists in the directory tree
-        let result = find_project_config();
-        // If found, verify it has the expected structure
-        if let Some(config) = result {
-            // ProjectConfig should have at least one default set (workspace, project, or environment)
-            let has_defaults = config.defaults.workspace.is_some()
-                || config.defaults.project.is_some()
-                || config.defaults.environment.is_some();
-            assert!(
-                has_defaults,
-                "Found config should have at least one default value"
-            );
-        }
-        // If not found, that's also valid - no assertion needed for None case
+        // This test verifies find_project_config() doesn't panic regardless of environment.
+        // The result depends on whether zopp.toml exists in the directory tree.
+        // Both Some (config found) and None (not found) are valid outcomes.
+        // A valid config can have empty defaults (all None) due to #[serde(default)].
+        let _result = find_project_config();
     }
 }
