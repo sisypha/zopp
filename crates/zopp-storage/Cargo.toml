@@ -10,8 +10,13 @@ description = "Storage abstraction layer for zopp secrets manager"
 [dependencies]
 async-trait = { workspace = true }
 chrono = { workspace = true }
+mockall = { workspace = true, optional = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+
+[features]
+default = []
+test-support = ["mockall"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }

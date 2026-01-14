@@ -40,3 +40,5 @@ sha2 = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 reqwest = { workspace = true }
+rand_core = { workspace = true }
+x25519-dalek = { workspace = true }

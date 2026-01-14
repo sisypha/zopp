@@ -1,6 +1,64 @@
 use crate::crypto::fetch_and_decrypt_secrets;
 use crate::grpc::{add_auth_metadata, setup_client};
+use std::collections::BTreeMap;
+use std::io::Cursor;
 use zopp_secrets::SecretContext;
+
+/// Parse .env content into key-value pairs.
+/// Handles quoted values, comments, and edge cases properly using dotenvy.
+/// Returns parsed secrets and any parsing errors encountered (with line numbers).
+pub fn parse_env_content(content: &str) -> (Vec<(String, String)>, Vec<String>) {
+    let mut secrets = Vec::new();
+    let mut errors = Vec::new();
+
+    // Track line numbers manually since dotenvy's iterator skips comments/empty lines
+    let lines: Vec<&str> = content.lines().collect();
+    let mut line_idx = 0;
+
+    for result in dotenvy::from_read_iter(Cursor::new(content)) {
+        match result {
+            Ok((ref key, value)) => {
+                // Find which line this key came from
+                while line_idx < lines.len() {
+                    let line = lines[line_idx].trim();
+                    line_idx += 1;
+                    if line.starts_with(key) || line.starts_with(&format!("\"{}\"", key)) {
+                        break;
+                    }
+                }
+                secrets.push((key.clone(), value));
+            }
+            Err(e) => {
+                // Find the next non-comment, non-empty line for context
+                let mut found_line = false;
+                while line_idx < lines.len() {
+                    let line = lines[line_idx].trim();
+                    line_idx += 1;
+                    if !line.is_empty() && !line.starts_with('#') {
+                        errors.push(format!("line {}: {}", line_idx, e));
+                        found_line = true;
+                        break;
+                    }
+                }
+                // If we couldn't find the line, report without line number
+                if !found_line {
+                    errors.push(e.to_string());
+                }
+            }
+        }
+    }
+
+    (secrets, errors)
+}
+
+/// Format secrets as .env content (KEY=value, one per line).
+pub fn format_env_content(secrets: &BTreeMap<String, String>) -> String {
+    secrets
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Helper to create a SecretContext for a given environment
 async fn create_secret_context(
@@ -205,11 +263,7 @@ pub async fn cmd_secret_export(
     }
 
     // Format as .env (BTreeMap is already sorted)
-    let env_content = secret_data
-        .iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let env_content = format_env_content(&secret_data);
 
     // Write to file or stdout
     if let Some(path) = output {
@@ -241,15 +295,11 @@ pub async fn cmd_secret_import(
     };
 
     // Parse .env format (KEY=value, skip comments and empty lines)
-    let mut secrets = Vec::new();
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            secrets.push((key.trim().to_string(), value.trim().to_string()));
-        }
+    let (secrets, errors) = parse_env_content(&content);
+
+    // Report any parsing errors to stderr
+    for error in &errors {
+        eprintln!("Warning: failed to parse {}", error);
     }
 
     if secrets.is_empty() {
@@ -320,4 +370,114 @@ pub async fn cmd_secret_run(
         .status()?;
 
     std::process::exit(status.code().unwrap_or(1));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_env_content_simple() {
+        let content = "API_KEY=secret123\nDB_PASSWORD=pass456";
+        let (secrets, errors) = parse_env_content(content);
+        assert!(errors.is_empty());
+        assert_eq!(secrets.len(), 2);
+        assert_eq!(secrets[0], ("API_KEY".to_string(), "secret123".to_string()));
+        assert_eq!(
+            secrets[1],
+            ("DB_PASSWORD".to_string(), "pass456".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_with_comments() {
+        let content = "# Comment\nAPI_KEY=secret\n# Another\nDB=pass";
+        let (secrets, errors) = parse_env_content(content);
+        assert!(errors.is_empty());
+        assert_eq!(secrets.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_env_content_with_empty_lines() {
+        let content = "API_KEY=secret\n\n\nDB=pass\n";
+        let (secrets, errors) = parse_env_content(content);
+        assert!(errors.is_empty());
+        assert_eq!(secrets.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_env_content_empty() {
+        let (secrets, errors) = parse_env_content("");
+        assert!(secrets.is_empty());
+        assert!(errors.is_empty());
+
+        let (secrets, errors) = parse_env_content("# only comments");
+        assert!(secrets.is_empty());
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_env_content_value_with_equals() {
+        let content = "URL=postgres://user:pass@host/db?ssl=true";
+        let (secrets, errors) = parse_env_content(content);
+        assert!(errors.is_empty());
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].1, "postgres://user:pass@host/db?ssl=true");
+    }
+
+    #[test]
+    fn test_parse_env_content_quoted_with_whitespace() {
+        // dotenvy preserves whitespace inside quoted values
+        let content = r#"API_KEY=" secret with spaces ""#;
+        let (secrets, errors) = parse_env_content(content);
+        assert!(errors.is_empty());
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].1, " secret with spaces ");
+    }
+
+    #[test]
+    fn test_parse_env_content_reports_errors() {
+        // Unclosed quote should result in a parsing error
+        let content = "VALID=value\nINVALID=\"unclosed";
+        let (secrets, errors) = parse_env_content(content);
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].0, "VALID");
+        assert_eq!(errors.len(), 1);
+        // Error should include the actual line number (line 2)
+        assert!(
+            errors[0].contains("line 2"),
+            "Error should contain line number"
+        );
+    }
+
+    #[test]
+    fn test_parse_env_content_error_line_with_comments() {
+        // Test that line numbers are correct even with comments
+        let content = "# comment\nVALID=value\n# another comment\nINVALID=\"unclosed";
+        let (secrets, errors) = parse_env_content(content);
+        assert_eq!(secrets.len(), 1);
+        assert_eq!(secrets[0].0, "VALID");
+        assert_eq!(errors.len(), 1);
+        // Error should be on line 4, not line 2 (accounting for comments)
+        assert!(
+            errors[0].contains("line 4"),
+            "Error should be on line 4, got: {}",
+            errors[0]
+        );
+    }
+
+    #[test]
+    fn test_format_env_content() {
+        let mut secrets = BTreeMap::new();
+        secrets.insert("API_KEY".to_string(), "secret123".to_string());
+        secrets.insert("DB_PASSWORD".to_string(), "pass456".to_string());
+        let content = format_env_content(&secrets);
+        assert_eq!(content, "API_KEY=secret123\nDB_PASSWORD=pass456");
+    }
+
+    #[test]
+    fn test_format_env_content_empty() {
+        let secrets = BTreeMap::new();
+        assert_eq!(format_env_content(&secrets), "");
+    }
 }

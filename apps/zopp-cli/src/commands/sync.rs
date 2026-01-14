@@ -6,6 +6,47 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::{api::PostParams, Api, Client};
 use std::collections::BTreeMap;
 
+/// Check if a K8s Secret is managed by zopp.
+pub fn is_managed_by_zopp(secret: &Secret) -> bool {
+    secret
+        .metadata
+        .labels
+        .as_ref()
+        .and_then(|labels| labels.get("app.kubernetes.io/managed-by"))
+        .map(|s| s.as_str())
+        == Some("zopp")
+}
+
+/// Build the standard labels for a zopp-managed K8s Secret.
+pub fn build_zopp_labels() -> BTreeMap<String, String> {
+    let mut labels = BTreeMap::new();
+    labels.insert(
+        "app.kubernetes.io/managed-by".to_string(),
+        "zopp".to_string(),
+    );
+    labels
+}
+
+/// Build the annotations for a zopp-synced K8s Secret.
+pub fn build_zopp_annotations(
+    workspace_name: &str,
+    project_name: &str,
+    environment_name: &str,
+    principal_id: &str,
+    synced_at: &str,
+) -> BTreeMap<String, String> {
+    let mut annotations = BTreeMap::new();
+    annotations.insert("zopp.dev/workspace".to_string(), workspace_name.to_string());
+    annotations.insert("zopp.dev/project".to_string(), project_name.to_string());
+    annotations.insert(
+        "zopp.dev/environment".to_string(),
+        environment_name.to_string(),
+    );
+    annotations.insert("zopp.dev/synced-at".to_string(), synced_at.to_string());
+    annotations.insert("zopp.dev/synced-by".to_string(), principal_id.to_string());
+    annotations
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn cmd_sync_k8s(
     server: &str,
@@ -41,14 +82,7 @@ pub async fn cmd_sync_k8s(
     match secrets_api.get(secret_name).await {
         Ok(existing_secret) => {
             // Secret exists, check if managed by zopp
-            let managed_by = existing_secret
-                .metadata
-                .labels
-                .as_ref()
-                .and_then(|labels| labels.get("app.kubernetes.io/managed-by"))
-                .map(|s| s.as_str());
-
-            if managed_by != Some("zopp") && !force {
+            if !is_managed_by_zopp(&existing_secret) && !force {
                 return Err(format!(
                     "Secret '{}' in namespace '{}' exists but is not managed by zopp. Use --force to take ownership.",
                     secret_name, namespace
@@ -65,28 +99,19 @@ pub async fn cmd_sync_k8s(
     }
 
     let synced_at = chrono::Utc::now().to_rfc3339();
-    let mut labels = BTreeMap::new();
-    labels.insert(
-        "app.kubernetes.io/managed-by".to_string(),
-        "zopp".to_string(),
-    );
-
-    let mut annotations = BTreeMap::new();
-    annotations.insert("zopp.dev/workspace".to_string(), workspace_name.to_string());
-    annotations.insert("zopp.dev/project".to_string(), project_name.to_string());
-    annotations.insert(
-        "zopp.dev/environment".to_string(),
-        environment_name.to_string(),
-    );
-    annotations.insert("zopp.dev/synced-at".to_string(), synced_at.clone());
-    annotations.insert("zopp.dev/synced-by".to_string(), principal.id.clone());
 
     let secret = Secret {
         metadata: ObjectMeta {
             name: Some(secret_name.to_string()),
             namespace: Some(namespace.to_string()),
-            labels: Some(labels),
-            annotations: Some(annotations),
+            labels: Some(build_zopp_labels()),
+            annotations: Some(build_zopp_annotations(
+                workspace_name,
+                project_name,
+                environment_name,
+                &principal.id,
+                &synced_at,
+            )),
             ..Default::default()
         },
         string_data: Some(secret_data),
@@ -172,4 +197,84 @@ pub async fn cmd_sync_k8s(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_secret_with_labels(labels: Option<BTreeMap<String, String>>) -> Secret {
+        Secret {
+            metadata: ObjectMeta {
+                labels,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_is_managed_by_zopp_true() {
+        let mut labels = BTreeMap::new();
+        labels.insert(
+            "app.kubernetes.io/managed-by".to_string(),
+            "zopp".to_string(),
+        );
+        let secret = make_secret_with_labels(Some(labels));
+        assert!(is_managed_by_zopp(&secret));
+    }
+
+    #[test]
+    fn test_is_managed_by_zopp_false_different_manager() {
+        let mut labels = BTreeMap::new();
+        labels.insert(
+            "app.kubernetes.io/managed-by".to_string(),
+            "helm".to_string(),
+        );
+        let secret = make_secret_with_labels(Some(labels));
+        assert!(!is_managed_by_zopp(&secret));
+    }
+
+    #[test]
+    fn test_is_managed_by_zopp_false_no_labels() {
+        let secret = make_secret_with_labels(None);
+        assert!(!is_managed_by_zopp(&secret));
+    }
+
+    #[test]
+    fn test_build_zopp_labels() {
+        let labels = build_zopp_labels();
+        assert_eq!(labels.len(), 1);
+        assert_eq!(
+            labels.get("app.kubernetes.io/managed-by"),
+            Some(&"zopp".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_zopp_annotations() {
+        let annotations =
+            build_zopp_annotations("ws", "proj", "dev", "principal-1", "2024-01-01T00:00:00Z");
+        assert_eq!(annotations.len(), 5);
+        assert_eq!(
+            annotations.get("zopp.dev/workspace"),
+            Some(&"ws".to_string())
+        );
+        assert_eq!(
+            annotations.get("zopp.dev/project"),
+            Some(&"proj".to_string())
+        );
+        assert_eq!(
+            annotations.get("zopp.dev/environment"),
+            Some(&"dev".to_string())
+        );
+        assert_eq!(
+            annotations.get("zopp.dev/synced-by"),
+            Some(&"principal-1".to_string())
+        );
+        assert_eq!(
+            annotations.get("zopp.dev/synced-at"),
+            Some(&"2024-01-01T00:00:00Z".to_string())
+        );
+    }
 }

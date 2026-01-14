@@ -619,3 +619,62 @@ async fn trigger_reload_if_needed(k8s_client: &Client, namespace: &str, secret_n
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_secret_sync_config_from_annotations_valid() {
+        let mut annotations = BTreeMap::new();
+        annotations.insert("zopp.dev/workspace".to_string(), "my-workspace".to_string());
+        annotations.insert("zopp.dev/project".to_string(), "my-project".to_string());
+        annotations.insert("zopp.dev/environment".to_string(), "production".to_string());
+
+        let config = SecretSyncConfig::from_annotations(&annotations).unwrap();
+        assert_eq!(config.workspace, "my-workspace");
+        assert_eq!(config.project, "my-project");
+        assert_eq!(config.environment, "production");
+    }
+
+    #[test]
+    fn test_secret_sync_config_from_annotations_missing_workspace() {
+        let mut annotations = BTreeMap::new();
+        annotations.insert("zopp.dev/project".to_string(), "my-project".to_string());
+        annotations.insert("zopp.dev/environment".to_string(), "production".to_string());
+
+        let result = SecretSyncConfig::from_annotations(&annotations);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            OperatorError::MissingAnnotation(_)
+        ));
+    }
+
+    #[test]
+    fn test_secret_sync_config_from_annotations_missing_project() {
+        let mut annotations = BTreeMap::new();
+        annotations.insert("zopp.dev/workspace".to_string(), "my-workspace".to_string());
+        annotations.insert("zopp.dev/environment".to_string(), "production".to_string());
+
+        let result = SecretSyncConfig::from_annotations(&annotations);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_secret_sync_config_from_annotations_missing_environment() {
+        let mut annotations = BTreeMap::new();
+        annotations.insert("zopp.dev/workspace".to_string(), "my-workspace".to_string());
+        annotations.insert("zopp.dev/project".to_string(), "my-project".to_string());
+
+        let result = SecretSyncConfig::from_annotations(&annotations);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_secret_sync_config_from_annotations_empty() {
+        let annotations = BTreeMap::new();
+        let result = SecretSyncConfig::from_annotations(&annotations);
+        assert!(result.is_err());
+    }
+}

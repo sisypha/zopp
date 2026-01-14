@@ -479,7 +479,7 @@ impl Store for SqliteStore {
         }
     }
 
-    async fn list_invites(&self, user_id: Option<&UserId>) -> Result<Vec<Invite>, StoreError> {
+    async fn list_invites(&self, user_id: Option<UserId>) -> Result<Vec<Invite>, StoreError> {
         let user_id_str = user_id.map(|id| id.0.to_string());
 
         // Query for either user-created invites or server invites (where created_by_user_id IS NULL)
@@ -1961,7 +1961,7 @@ impl Store for SqliteStore {
         &self,
         group_id: &zopp_storage::GroupId,
         name: &str,
-        description: Option<&str>,
+        description: Option<String>,
     ) -> Result<(), StoreError> {
         let g_id = group_id.0.to_string();
 
@@ -3041,7 +3041,8 @@ impl AuditLog for SqliteStore {
 mod tests {
     use super::*;
     use zopp_storage::{
-        CreateWorkspaceParams, EnvName, ProjectName, StoreError, UserId, WorkspaceId,
+        CreatePrincipalData, CreateWorkspaceParams, EnvName, ProjectName, StoreError, UserId,
+        WorkspaceId,
     };
 
     fn workspace_params(owner_user_id: UserId, name: &str) -> CreateWorkspaceParams {
@@ -3620,6 +3621,336 @@ mod tests {
             .unwrap();
         let err = s
             .get_workspace_permission(&ws, &principal_id)
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn secret_crud_operations() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, _) = s
+            .create_user(&CreateUserParams {
+                email: "test@example.com".to_string(),
+                principal: None,
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+        let ws = s
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
+            .await
+            .unwrap();
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: "test-project".to_string(),
+            })
+            .await
+            .unwrap();
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id: project_id.clone(),
+                name: "dev".to_string(),
+                dek_wrapped: vec![4, 5, 6],
+                dek_nonce: vec![
+                    7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                ],
+            })
+            .await
+            .unwrap();
+
+        // Insert a secret
+        let nonce = vec![0u8; 24];
+        let ciphertext = vec![1u8, 2, 3, 4, 5];
+        let version = s
+            .upsert_secret(&env_id, "API_KEY", &nonce, &ciphertext)
+            .await
+            .unwrap();
+        assert_eq!(version, 1);
+
+        // Get the secret
+        let secret = s.get_secret(&env_id, "API_KEY").await.unwrap();
+        assert_eq!(secret.nonce, nonce);
+        assert_eq!(secret.ciphertext, ciphertext);
+
+        // Update the secret
+        let new_ciphertext = vec![10u8, 20, 30];
+        let version2 = s
+            .upsert_secret(&env_id, "API_KEY", &nonce, &new_ciphertext)
+            .await
+            .unwrap();
+        assert_eq!(version2, 2);
+
+        // List secret keys
+        let keys = s.list_secret_keys(&env_id).await.unwrap();
+        assert_eq!(keys, vec!["API_KEY".to_string()]);
+
+        // Delete the secret
+        let del_version = s.delete_secret(&env_id, "API_KEY").await.unwrap();
+        assert_eq!(del_version, 3);
+
+        // Get should fail now
+        let err = s.get_secret(&env_id, "API_KEY").await.unwrap_err();
+        assert!(matches!(err, StoreError::NotFound));
+    }
+
+    #[tokio::test]
+    async fn user_operations() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, _) = s
+            .create_user(&CreateUserParams {
+                email: "user@example.com".to_string(),
+                principal: None,
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+
+        // Get user by email
+        let user = s.get_user_by_email("user@example.com").await.unwrap();
+        assert_eq!(user.id, user_id);
+        assert_eq!(user.email, "user@example.com");
+
+        // Get user by id
+        let user2 = s.get_user_by_id(&user_id).await.unwrap();
+        assert_eq!(user2.email, "user@example.com");
+
+        // User not found
+        let err = s
+            .get_user_by_email("notfound@example.com")
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn invite_operations() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, _) = s
+            .create_user(&CreateUserParams {
+                email: "inviter@example.com".to_string(),
+                principal: None,
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+        let ws = s
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
+            .await
+            .unwrap();
+
+        // Create an invite
+        let invite = s
+            .create_invite(&CreateInviteParams {
+                workspace_ids: vec![ws.clone()],
+                token: "test-token".to_string(),
+                kek_encrypted: Some(vec![1, 2, 3]),
+                kek_nonce: Some(vec![0u8; 24]),
+                expires_at: chrono::Utc::now() + chrono::Duration::hours(24),
+                created_by_user_id: Some(user_id.clone()),
+            })
+            .await
+            .unwrap();
+
+        // Get invite by token
+        let got = s.get_invite_by_token("test-token").await.unwrap();
+        assert_eq!(got.id, invite.id);
+
+        // List invites
+        let invites = s.list_invites(Some(user_id.clone())).await.unwrap();
+        assert_eq!(invites.len(), 1);
+
+        // Revoke invite
+        s.revoke_invite(&invite.id).await.unwrap();
+        let err = s.get_invite_by_token("test-token").await.unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn project_and_environment_delete() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, _) = s
+            .create_user(&CreateUserParams {
+                email: "test@example.com".to_string(),
+                principal: None,
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+        let ws = s
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
+            .await
+            .unwrap();
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: "test-project".to_string(),
+            })
+            .await
+            .unwrap();
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id: project_id.clone(),
+                name: "dev".to_string(),
+                dek_wrapped: vec![4, 5, 6],
+                dek_nonce: vec![
+                    7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                ],
+            })
+            .await
+            .unwrap();
+
+        // Delete environment
+        s.delete_environment(&env_id).await.unwrap();
+        let err = s.get_environment(&env_id).await.unwrap_err();
+        matches!(err, StoreError::NotFound);
+
+        // Delete project
+        s.delete_project(&project_id).await.unwrap();
+        let err = s.get_project(&project_id).await.unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn user_permission_operations() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, _) = s
+            .create_user(&CreateUserParams {
+                email: "test@example.com".to_string(),
+                principal: None,
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+        let ws = s
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
+            .await
+            .unwrap();
+        s.add_user_to_workspace(&ws, &user_id).await.unwrap();
+
+        let project_id = s
+            .create_project(&CreateProjectParams {
+                workspace_id: ws.clone(),
+                name: "test-project".to_string(),
+            })
+            .await
+            .unwrap();
+        let env_id = s
+            .create_env(&CreateEnvParams {
+                project_id: project_id.clone(),
+                name: "dev".to_string(),
+                dek_wrapped: vec![4, 5, 6],
+                dek_nonce: vec![
+                    7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                ],
+            })
+            .await
+            .unwrap();
+
+        // Set user workspace permission
+        s.set_user_workspace_permission(&ws, &user_id, Role::Admin)
+            .await
+            .unwrap();
+        let role = s
+            .get_user_workspace_permission(&ws, &user_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Admin);
+
+        // Set user project permission
+        s.set_user_project_permission(&project_id, &user_id, Role::Write)
+            .await
+            .unwrap();
+        let role = s
+            .get_user_project_permission(&project_id, &user_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Write);
+
+        // Set user environment permission
+        s.set_user_environment_permission(&env_id, &user_id, Role::Read)
+            .await
+            .unwrap();
+        let role = s
+            .get_user_environment_permission(&env_id, &user_id)
+            .await
+            .unwrap();
+        assert_eq!(role, Role::Read);
+
+        // List user permissions at each level
+        let ws_perms = s.list_user_workspace_permissions(&ws).await.unwrap();
+        assert_eq!(ws_perms.len(), 1);
+        assert_eq!(ws_perms[0].role, Role::Admin);
+
+        let proj_perms = s.list_user_project_permissions(&project_id).await.unwrap();
+        assert_eq!(proj_perms.len(), 1);
+        assert_eq!(proj_perms[0].role, Role::Write);
+
+        let env_perms = s.list_user_environment_permissions(&env_id).await.unwrap();
+        assert_eq!(env_perms.len(), 1);
+        assert_eq!(env_perms[0].role, Role::Read);
+
+        // Remove user permissions
+        s.remove_user_workspace_permission(&ws, &user_id)
+            .await
+            .unwrap();
+        let err = s
+            .get_user_workspace_permission(&ws, &user_id)
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn workspace_principal_operations() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+        let (user_id, principal_id) = s
+            .create_user(&CreateUserParams {
+                email: "test@example.com".to_string(),
+                principal: Some(CreatePrincipalData {
+                    name: "laptop".to_string(),
+                    public_key: vec![1, 2, 3, 4],
+                    x25519_public_key: Some(vec![5, 6, 7, 8]),
+                    is_service: false,
+                }),
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+        let principal_id = principal_id.unwrap();
+
+        let ws = s
+            .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
+            .await
+            .unwrap();
+
+        // Add workspace principal
+        s.add_workspace_principal(&AddWorkspacePrincipalParams {
+            workspace_id: ws.clone(),
+            principal_id: principal_id.clone(),
+            ephemeral_pub: vec![10, 20, 30],
+            kek_wrapped: vec![40, 50, 60],
+            kek_nonce: vec![0u8; 24],
+        })
+        .await
+        .unwrap();
+
+        // Get workspace principal
+        let wp = s.get_workspace_principal(&ws, &principal_id).await.unwrap();
+        assert_eq!(wp.ephemeral_pub, vec![10, 20, 30]);
+        assert_eq!(wp.kek_wrapped, vec![40, 50, 60]);
+
+        // List workspace principals
+        let principals = s.list_workspace_principals(&ws).await.unwrap();
+        assert_eq!(principals.len(), 1);
+
+        // Remove workspace principal
+        s.remove_workspace_principal(&ws, &principal_id)
+            .await
+            .unwrap();
+        let err = s
+            .get_workspace_principal(&ws, &principal_id)
             .await
             .unwrap_err();
         matches!(err, StoreError::NotFound);

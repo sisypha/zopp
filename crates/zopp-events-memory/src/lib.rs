@@ -167,4 +167,104 @@ mod tests {
             "Should not receive event published before subscription"
         );
     }
+
+    #[tokio::test]
+    async fn cross_environment_isolation() {
+        let bus = MemoryEventBus::new();
+        let env_a = EnvironmentId(Uuid::new_v4());
+        let env_b = EnvironmentId(Uuid::new_v4());
+
+        // Subscribe to env_a only
+        let mut stream_a = bus.subscribe(&env_a).await.unwrap();
+
+        // Publish to env_b (should NOT be received by stream_a)
+        let event_b = SecretChangeEvent {
+            event_type: EventType::Created,
+            key: "ENV_B_SECRET".to_string(),
+            version: 1,
+            timestamp: 11111,
+        };
+        bus.publish(&env_b, event_b).await.unwrap();
+
+        // Publish to env_a (should be received)
+        let event_a = SecretChangeEvent {
+            event_type: EventType::Created,
+            key: "ENV_A_SECRET".to_string(),
+            version: 1,
+            timestamp: 22222,
+        };
+        bus.publish(&env_a, event_a).await.unwrap();
+
+        // Should receive env_a event, not env_b
+        let received = tokio::time::timeout(std::time::Duration::from_millis(100), stream_a.next())
+            .await
+            .expect("timeout")
+            .expect("stream ended");
+
+        assert_eq!(received.key, "ENV_A_SECRET");
+    }
+
+    #[test]
+    fn memory_event_bus_default() {
+        let bus = MemoryEventBus::default();
+        // Default should create an empty bus
+        assert!(bus.channels.is_empty());
+    }
+
+    #[tokio::test]
+    async fn multiple_events_ordering() {
+        let bus = MemoryEventBus::new();
+        let env_id = EnvironmentId(Uuid::new_v4());
+
+        let mut stream = bus.subscribe(&env_id).await.unwrap();
+
+        // Publish multiple events
+        for i in 1i64..=3 {
+            let event = SecretChangeEvent {
+                event_type: EventType::Updated,
+                key: format!("KEY_{}", i),
+                version: i,
+                timestamp: i,
+            };
+            bus.publish(&env_id, event).await.unwrap();
+        }
+
+        // Receive in order
+        let recv1 = stream.next().await.unwrap();
+        let recv2 = stream.next().await.unwrap();
+        let recv3 = stream.next().await.unwrap();
+
+        assert_eq!(recv1.key, "KEY_1");
+        assert_eq!(recv2.key, "KEY_2");
+        assert_eq!(recv3.key, "KEY_3");
+    }
+
+    #[tokio::test]
+    async fn subscribe_after_channel_exists() {
+        let bus = MemoryEventBus::new();
+        let env_id = EnvironmentId(Uuid::new_v4());
+
+        // First subscriber creates the channel
+        let _stream1 = bus.subscribe(&env_id).await.unwrap();
+
+        // Second subscriber reuses existing channel
+        let mut stream2 = bus.subscribe(&env_id).await.unwrap();
+
+        // Publish event
+        let event = SecretChangeEvent {
+            event_type: EventType::Created,
+            key: "TEST".to_string(),
+            version: 1,
+            timestamp: 1,
+        };
+        bus.publish(&env_id, event).await.unwrap();
+
+        // Second subscriber should receive it
+        let received = tokio::time::timeout(std::time::Duration::from_millis(100), stream2.next())
+            .await
+            .expect("timeout")
+            .expect("stream ended");
+
+        assert_eq!(received.key, "TEST");
+    }
 }

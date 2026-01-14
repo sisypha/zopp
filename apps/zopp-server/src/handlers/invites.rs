@@ -139,7 +139,7 @@ pub async fn list_invites(
 
     let invites = server
         .store
-        .list_invites(Some(&user_id))
+        .list_invites(Some(user_id))
         .await
         .map_err(|e| Status::internal(format!("Failed to list invites: {}", e)))?
         .into_iter()

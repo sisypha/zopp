@@ -64,3 +64,93 @@ pub trait EventBus: Send + Sync {
     /// The stream will continue until dropped or the connection is closed.
     async fn subscribe(&self, env_id: &EnvironmentId) -> Result<EventStream, EventBusError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_event_type_equality() {
+        assert_eq!(EventType::Created, EventType::Created);
+        assert_eq!(EventType::Updated, EventType::Updated);
+        assert_eq!(EventType::Deleted, EventType::Deleted);
+        assert_ne!(EventType::Created, EventType::Updated);
+        assert_ne!(EventType::Updated, EventType::Deleted);
+    }
+
+    #[test]
+    fn test_event_type_clone() {
+        let event_type = EventType::Created;
+        let cloned = event_type.clone();
+        assert_eq!(event_type, cloned);
+    }
+
+    #[test]
+    fn test_event_type_debug() {
+        assert!(format!("{:?}", EventType::Created).contains("Created"));
+        assert!(format!("{:?}", EventType::Updated).contains("Updated"));
+        assert!(format!("{:?}", EventType::Deleted).contains("Deleted"));
+    }
+
+    #[test]
+    fn test_secret_change_event_serialization() {
+        let event = SecretChangeEvent {
+            event_type: EventType::Created,
+            key: "API_KEY".to_string(),
+            version: 42,
+            timestamp: 1234567890,
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: SecretChangeEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(event.event_type, deserialized.event_type);
+        assert_eq!(event.key, deserialized.key);
+        assert_eq!(event.version, deserialized.version);
+        assert_eq!(event.timestamp, deserialized.timestamp);
+    }
+
+    #[test]
+    fn test_secret_change_event_clone() {
+        let event = SecretChangeEvent {
+            event_type: EventType::Updated,
+            key: "SECRET".to_string(),
+            version: 1,
+            timestamp: 999,
+        };
+
+        let cloned = event.clone();
+        assert_eq!(event.key, cloned.key);
+        assert_eq!(event.version, cloned.version);
+    }
+
+    #[test]
+    fn test_secret_change_event_debug() {
+        let event = SecretChangeEvent {
+            event_type: EventType::Deleted,
+            key: "TO_DELETE".to_string(),
+            version: 3,
+            timestamp: 111,
+        };
+
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("TO_DELETE"));
+        assert!(debug_str.contains("Deleted"));
+    }
+
+    #[test]
+    fn test_event_bus_error_display() {
+        let error = EventBusError::Backend("connection failed".to_string());
+        let display = error.to_string();
+        assert!(display.contains("backend error"));
+        assert!(display.contains("connection failed"));
+    }
+
+    #[test]
+    fn test_event_bus_error_debug() {
+        let error = EventBusError::Backend("test error".to_string());
+        let debug_str = format!("{:?}", error);
+        assert!(debug_str.contains("Backend"));
+        assert!(debug_str.contains("test error"));
+    }
+}

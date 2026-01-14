@@ -632,4 +632,306 @@ mod tests {
         assert_eq!(event.principal_id, deserialized.principal_id);
         assert_eq!(event.action, deserialized.action);
     }
+
+    // Test all AuditAction variants display/parse roundtrip
+    #[test]
+    fn test_audit_action_all_variants_roundtrip() {
+        let actions = vec![
+            AuditAction::UserJoin,
+            AuditAction::UserRegister,
+            AuditAction::PrincipalCreate,
+            AuditAction::PrincipalRename,
+            AuditAction::PrincipalRemove,
+            AuditAction::PrincipalRevokeAllPermissions,
+            AuditAction::WorkspaceCreate,
+            AuditAction::WorkspaceGrantAccess,
+            AuditAction::WorkspaceRevokeAccess,
+            AuditAction::ProjectCreate,
+            AuditAction::ProjectDelete,
+            AuditAction::EnvironmentCreate,
+            AuditAction::EnvironmentDelete,
+            AuditAction::EnvironmentRotateKey,
+            AuditAction::SecretCreate,
+            AuditAction::SecretUpdate,
+            AuditAction::SecretRead,
+            AuditAction::SecretDelete,
+            AuditAction::SecretList,
+            AuditAction::InviteCreate,
+            AuditAction::InviteConsume,
+            AuditAction::InviteRevoke,
+            AuditAction::PermissionSetWorkspace,
+            AuditAction::PermissionSetProject,
+            AuditAction::PermissionSetEnvironment,
+            AuditAction::PermissionRemoveWorkspace,
+            AuditAction::PermissionRemoveProject,
+            AuditAction::PermissionRemoveEnvironment,
+            AuditAction::UserPermissionSetWorkspace,
+            AuditAction::UserPermissionSetProject,
+            AuditAction::UserPermissionSetEnvironment,
+            AuditAction::UserPermissionRemoveWorkspace,
+            AuditAction::UserPermissionRemoveProject,
+            AuditAction::UserPermissionRemoveEnvironment,
+            AuditAction::GroupCreate,
+            AuditAction::GroupUpdate,
+            AuditAction::GroupDelete,
+            AuditAction::GroupMemberAdd,
+            AuditAction::GroupMemberRemove,
+            AuditAction::GroupPermissionSetWorkspace,
+            AuditAction::GroupPermissionSetProject,
+            AuditAction::GroupPermissionSetEnvironment,
+            AuditAction::GroupPermissionRemoveWorkspace,
+            AuditAction::GroupPermissionRemoveProject,
+            AuditAction::GroupPermissionRemoveEnvironment,
+        ];
+
+        for action in actions {
+            let display = action.to_string();
+            let parsed: AuditAction = display.parse().unwrap();
+            assert_eq!(action, parsed, "Roundtrip failed for {:?}", action);
+        }
+    }
+
+    // Test all AuditResult variants display/parse roundtrip
+    #[test]
+    fn test_audit_result_all_variants_roundtrip() {
+        let results = vec![
+            AuditResult::Success,
+            AuditResult::PermissionDenied,
+            AuditResult::NotFound,
+            AuditResult::InvalidRequest,
+            AuditResult::Error,
+        ];
+
+        for result in results {
+            let display = result.to_string();
+            let parsed: AuditResult = display.parse().unwrap();
+            assert_eq!(result, parsed, "Roundtrip failed for {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_audit_result_parse_error() {
+        let result = "unknown_result".parse::<AuditResult>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown audit result"));
+    }
+
+    #[test]
+    fn test_audit_log_id_display() {
+        let uuid = Uuid::new_v4();
+        let id = AuditLogId(uuid);
+        assert_eq!(id.to_string(), uuid.to_string());
+    }
+
+    #[test]
+    fn test_audit_log_id_parse() {
+        let uuid = Uuid::new_v4();
+        let id_str = uuid.to_string();
+        let parsed: AuditLogId = id_str.parse().unwrap();
+        assert_eq!(parsed.0, uuid);
+    }
+
+    #[test]
+    fn test_audit_log_id_parse_invalid() {
+        let result = "not-a-uuid".parse::<AuditLogId>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_audit_log_id_default() {
+        let id1 = AuditLogId::default();
+        let id2 = AuditLogId::default();
+        assert_ne!(id1, id2); // Each default creates a new ID
+    }
+
+    #[test]
+    fn test_audit_event_builder_with_all_fields() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let user_id = UserId(Uuid::new_v4());
+        let workspace_id = WorkspaceId(Uuid::new_v4());
+        let project_id = ProjectId(Uuid::new_v4());
+        let environment_id = EnvironmentId(Uuid::new_v4());
+
+        let event = AuditEvent::builder(&principal_id, AuditAction::SecretCreate)
+            .user_id(Some(&user_id))
+            .resource("secret", "DATABASE_URL")
+            .workspace_id(Some(&workspace_id))
+            .project_id(Some(&project_id))
+            .environment_id(Some(&environment_id))
+            .result(AuditResult::Success)
+            .reason("Test reason")
+            .details(serde_json::json!({"old_value": "hidden", "new_value": "hidden"}))
+            .client_ip("192.168.1.1")
+            .build();
+
+        assert_eq!(event.principal_id, principal_id.0);
+        assert_eq!(event.user_id, Some(user_id.0));
+        assert_eq!(event.resource_type, "secret");
+        assert_eq!(event.resource_id, "DATABASE_URL");
+        assert_eq!(event.workspace_id, Some(workspace_id.0));
+        assert_eq!(event.project_id, Some(project_id.0));
+        assert_eq!(event.environment_id, Some(environment_id.0));
+        assert_eq!(event.result, AuditResult::Success);
+        assert_eq!(event.reason, Some("Test reason".to_string()));
+        assert!(event.details.is_some());
+        assert_eq!(event.client_ip, Some("192.168.1.1".to_string()));
+    }
+
+    #[test]
+    fn test_audit_event_builder_with_none_fields() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+
+        let event = AuditEvent::builder(&principal_id, AuditAction::UserJoin)
+            .user_id(None)
+            .workspace_id(None)
+            .project_id(None)
+            .environment_id(None)
+            .build();
+
+        assert!(event.user_id.is_none());
+        assert!(event.workspace_id.is_none());
+        assert!(event.project_id.is_none());
+        assert!(event.environment_id.is_none());
+    }
+
+    #[test]
+    fn test_audit_event_get_typed_ids() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let user_id = UserId(Uuid::new_v4());
+        let workspace_id = WorkspaceId(Uuid::new_v4());
+        let project_id = ProjectId(Uuid::new_v4());
+        let environment_id = EnvironmentId(Uuid::new_v4());
+
+        let event = AuditEvent::builder(&principal_id, AuditAction::SecretRead)
+            .user_id(Some(&user_id))
+            .workspace_id(Some(&workspace_id))
+            .project_id(Some(&project_id))
+            .environment_id(Some(&environment_id))
+            .build();
+
+        assert_eq!(event.get_principal_id(), principal_id);
+        assert_eq!(event.get_user_id(), Some(user_id));
+        assert_eq!(event.get_workspace_id(), Some(workspace_id));
+        assert_eq!(event.get_project_id(), Some(project_id));
+        assert_eq!(event.get_environment_id(), Some(environment_id));
+    }
+
+    #[test]
+    fn test_audit_event_get_typed_ids_none() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+
+        let event = AuditEvent::builder(&principal_id, AuditAction::UserRegister).build();
+
+        assert_eq!(event.get_principal_id(), principal_id);
+        assert!(event.get_user_id().is_none());
+        assert!(event.get_workspace_id().is_none());
+        assert!(event.get_project_id().is_none());
+        assert!(event.get_environment_id().is_none());
+    }
+
+    #[test]
+    fn test_audit_log_filter_builder() {
+        let principal_uuid = Uuid::new_v4();
+        let user_uuid = Uuid::new_v4();
+        let workspace_uuid = Uuid::new_v4();
+        let project_uuid = Uuid::new_v4();
+        let environment_uuid = Uuid::new_v4();
+        let from_time = Utc::now();
+        let to_time = Utc::now();
+
+        let filter = AuditLogFilter::new()
+            .principal_id(PrincipalId(principal_uuid))
+            .user_id(UserId(user_uuid))
+            .workspace_id(WorkspaceId(workspace_uuid))
+            .project_id(ProjectId(project_uuid))
+            .environment_id(EnvironmentId(environment_uuid))
+            .action(AuditAction::SecretCreate)
+            .result(AuditResult::Success)
+            .from(from_time)
+            .to(to_time)
+            .limit(100)
+            .offset(50);
+
+        assert_eq!(filter.principal_id, Some(PrincipalId(principal_uuid)));
+        assert_eq!(filter.user_id, Some(UserId(user_uuid)));
+        assert_eq!(filter.workspace_id, Some(WorkspaceId(workspace_uuid)));
+        assert_eq!(filter.project_id, Some(ProjectId(project_uuid)));
+        assert_eq!(filter.environment_id, Some(EnvironmentId(environment_uuid)));
+        assert_eq!(filter.action, Some(AuditAction::SecretCreate));
+        assert_eq!(filter.result, Some(AuditResult::Success));
+        assert_eq!(filter.from, Some(from_time));
+        assert_eq!(filter.to, Some(to_time));
+        assert_eq!(filter.limit, Some(100));
+        assert_eq!(filter.offset, Some(50));
+    }
+
+    #[test]
+    fn test_audit_log_filter_default() {
+        let filter = AuditLogFilter::default();
+
+        assert!(filter.principal_id.is_none());
+        assert!(filter.user_id.is_none());
+        assert!(filter.workspace_id.is_none());
+        assert!(filter.project_id.is_none());
+        assert!(filter.environment_id.is_none());
+        assert!(filter.action.is_none());
+        assert!(filter.result.is_none());
+        assert!(filter.from.is_none());
+        assert!(filter.to.is_none());
+        assert!(filter.limit.is_none());
+        assert!(filter.offset.is_none());
+    }
+
+    #[test]
+    fn test_audit_log_error_display() {
+        let db_err = AuditLogError::Database("connection failed".to_string());
+        assert!(db_err.to_string().contains("database error"));
+        assert!(db_err.to_string().contains("connection failed"));
+
+        let id = AuditLogId::new();
+        let not_found_err = AuditLogError::NotFound(id);
+        assert!(not_found_err.to_string().contains("not found"));
+
+        let filter_err = AuditLogError::InvalidFilter("bad limit".to_string());
+        assert!(filter_err.to_string().contains("invalid filter"));
+        assert!(filter_err.to_string().contains("bad limit"));
+    }
+
+    #[test]
+    fn test_audit_action_serde() {
+        let action = AuditAction::SecretCreate;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"secret_create\"");
+
+        let deserialized: AuditAction = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, action);
+    }
+
+    #[test]
+    fn test_audit_result_serde() {
+        let result = AuditResult::PermissionDenied;
+        let json = serde_json::to_string(&result).unwrap();
+        assert_eq!(json, "\"permission_denied\"");
+
+        let deserialized: AuditResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, result);
+    }
+
+    #[test]
+    fn test_audit_event_timestamp_is_recent() {
+        let principal_id = PrincipalId(Uuid::new_v4());
+        let before = Utc::now();
+        let event = AuditEvent::builder(&principal_id, AuditAction::UserJoin).build();
+        let after = Utc::now();
+
+        assert!(event.timestamp >= before);
+        assert!(event.timestamp <= after);
+    }
+
+    #[test]
+    fn test_audit_log_id_is_v7() {
+        let id = AuditLogId::new();
+        // UUID v7 has version 7 in the version field
+        assert_eq!(id.0.get_version_num(), 7);
+    }
 }

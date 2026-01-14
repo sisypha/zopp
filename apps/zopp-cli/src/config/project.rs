@@ -103,3 +103,219 @@ pub fn resolve_context(
 
     Ok((workspace, project, environment))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_project_config_deserialization_toml() {
+        let toml_content = r#"
+        [defaults]
+        workspace = "my-workspace"
+        project = "my-project"
+        environment = "production"
+        "#;
+
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("production".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_deserialization_yaml() {
+        let yaml_content = r#"
+        defaults:
+          workspace: my-workspace
+          project: my-project
+          environment: staging
+        "#;
+
+        let config: ProjectConfig = serde_yaml::from_str(yaml_content).unwrap();
+        assert_eq!(config.defaults.workspace, Some("my-workspace".to_string()));
+        assert_eq!(config.defaults.project, Some("my-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("staging".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_deserialization_json() {
+        let json_content = r#"{
+            "defaults": {
+                "workspace": "json-workspace",
+                "project": "json-project",
+                "environment": "dev"
+            }
+        }"#;
+
+        let config: ProjectConfig = serde_json::from_str(json_content).unwrap();
+        assert_eq!(
+            config.defaults.workspace,
+            Some("json-workspace".to_string())
+        );
+        assert_eq!(config.defaults.project, Some("json-project".to_string()));
+        assert_eq!(config.defaults.environment, Some("dev".to_string()));
+    }
+
+    #[test]
+    fn test_project_config_partial_defaults() {
+        let toml_content = r#"
+        [defaults]
+        workspace = "only-workspace"
+        "#;
+
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert_eq!(
+            config.defaults.workspace,
+            Some("only-workspace".to_string())
+        );
+        assert!(config.defaults.project.is_none());
+        assert!(config.defaults.environment.is_none());
+    }
+
+    #[test]
+    fn test_project_config_empty_defaults() {
+        let toml_content = r#"
+        [defaults]
+        "#;
+
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert!(config.defaults.workspace.is_none());
+        assert!(config.defaults.project.is_none());
+        assert!(config.defaults.environment.is_none());
+    }
+
+    #[test]
+    fn test_project_defaults_is_default() {
+        let defaults = ProjectDefaults::default();
+        assert!(defaults.workspace.is_none());
+        assert!(defaults.project.is_none());
+        assert!(defaults.environment.is_none());
+    }
+
+    #[test]
+    fn test_project_config_no_defaults_section() {
+        // Empty config should work since defaults is optional
+        let toml_content = "";
+        let config: ProjectConfig = toml::from_str(toml_content).unwrap();
+        assert!(config.defaults.workspace.is_none());
+    }
+
+    #[test]
+    fn test_project_config_debug() {
+        let config = ProjectConfig {
+            defaults: ProjectDefaults {
+                workspace: Some("ws".to_string()),
+                project: Some("proj".to_string()),
+                environment: Some("env".to_string()),
+            },
+        };
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("ws"));
+        assert!(debug_str.contains("proj"));
+        assert!(debug_str.contains("env"));
+    }
+
+    #[test]
+    fn test_resolve_workspace_with_argument() {
+        let ws = String::from("my-workspace");
+        let result = resolve_workspace(Some(&ws));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "my-workspace");
+    }
+
+    #[test]
+    fn test_resolve_workspace_without_argument_no_config() {
+        // When no argument is provided and no config exists (in most test environments),
+        // this should fail
+        let result = resolve_workspace(None);
+        // Either succeeds (if zopp.toml exists in the directory tree) or fails
+        // In a clean test environment, it should fail
+        if let Err(e) = result {
+            assert!(e.to_string().contains("workspace not specified"));
+        }
+    }
+
+    #[test]
+    fn test_resolve_workspace_project_with_arguments() {
+        let ws = String::from("my-workspace");
+        let proj = String::from("my-project");
+        let result = resolve_workspace_project(Some(&ws), Some(&proj));
+        assert!(result.is_ok());
+        let (workspace, project) = result.unwrap();
+        assert_eq!(workspace, "my-workspace");
+        assert_eq!(project, "my-project");
+    }
+
+    #[test]
+    fn test_resolve_workspace_project_missing_workspace() {
+        let proj = String::from("my-project");
+        let result = resolve_workspace_project(None, Some(&proj));
+        // Either succeeds (if zopp.toml exists) or fails
+        if let Err(e) = result {
+            assert!(e.to_string().contains("workspace not specified"));
+        }
+    }
+
+    #[test]
+    fn test_resolve_workspace_project_missing_project() {
+        let ws = String::from("my-workspace");
+        let result = resolve_workspace_project(Some(&ws), None);
+        // Either succeeds (if zopp.toml exists) or fails
+        if let Err(e) = result {
+            assert!(e.to_string().contains("project not specified"));
+        }
+    }
+
+    #[test]
+    fn test_resolve_context_with_all_arguments() {
+        let ws = String::from("my-workspace");
+        let proj = String::from("my-project");
+        let env = String::from("production");
+        let result = resolve_context(Some(&ws), Some(&proj), Some(&env));
+        assert!(result.is_ok());
+        let (workspace, project, environment) = result.unwrap();
+        assert_eq!(workspace, "my-workspace");
+        assert_eq!(project, "my-project");
+        assert_eq!(environment, "production");
+    }
+
+    #[test]
+    fn test_resolve_context_missing_workspace() {
+        let proj = String::from("my-project");
+        let env = String::from("production");
+        let result = resolve_context(None, Some(&proj), Some(&env));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("workspace not specified"));
+        }
+    }
+
+    #[test]
+    fn test_resolve_context_missing_project() {
+        let ws = String::from("my-workspace");
+        let env = String::from("production");
+        let result = resolve_context(Some(&ws), None, Some(&env));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("project not specified"));
+        }
+    }
+
+    #[test]
+    fn test_resolve_context_missing_environment() {
+        let ws = String::from("my-workspace");
+        let proj = String::from("my-project");
+        let result = resolve_context(Some(&ws), Some(&proj), None);
+        if let Err(e) = result {
+            assert!(e.to_string().contains("environment not specified"));
+        }
+    }
+
+    #[test]
+    fn test_find_project_config_does_not_panic() {
+        // This test verifies find_project_config() doesn't panic regardless of environment.
+        // The result depends on whether zopp.toml exists in the directory tree.
+        // Both Some (config found) and None (not found) are valid outcomes.
+        // A valid config can have empty defaults (all None) due to #[serde(default)].
+        let _result = find_project_config();
+    }
+}

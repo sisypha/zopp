@@ -253,7 +253,7 @@ pub async fn update_group(
             if req.new_description.is_empty() {
                 None
             } else {
-                Some(&req.new_description)
+                Some(req.new_description.clone())
             },
         )
         .await

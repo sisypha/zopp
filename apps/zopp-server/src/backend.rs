@@ -86,9 +86,9 @@ impl Store for StoreBackend {
         }
     }
 
-    async fn list_invites(&self, user_id: Option<&UserId>) -> Result<Vec<Invite>, StoreError> {
+    async fn list_invites(&self, user_id: Option<UserId>) -> Result<Vec<Invite>, StoreError> {
         match self {
-            StoreBackend::Sqlite(s) => s.list_invites(user_id).await,
+            StoreBackend::Sqlite(s) => s.list_invites(user_id.clone()).await,
             StoreBackend::Postgres(s) => s.list_invites(user_id).await,
         }
     }
@@ -626,10 +626,10 @@ impl Store for StoreBackend {
         &self,
         group_id: &GroupId,
         name: &str,
-        description: Option<&str>,
+        description: Option<String>,
     ) -> Result<(), StoreError> {
         match self {
-            StoreBackend::Sqlite(s) => s.update_group(group_id, name, description).await,
+            StoreBackend::Sqlite(s) => s.update_group(group_id, name, description.clone()).await,
             StoreBackend::Postgres(s) => s.update_group(group_id, name, description).await,
         }
     }

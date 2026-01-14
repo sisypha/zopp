@@ -9,7 +9,7 @@
 mod common;
 
 use std::fs;
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Command, Output, Stdio};
 use std::time::Duration;
@@ -93,17 +93,23 @@ impl TestEnv {
             .stderr(Stdio::null())
             .spawn()?;
 
-        // Wait for server
-        let client_addr = format!("127.0.0.1:{}", port);
-        for _ in 0..30 {
+        // Wait for server to be ready using the /readyz endpoint
+        // This ensures the gRPC service is fully registered, not just TCP accepting
+        let readiness_url = format!("http://127.0.0.1:{}/readyz", health_port);
+        let client = reqwest::Client::new();
+        let mut ready = false;
+        for _ in 0..60 {
             sleep(Duration::from_millis(200)).await;
-            if TcpStream::connect(&client_addr).is_ok() {
-                break;
+            if let Ok(resp) = client.get(&readiness_url).send().await {
+                if resp.status().is_success() {
+                    ready = true;
+                    break;
+                }
             }
         }
 
-        if TcpStream::connect(&client_addr).is_err() {
-            return Err("Server failed to start".into());
+        if !ready {
+            return Err("Server failed to become ready within 12 seconds".into());
         }
 
         Ok(Self {

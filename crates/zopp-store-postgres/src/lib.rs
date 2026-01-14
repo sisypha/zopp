@@ -358,7 +358,7 @@ impl Store for PostgresStore {
         })
     }
 
-    async fn list_invites(&self, user_id: Option<&UserId>) -> Result<Vec<Invite>, StoreError> {
+    async fn list_invites(&self, user_id: Option<UserId>) -> Result<Vec<Invite>, StoreError> {
         let user_id_opt = user_id.map(|id| id.0);
 
         let rows = sqlx::query!(
@@ -1576,7 +1576,7 @@ impl Store for PostgresStore {
         &self,
         group_id: &zopp_storage::GroupId,
         name: &str,
-        description: Option<&str>,
+        description: Option<String>,
     ) -> Result<(), StoreError> {
         let result = sqlx::query!(
             "UPDATE groups SET name = $1, description = $2, updated_at = NOW() WHERE id = $3",

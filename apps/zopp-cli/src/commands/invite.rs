@@ -85,7 +85,9 @@ pub async fn cmd_invite_list(
             println!("Token:   {}", invite.token);
             println!(
                 "Expires: {}",
-                chrono::DateTime::from_timestamp(invite.expires_at, 0).unwrap()
+                chrono::DateTime::from_timestamp(invite.expires_at, 0)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_else(|| "Unknown".to_string())
             );
             println!();
         }
