@@ -95,13 +95,6 @@ impl ZoppService for ZoppServer {
         invites::create_invite(self, request).await
     }
 
-    async fn create_self_invite(
-        &self,
-        request: Request<CreateSelfInviteRequest>,
-    ) -> Result<Response<InviteToken>, Status> {
-        invites::create_self_invite(self, request).await
-    }
-
     async fn get_invite(
         &self,
         request: Request<GetInviteRequest>,

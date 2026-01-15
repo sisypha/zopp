@@ -278,19 +278,17 @@ impl Store for PostgresStore {
     async fn create_invite(&self, params: &CreateInviteParams) -> Result<Invite, StoreError> {
         let invite_id = Uuid::now_v7();
         let created_by_user_id = params.created_by_user_id.as_ref().map(|id| id.0);
-        let for_user_id = params.for_user_id.as_ref().map(|id| id.0);
 
         let row = sqlx::query!(
-            r#"INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce, for_user_id)
-               VALUES($1, $2, $3, $4, $5, $6, $7)
+            r#"INSERT INTO invites(id, token, expires_at, created_by_user_id, kek_encrypted, kek_nonce)
+               VALUES($1, $2, $3, $4, $5, $6)
                RETURNING created_at, updated_at"#,
             invite_id,
             params.token,
             params.expires_at,
             created_by_user_id,
             params.kek_encrypted,
-            params.kek_nonce,
-            for_user_id
+            params.kek_nonce
         )
         .fetch_one(&self.pool)
         .await
@@ -317,13 +315,12 @@ impl Store for PostgresStore {
             updated_at: row.updated_at,
             expires_at: params.expires_at,
             created_by_user_id: params.created_by_user_id.clone(),
-            for_user_id: params.for_user_id.clone(),
         })
     }
 
     async fn get_invite_by_token(&self, token: &str) -> Result<Invite, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce, for_user_id
+            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce
                FROM invites WHERE token = $1"#,
             token
         )
@@ -359,7 +356,6 @@ impl Store for PostgresStore {
             updated_at: row.updated_at,
             expires_at: row.expires_at,
             created_by_user_id: row.created_by_user_id.map(UserId),
-            for_user_id: row.for_user_id.map(UserId),
         })
     }
 
@@ -367,7 +363,7 @@ impl Store for PostgresStore {
         let user_id_opt = user_id.map(|id| id.0);
 
         let rows = sqlx::query!(
-            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce, for_user_id
+            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce
                FROM invites
                WHERE revoked = FALSE AND (
                    ($1::UUID IS NOT NULL AND created_by_user_id = $1) OR
@@ -404,7 +400,6 @@ impl Store for PostgresStore {
                 updated_at: row.updated_at,
                 expires_at: row.expires_at,
                 created_by_user_id: row.created_by_user_id.map(UserId),
-                for_user_id: row.for_user_id.map(UserId),
             });
         }
         Ok(invites)

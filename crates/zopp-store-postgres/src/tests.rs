@@ -513,7 +513,6 @@ async fn test_invite_creation_and_revocation() {
             kek_nonce: Some(vec![8; 24]),
             expires_at,
             created_by_user_id: Some(user_id.clone()),
-            for_user_id: None,
         })
         .await
         .unwrap();

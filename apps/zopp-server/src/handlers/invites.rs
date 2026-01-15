@@ -3,8 +3,7 @@
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 use zopp_proto::{
-    CreateInviteRequest, CreateSelfInviteRequest, Empty, GetInviteRequest, InviteList, InviteToken,
-    RevokeInviteRequest,
+    CreateInviteRequest, Empty, GetInviteRequest, InviteList, InviteToken, RevokeInviteRequest,
 };
 use zopp_storage::{CreateInviteParams, Store, WorkspaceId};
 
@@ -69,7 +68,6 @@ pub async fn create_invite(
             expires_at: chrono::DateTime::from_timestamp(req.expires_at, 0)
                 .ok_or_else(|| Status::invalid_argument("Invalid expires_at timestamp"))?,
             created_by_user_id: Some(user_id),
-            for_user_id: None, // Regular invites can be used by anyone
         })
         .await
         .map_err(|e| Status::internal(format!("Failed to create invite: {}", e)))?;
@@ -88,85 +86,6 @@ pub async fn create_invite(
         kek_nonce: invite.kek_nonce.unwrap_or_default(),
         invite_secret: String::new(),
         user_id: None,
-    }))
-}
-
-/// Create a self-invite for adding a new device.
-/// Unlike regular invites, self-invites:
-/// - Only require any workspace role (read/write/admin), not just admin
-/// - Are restricted to the same user (only they can consume the invite)
-/// - Only allow a single workspace
-pub async fn create_self_invite(
-    server: &ZoppServer,
-    request: Request<CreateSelfInviteRequest>,
-) -> Result<Response<InviteToken>, Status> {
-    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
-    let req_for_verify = request.get_ref().clone();
-    let principal = server
-        .verify_signature_and_get_principal(
-            &principal_id,
-            timestamp,
-            &signature,
-            "/zopp.ZoppService/CreateSelfInvite",
-            &req_for_verify,
-            &request_hash,
-        )
-        .await?;
-    let req = request.into_inner();
-
-    let user_id = principal
-        .user_id
-        .ok_or_else(|| Status::unauthenticated("Service accounts cannot create self-invites"))?;
-
-    // Look up workspace by name
-    let workspace = server
-        .store
-        .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
-        .await
-        .map_err(|_| Status::not_found("Workspace not found"))?;
-
-    // Check ANY permission for the workspace (read, write, or admin)
-    server
-        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Read)
-        .await?;
-
-    let invite = server
-        .store
-        .create_invite(&CreateInviteParams {
-            workspace_ids: vec![workspace.id.clone()],
-            token: req.token,
-            kek_encrypted: if req.kek_encrypted.is_empty() {
-                None
-            } else {
-                Some(req.kek_encrypted)
-            },
-            kek_nonce: if req.kek_nonce.is_empty() {
-                None
-            } else {
-                Some(req.kek_nonce)
-            },
-            expires_at: chrono::DateTime::from_timestamp(req.expires_at, 0)
-                .ok_or_else(|| Status::invalid_argument("Invalid expires_at timestamp"))?,
-            created_by_user_id: Some(user_id.clone()),
-            for_user_id: Some(user_id.clone()),
-        })
-        .await
-        .map_err(|e| Status::internal(format!("Failed to create self-invite: {}", e)))?;
-
-    Ok(Response::new(InviteToken {
-        id: invite.id.0.to_string(),
-        token: invite.token.clone(),
-        workspace_ids: invite
-            .workspace_ids
-            .into_iter()
-            .map(|id| id.0.to_string())
-            .collect(),
-        created_at: invite.created_at.timestamp(),
-        expires_at: invite.expires_at.timestamp(),
-        kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
-        kek_nonce: invite.kek_nonce.unwrap_or_default(),
-        invite_secret: String::new(),
-        user_id: Some(user_id.0.to_string()),
     }))
 }
 
@@ -196,7 +115,7 @@ pub async fn get_invite(
         kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
         kek_nonce: invite.kek_nonce.unwrap_or_default(),
         invite_secret: String::new(),
-        user_id: invite.for_user_id.map(|id| id.0.to_string()),
+        user_id: None,
     }))
 }
 
@@ -239,7 +158,7 @@ pub async fn list_invites(
             kek_encrypted: inv.kek_encrypted.unwrap_or_default(),
             kek_nonce: inv.kek_nonce.unwrap_or_default(),
             invite_secret: String::new(),
-            user_id: inv.for_user_id.map(|id| id.0.to_string()),
+            user_id: None,
         })
         .collect();
 

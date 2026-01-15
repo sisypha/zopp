@@ -24,21 +24,6 @@ pub async fn join(
         .await
         .map_err(|e| Status::not_found(format!("Invalid invite: {}", e)))?;
 
-    // If this is a self-invite (for_user_id is set), verify the email matches
-    if let Some(for_user_id) = &invite.for_user_id {
-        let target_user = server
-            .store
-            .get_user_by_id(for_user_id)
-            .await
-            .map_err(|_| Status::not_found("Target user for self-invite not found"))?;
-
-        if !target_user.email.eq_ignore_ascii_case(&req.email) {
-            return Err(Status::permission_denied(
-                "This invite can only be used by the user who created it",
-            ));
-        }
-    }
-
     // Check if invite is expired
     let now = chrono::Utc::now();
     if now > invite.expires_at {

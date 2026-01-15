@@ -265,7 +265,6 @@ pub struct CreateInviteParams {
     pub kek_nonce: Option<Vec<u8>>,     // 24-byte nonce for KEK encryption
     pub expires_at: DateTime<Utc>,
     pub created_by_user_id: Option<UserId>, // None for server-created invites
-    pub for_user_id: Option<UserId>, // If set, only this user can use the invite (self-invite)
 }
 
 /// Parameters for creating a project
@@ -317,7 +316,6 @@ pub struct Invite {
     pub updated_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub created_by_user_id: Option<UserId>, // None for server-created invites
-    pub for_user_id: Option<UserId>, // If set, only this user can use the invite (self-invite)
 }
 
 /// Workspace record
@@ -975,7 +973,6 @@ mod tests {
                 updated_at: Utc::now(),
                 expires_at: Utc::now(),
                 created_by_user_id: _params.created_by_user_id.clone(),
-                for_user_id: _params.for_user_id.clone(),
             })
         }
 

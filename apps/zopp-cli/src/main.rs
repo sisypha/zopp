@@ -323,21 +323,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
             }
-            InviteCommand::CreateSelf {
-                workspace,
-                expires_hours,
-                plain,
-            } => {
-                let workspace = resolve_workspace(workspace.as_ref())?;
-                invite::cmd_invite_create_self(
-                    &cli.server,
-                    cli.tls_ca_cert.as_deref(),
-                    &workspace,
-                    expires_hours,
-                    plain,
-                )
-                .await?;
-            }
             InviteCommand::List => {
                 cmd_invite_list(&cli.server, cli.tls_ca_cert.as_deref()).await?;
             }

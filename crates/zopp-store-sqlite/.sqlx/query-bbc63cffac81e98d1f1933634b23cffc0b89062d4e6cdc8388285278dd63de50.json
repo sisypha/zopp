@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, token,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\",\n               expires_at as \"expires_at: DateTime<Utc>\",\n               created_by_user_id, revoked, kek_encrypted, kek_nonce, for_user_id\n               FROM invites WHERE token = ?",
+  "query": "SELECT id, token,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\",\n               expires_at as \"expires_at: DateTime<Utc>\",\n               created_by_user_id, revoked, kek_encrypted, kek_nonce\n               FROM invites WHERE token = ?",
   "describe": {
     "columns": [
       {
@@ -47,11 +47,6 @@
         "name": "kek_nonce",
         "ordinal": 8,
         "type_info": "Blob"
-      },
-      {
-        "name": "for_user_id",
-        "ordinal": 9,
-        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -66,9 +61,8 @@
       true,
       false,
       true,
-      true,
       true
     ]
   },
-  "hash": "d9f5895b12d91f3ee361277fd71ddafae4baf5fa7d5ad158b263c297c78c5954"
+  "hash": "bbc63cffac81e98d1f1933634b23cffc0b89062d4e6cdc8388285278dd63de50"
 }
