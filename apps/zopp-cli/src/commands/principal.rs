@@ -712,14 +712,35 @@ pub async fn cmd_principal_import(
     save_config(&config)?;
 
     // Mark export as consumed (one-time use) - done after saving config
-    // so the user doesn't lose data if consume succeeds but save fails
-    let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
-        export_id: response.export_id.clone(),
-    });
-    if let Err(e) = client.consume_principal_export(consume_request).await {
-        // Export may have been consumed by another import or expired - that's okay
-        // since we already have the data saved locally
-        eprintln!("Warning: Could not mark export as consumed: {}", e);
+    // so the user doesn't lose data if consume succeeds but save fails.
+    // Retry up to 3 times with backoff for transient network issues.
+    for attempt in 1..=3 {
+        let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
+            export_id: response.export_id.clone(),
+        });
+        match client.consume_principal_export(consume_request).await {
+            Ok(_) => break,
+            Err(_) if attempt < 3 => {
+                // Retry after brief delay for transient failures
+                tokio::time::sleep(tokio::time::Duration::from_millis(100 * attempt as u64)).await;
+                eprintln!("Retrying consume (attempt {}/3)...", attempt + 1);
+            }
+            Err(e) => {
+                // Final attempt failed - warn user prominently
+                eprintln!();
+                eprintln!(
+                    "WARNING: Failed to mark export as consumed after 3 attempts: {}",
+                    e
+                );
+                eprintln!("The export may still be active. For security, you should:");
+                eprintln!(
+                    "  1. Create a new export with: zopp principal export {}",
+                    final_name
+                );
+                eprintln!("  2. The old export will expire automatically in 24 hours");
+                eprintln!();
+            }
+        }
     }
 
     println!("Principal '{}' imported successfully.", final_name);
