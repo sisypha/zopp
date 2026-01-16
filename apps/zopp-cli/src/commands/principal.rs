@@ -526,7 +526,6 @@ pub async fn cmd_principal_export(
     let (nonce, ciphertext) = zopp_crypto::encrypt(json.as_bytes(), &dek, aad)?;
 
     // Calculate expiration timestamp
-    let expires_hours = expires_hours.min(24); // Cap at 24 hours
     let expires_at = chrono::Utc::now().timestamp() + (expires_hours as i64 * 3600);
 
     // Upload to server

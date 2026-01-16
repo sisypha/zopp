@@ -641,14 +641,6 @@ pub async fn create_principal_export(
         return Err(Status::invalid_argument("Expiration must be in the future"));
     }
 
-    // Limit expiration to 24 hours max (for security)
-    let max_expires_at = Utc::now() + chrono::Duration::hours(24);
-    if expires_at > max_expires_at {
-        return Err(Status::invalid_argument(
-            "Expiration cannot be more than 24 hours in the future",
-        ));
-    }
-
     // Generate unique export code
     let export_code = generate_export_code();
 

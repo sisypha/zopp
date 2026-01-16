@@ -188,7 +188,7 @@ pub enum PrincipalCommand {
     Export {
         /// Principal name to export
         name: String,
-        /// Expiration time in hours (default: 24, max: 24)
+        /// Expiration time in hours (default: 24)
         #[arg(long, default_value = "24")]
         expires_hours: u32,
     },
