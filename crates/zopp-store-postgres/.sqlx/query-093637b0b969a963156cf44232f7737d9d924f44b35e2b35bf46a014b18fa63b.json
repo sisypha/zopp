@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE principal_exports SET failed_attempts = failed_attempts + 1\n               WHERE id = $1\n               RETURNING failed_attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "failed_attempts",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "093637b0b969a963156cf44232f7737d9d924f44b35e2b35bf46a014b18fa63b"
+}

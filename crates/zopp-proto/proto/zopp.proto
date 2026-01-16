@@ -27,6 +27,11 @@ service ZoppService {
   rpc RemovePrincipalFromWorkspace(RemovePrincipalFromWorkspaceRequest) returns (Empty);
   rpc RevokeAllPrincipalPermissions(RevokeAllPrincipalPermissionsRequest) returns (RevokeAllPrincipalPermissionsResponse);
 
+  // Principal Export/Import (multi-device support)
+  rpc CreatePrincipalExport(CreatePrincipalExportRequest) returns (CreatePrincipalExportResponse);
+  rpc GetPrincipalExport(GetPrincipalExportRequest) returns (GetPrincipalExportResponse);
+  rpc ConsumePrincipalExport(ConsumePrincipalExportRequest) returns (Empty);
+
   // Projects
   rpc CreateProject(CreateProjectRequest) returns (Project);
   rpc ListProjects(ListProjectsRequest) returns (ProjectList);
@@ -223,6 +228,7 @@ message InviteToken {
   bytes kek_encrypted = 6;           // Workspace KEK encrypted with invite secret
   bytes kek_nonce = 7;               // 24-byte nonce for KEK encryption
   string invite_secret = 8;          // Secret to decrypt KEK (only returned on create, hex-encoded)
+  optional string user_id = 9;       // If set, only this user can use the invite (self-invite)
 }
 
 message GetInviteRequest {
@@ -291,6 +297,39 @@ message RevokeAllPrincipalPermissionsRequest {
 
 message RevokeAllPrincipalPermissionsResponse {
   int32 permissions_revoked = 1;
+}
+
+// Principal Export/Import messages (multi-device support)
+message CreatePrincipalExportRequest {
+  string token_hash = 1;        // Argon2id(passphrase, verification_salt) for verification
+  bytes verification_salt = 2;  // Salt for passphrase verification (separate from encryption)
+  bytes encrypted_data = 3;     // Principal data encrypted with passphrase-derived key
+  bytes salt = 4;               // Argon2id salt for encryption key derivation
+  bytes nonce = 5;              // XChaCha20-Poly1305 nonce
+  int64 expires_at = 6;         // Unix timestamp for expiration
+}
+
+message CreatePrincipalExportResponse {
+  string export_code = 1;       // Public code for lookup (e.g., "exp_a7k9m2x4")
+}
+
+message GetPrincipalExportRequest {
+  string export_code = 1;       // Public code for lookup
+  string token_hash = 2;        // Argon2id(passphrase, verification_salt) - empty for first request to get salt
+}
+
+message GetPrincipalExportResponse {
+  string export_id = 1;         // Empty if only returning verification_salt
+  bytes verification_salt = 2;  // Salt for passphrase verification (always returned)
+  bytes encrypted_data = 3;     // Principal data encrypted with passphrase-derived key (only if verified)
+  bytes salt = 4;               // Argon2id salt for encryption key derivation (only if verified)
+  bytes nonce = 5;              // XChaCha20-Poly1305 nonce (only if verified)
+  int64 expires_at = 6;         // Unix timestamp for expiration
+}
+
+message ConsumePrincipalExportRequest {
+  string export_code = 1; // Same export_code used in GetPrincipalExport
+  string token_hash = 2;  // Argon2id(passphrase, verification_salt) - same verification as GetPrincipalExport
 }
 
 // Project messages

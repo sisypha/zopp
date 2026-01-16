@@ -164,6 +164,29 @@ impl ZoppService for ZoppServer {
         principals::get_effective_permissions(self, request).await
     }
 
+    // ───────────────────────────────────── Principal Export/Import ─────────────────────────────────────
+
+    async fn create_principal_export(
+        &self,
+        request: Request<CreatePrincipalExportRequest>,
+    ) -> Result<Response<CreatePrincipalExportResponse>, Status> {
+        principals::create_principal_export(self, request).await
+    }
+
+    async fn get_principal_export(
+        &self,
+        request: Request<GetPrincipalExportRequest>,
+    ) -> Result<Response<GetPrincipalExportResponse>, Status> {
+        principals::get_principal_export(self, request).await
+    }
+
+    async fn consume_principal_export(
+        &self,
+        request: Request<ConsumePrincipalExportRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        principals::consume_principal_export(self, request).await
+    }
+
     // ───────────────────────────────────── Projects ─────────────────────────────────────
 
     async fn create_project(

@@ -22,6 +22,8 @@ zopp principal <COMMAND>
 | `use` | Switch to a different principal |
 | `rename` | Rename a principal |
 | `delete` | Delete a principal |
+| `export` | Export a principal to the server for retrieval on another device |
+| `import` | Import a principal from the server using a passphrase |
 | `service-list` | List service principals in a workspace |
 | `workspace-remove` | Remove a principal from a workspace |
 | `revoke-all` | Revoke all permissions for a principal |
@@ -93,6 +95,7 @@ zopp principal create [OPTIONS] <NAME>
 |--------|----------|-------------|
 | `--service` | No | Create as service principal (no user association) |
 | `-w, --workspace <WORKSPACE>` | No* | Workspace to add service principal to (*required with `--service`) |
+| `--export` | No | Export the principal immediately after creation for easy setup on another device |
 | `-h, --help` | No | Print help |
 
 ### Examples
@@ -100,6 +103,9 @@ zopp principal create [OPTIONS] <NAME>
 ```bash
 # Create a device principal
 zopp principal create work-laptop
+
+# Create a device principal and immediately export for setup on another device
+zopp principal create new-laptop --export
 
 # Create a service principal for CI/CD
 zopp principal create --service -w mycompany github-actions
@@ -163,6 +169,109 @@ zopp principal delete <NAME>
 
 :::warning
 Deleting a principal permanently revokes its access to all workspaces. This cannot be undone.
+:::
+
+---
+
+## principal export
+
+Export a principal to the server for retrieval on another device. A secure 6-word passphrase is generated from the EFF wordlist and displayed. The encrypted principal data is stored on the server for up to 24 hours and can only be retrieved once.
+
+```bash
+zopp principal export <NAME> [--expires-hours <HOURS>]
+```
+
+### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `NAME` | Yes | Principal name to export |
+
+### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `--expires-hours <HOURS>` | No | Expiration time in hours (default: 24) |
+| `-h, --help` | No | Print help |
+
+### Example
+
+```bash
+$ zopp principal export laptop
+
+Principal 'laptop' export created successfully.
+
+Export code:
+    exp_a7k9m2x4
+
+Passphrase (write this down):
+    correct horse battery staple purple llama
+
+This export expires in 24 hours.
+After 3 failed passphrase attempts, the export is permanently deleted.
+
+On your new device, run:
+    zopp --server https://zopp.example.com:50051 principal import
+```
+
+:::tip
+The passphrase provides approximately 77 bits of entropy (6 words from a 7776-word list). Write it down or copy it securely - it will only be shown once.
+:::
+
+:::info Security
+- The export is encrypted with a key derived from the passphrase using Argon2id (64 MiB, 3 iterations)
+- The export code (e.g., `exp_a7k9m2x4`) is used for lookup; the passphrase hash is used for server-side verification
+- The server cannot decrypt your principal data without the passphrase
+- Each export can only be retrieved once (consumed on import)
+- Exports self-destruct after 3 failed passphrase attempts
+:::
+
+---
+
+## principal import
+
+Import a principal from the server using the export code and passphrase.
+
+```bash
+zopp principal import [-c CODE]
+```
+
+### Options
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `-c`, `--code` | No | Export code (will prompt if not provided) |
+
+### Example
+
+```bash
+# Interactive (recommended - prompts for code and passphrase securely)
+$ zopp principal import
+Enter export code: exp_a7k9m2x4
+Enter passphrase: ************************************
+Principal 'laptop' imported successfully.
+
+You are now authenticated as:
+  Email: alice@example.com
+  Principal: laptop
+
+Test with: zopp workspace list
+
+# With export code provided
+$ zopp principal import -c exp_a7k9m2x4
+Enter passphrase: ************************************
+Principal 'laptop' imported successfully.
+
+# For automated/scripted usage, use env var (never pass passphrase on command line)
+$ ZOPP_EXPORT_PASSPHRASE="correct horse battery staple purple llama" zopp principal import -c exp_a7k9m2x4
+```
+
+:::note
+If a principal with the same name already exists locally, the imported principal will be renamed with an `-imported` suffix.
+:::
+
+:::warning One-time use
+Each export can only be imported once. If you need to set up multiple devices, create a new export for each device.
 :::
 
 ---

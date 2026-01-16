@@ -145,11 +145,77 @@ zopp invite create -w acme-corp --expires-hours 48
 
 ## Multiple Devices
 
-You can use zopp from multiple devices. Each device gets its own principal (identity):
+You can use zopp from multiple devices. There are two ways to set up a new device:
 
-1. On your new device, run `zopp join` with a new invite
-2. Each device has separate keys stored locally
-3. Your admin can see all your devices with `zopp principal service-list`
+### Option 1: Export/Import (Recommended)
+
+Export your principal from your current device and import it on your new device. The export is stored securely on the server and protected by a passphrase.
+
+```bash
+# On your existing device - create an export
+zopp principal export laptop
+
+# Output shows an export code and passphrase:
+#   Export code:
+#       exp_a7k9m2x4
+#
+#   Passphrase (write this down):
+#       correct horse battery staple purple llama
+#
+#   This export expires in 24 hours.
+#   After 3 failed passphrase attempts, the export is permanently deleted.
+```
+
+Write down both the export code and the 6-word passphrase, then on your new device:
+
+```bash
+# On your new device - import using the export code and passphrase
+zopp --server https://zopp.yourcompany.com:50051 principal import
+# Enter export code: exp_a7k9m2x4
+# Enter passphrase: correct horse battery staple purple llama
+
+# You're now authenticated!
+zopp workspace list
+```
+
+:::tip Create exports before traveling
+Create an export before you leave, so you can set up your new device without needing access to your old one. Exports last 24 hours.
+:::
+
+:::info Security
+- The passphrase provides ~77 bits of entropy (6 words from a 7776-word list)
+- The server only stores encrypted data—it cannot decrypt your principal
+- Each export can only be used once (consumed on import)
+- Exports self-destruct after 3 failed passphrase attempts to prevent brute-force attacks
+:::
+
+### Option 2: Create a New Principal
+
+If you have access to an existing device, you can create a new principal and immediately export it:
+
+```bash
+# On your existing device - create and export in one command
+zopp principal create new-laptop --export
+
+# Or create first, then export
+zopp principal create new-laptop
+zopp principal export new-laptop
+```
+
+The new principal automatically gets access to all workspaces your user has access to. Use the generated passphrase to import on your new device.
+
+### Managing Principals
+
+```bash
+# Switch between principals on the same device
+zopp principal use desktop
+
+# See which principal is active
+zopp principal current
+
+# List all principals
+zopp principal list
+```
 
 When you leave the team or lose a device, your admin can revoke access to that specific principal without affecting your other devices.
 

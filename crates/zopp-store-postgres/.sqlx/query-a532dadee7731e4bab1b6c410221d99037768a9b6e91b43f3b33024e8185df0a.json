@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE principal_exports SET consumed = TRUE WHERE id = $1 AND consumed = FALSE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a532dadee7731e4bab1b6c410221d99037768a9b6e91b43f3b33024e8185df0a"
+}

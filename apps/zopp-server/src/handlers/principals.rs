@@ -1,14 +1,22 @@
-//! Principal handlers: get, rename, list, service principals, remove, revoke
+//! Principal handlers: get, rename, list, service principals, remove, revoke, export/import
 
+use chrono::{DateTime, Utc};
+use rand::Rng;
+use subtle::ConstantTimeEq;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
+
+/// Maximum failed passphrase attempts before export self-destructs
+const MAX_FAILED_ATTEMPTS: i32 = 3;
 use zopp_proto::{
-    EffectivePermissionsResponse, Empty, GetEffectivePermissionsRequest, GetPrincipalRequest,
-    ListWorkspaceServicePrincipalsRequest, PrincipalList, RemovePrincipalFromWorkspaceRequest,
-    RenamePrincipalRequest, RevokeAllPrincipalPermissionsRequest,
-    RevokeAllPrincipalPermissionsResponse, ServicePrincipalList,
+    ConsumePrincipalExportRequest, CreatePrincipalExportRequest, CreatePrincipalExportResponse,
+    EffectivePermissionsResponse, Empty, GetEffectivePermissionsRequest, GetPrincipalExportRequest,
+    GetPrincipalExportResponse, GetPrincipalRequest, ListWorkspaceServicePrincipalsRequest,
+    PrincipalList, RemovePrincipalFromWorkspaceRequest, RenamePrincipalRequest,
+    RevokeAllPrincipalPermissionsRequest, RevokeAllPrincipalPermissionsResponse,
+    ServicePrincipalList,
 };
-use zopp_storage::{PrincipalId, Store};
+use zopp_storage::{CreatePrincipalExportParams, PrincipalId, Store};
 
 use crate::server::{extract_signature, ZoppServer};
 
@@ -581,4 +589,230 @@ pub async fn get_effective_permissions(
         }),
         projects: effective_projects,
     }))
+}
+
+/// Generate a unique export code (8 alphanumeric chars with exp_ prefix).
+fn generate_export_code() -> String {
+    let mut rng = rand::rng();
+    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
+    let code: String = (0..8)
+        .map(|_| chars[rng.random_range(0..chars.len())])
+        .collect();
+    format!("exp_{}", code)
+}
+
+/// This stores encrypted principal data on the server, keyed by a unique export code.
+/// The client derives a key from a passphrase and encrypts the principal locally,
+/// then sends only the encrypted data and hash to the server.
+pub async fn create_principal_export(
+    server: &ZoppServer,
+    request: Request<CreatePrincipalExportRequest>,
+) -> Result<Response<CreatePrincipalExportResponse>, Status> {
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
+    let principal = server
+        .verify_signature_and_get_principal(
+            &principal_id,
+            timestamp,
+            &signature,
+            "/zopp.ZoppService/CreatePrincipalExport",
+            &req_for_verify,
+            &request_hash,
+        )
+        .await?;
+
+    // Service accounts cannot export principals
+    let user_id = principal
+        .user_id
+        .ok_or_else(|| Status::permission_denied("Service accounts cannot export principals"))?;
+
+    let req = request.into_inner();
+
+    // Validate verification_salt
+    if req.verification_salt.len() != 16 {
+        return Err(Status::invalid_argument(
+            "verification_salt must be 16 bytes",
+        ));
+    }
+
+    // Validate the expiration timestamp
+    let expires_at = DateTime::<Utc>::from_timestamp(req.expires_at, 0)
+        .ok_or_else(|| Status::invalid_argument("Invalid expiration timestamp"))?;
+
+    if expires_at <= Utc::now() {
+        return Err(Status::invalid_argument("Expiration must be in the future"));
+    }
+
+    // Generate unique export code
+    let export_code = generate_export_code();
+
+    // Create the export record
+    let export = server
+        .store
+        .create_principal_export(&CreatePrincipalExportParams {
+            export_code,
+            token_hash: req.token_hash,
+            verification_salt: req.verification_salt,
+            user_id,
+            principal_id,
+            encrypted_data: req.encrypted_data,
+            salt: req.salt,
+            nonce: req.nonce,
+            expires_at,
+        })
+        .await
+        .map_err(|e| Status::internal(format!("Failed to create principal export: {}", e)))?;
+
+    Ok(Response::new(CreatePrincipalExportResponse {
+        export_code: export.export_code,
+    }))
+}
+
+/// Get a principal export for importing on a new device.
+///
+/// Two-phase protocol:
+/// - Phase 1: Client sends export_code only (empty token_hash) -> returns verification_salt
+/// - Phase 2: Client sends export_code + Argon2id(passphrase, verification_salt) -> returns encrypted data
+///
+/// This prevents offline brute-force - encrypted data is only returned if passphrase is verified server-side.
+pub async fn get_principal_export(
+    server: &ZoppServer,
+    request: Request<GetPrincipalExportRequest>,
+) -> Result<Response<GetPrincipalExportResponse>, Status> {
+    let req = request.into_inner();
+
+    // Look up the export by export code
+    let export = server
+        .store
+        .get_principal_export_by_code(&req.export_code)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => Status::not_found("Export not found or expired"),
+            _ => Status::internal(format!("Failed to get principal export: {}", e)),
+        })?;
+
+    // Phase 1: If token_hash is empty, return only verification_salt
+    // Client needs this to compute Argon2id(passphrase, verification_salt)
+    if req.token_hash.is_empty() {
+        return Ok(Response::new(GetPrincipalExportResponse {
+            export_id: String::new(), // Empty indicates phase 1 response
+            verification_salt: export.verification_salt,
+            encrypted_data: Vec::new(),
+            salt: Vec::new(),
+            nonce: Vec::new(),
+            expires_at: export.expires_at.timestamp(),
+        }));
+    }
+
+    // Phase 2: Verify token_hash matches stored Argon2id hash
+    // Using subtle crate for constant-time comparison to prevent timing attacks
+    let hashes_match: bool = export
+        .token_hash
+        .as_bytes()
+        .ct_eq(req.token_hash.as_bytes())
+        .into();
+    if !hashes_match {
+        // Increment failed attempts
+        let failed_attempts = server
+            .store
+            .increment_export_failed_attempts(&export.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to record failed attempt: {}", e)))?;
+
+        // Self-destruct after max failed attempts
+        if failed_attempts >= MAX_FAILED_ATTEMPTS {
+            if let Err(e) = server.store.delete_principal_export(&export.id).await {
+                eprintln!(
+                    "ERROR: Failed to delete principal export {} after max failed attempts: {}",
+                    export.id.0, e
+                );
+            }
+            return Err(Status::permission_denied(
+                "Incorrect passphrase. Export deleted after 3 failed attempts.",
+            ));
+        }
+
+        return Err(Status::permission_denied(format!(
+            "Incorrect passphrase. {} attempt(s) remaining.",
+            MAX_FAILED_ATTEMPTS - failed_attempts
+        )));
+    }
+
+    // Both export_code and token_hash verified - return encrypted data
+    Ok(Response::new(GetPrincipalExportResponse {
+        export_id: export.id.0.to_string(),
+        verification_salt: export.verification_salt,
+        encrypted_data: export.encrypted_data,
+        salt: export.salt,
+        nonce: export.nonce,
+        expires_at: export.expires_at.timestamp(),
+    }))
+}
+
+/// Mark a principal export as consumed after successful import.
+/// Requires export_code + token_hash verification (same as GetPrincipalExport).
+pub async fn consume_principal_export(
+    server: &ZoppServer,
+    request: Request<ConsumePrincipalExportRequest>,
+) -> Result<Response<Empty>, Status> {
+    let req = request.into_inner();
+
+    // Fetch export by code
+    let export = server
+        .store
+        .get_principal_export_by_code(&req.export_code)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => {
+                Status::not_found("Export not found, expired, or already consumed")
+            }
+            _ => Status::internal(format!("Failed to get principal export: {}", e)),
+        })?;
+
+    // Verify token_hash matches (constant-time comparison to prevent timing attacks)
+    let hashes_match: bool = export
+        .token_hash
+        .as_bytes()
+        .ct_eq(req.token_hash.as_bytes())
+        .into();
+    if !hashes_match {
+        // Increment failed attempts (same brute-force protection as get_principal_export)
+        let failed_attempts = server
+            .store
+            .increment_export_failed_attempts(&export.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to record failed attempt: {}", e)))?;
+
+        // Self-destruct after max failed attempts
+        if failed_attempts >= MAX_FAILED_ATTEMPTS {
+            if let Err(e) = server.store.delete_principal_export(&export.id).await {
+                eprintln!(
+                    "ERROR: Failed to delete principal export {} after max failed attempts: {}",
+                    export.id.0, e
+                );
+            }
+            return Err(Status::permission_denied(
+                "Incorrect passphrase. Export deleted after 3 failed attempts.",
+            ));
+        }
+
+        return Err(Status::permission_denied(format!(
+            "Incorrect passphrase. {} attempts remaining.",
+            MAX_FAILED_ATTEMPTS - failed_attempts
+        )));
+    }
+
+    // Token verified - mark as consumed
+    server
+        .store
+        .consume_principal_export(&export.id)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => {
+                Status::not_found("Export not found or already consumed")
+            }
+            _ => Status::internal(format!("Failed to consume principal export: {}", e)),
+        })?;
+
+    Ok(Response::new(Empty {}))
 }

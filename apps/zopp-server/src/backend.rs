@@ -100,6 +100,56 @@ impl Store for StoreBackend {
         }
     }
 
+    async fn create_principal_export(
+        &self,
+        params: &CreatePrincipalExportParams,
+    ) -> Result<PrincipalExport, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.create_principal_export(params).await,
+            StoreBackend::Postgres(s) => s.create_principal_export(params).await,
+        }
+    }
+
+    async fn get_principal_export_by_code(
+        &self,
+        export_code: &str,
+    ) -> Result<PrincipalExport, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_principal_export_by_code(export_code).await,
+            StoreBackend::Postgres(s) => s.get_principal_export_by_code(export_code).await,
+        }
+    }
+
+    async fn consume_principal_export(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.consume_principal_export(export_id).await,
+            StoreBackend::Postgres(s) => s.consume_principal_export(export_id).await,
+        }
+    }
+
+    async fn increment_export_failed_attempts(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<i32, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.increment_export_failed_attempts(export_id).await,
+            StoreBackend::Postgres(s) => s.increment_export_failed_attempts(export_id).await,
+        }
+    }
+
+    async fn delete_principal_export(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.delete_principal_export(export_id).await,
+            StoreBackend::Postgres(s) => s.delete_principal_export(export_id).await,
+        }
+    }
+
     async fn create_workspace(
         &self,
         params: &CreateWorkspaceParams,

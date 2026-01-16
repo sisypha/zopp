@@ -85,6 +85,7 @@ pub async fn create_invite(
         kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
         kek_nonce: invite.kek_nonce.unwrap_or_default(),
         invite_secret: String::new(),
+        user_id: None,
     }))
 }
 
@@ -114,6 +115,7 @@ pub async fn get_invite(
         kek_encrypted: invite.kek_encrypted.unwrap_or_default(),
         kek_nonce: invite.kek_nonce.unwrap_or_default(),
         invite_secret: String::new(),
+        user_id: None,
     }))
 }
 
@@ -156,6 +158,7 @@ pub async fn list_invites(
             kek_encrypted: inv.kek_encrypted.unwrap_or_default(),
             kek_nonce: inv.kek_nonce.unwrap_or_default(),
             invite_secret: String::new(),
+            user_id: None,
         })
         .collect();
 

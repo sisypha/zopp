@@ -18,6 +18,9 @@ pub async fn join(
 ) -> Result<Response<JoinResponse>, Status> {
     let req = request.into_inner();
 
+    // Normalize email to lowercase for consistent comparison
+    let email = req.email.to_lowercase();
+
     let invite = server
         .store
         .get_invite_by_token(&req.invite_token)
@@ -37,7 +40,7 @@ pub async fn join(
     let result = server
         .store
         .create_user(&CreateUserParams {
-            email: req.email.clone(),
+            email: email.clone(),
             principal: Some(CreatePrincipalData {
                 name: req.principal_name.clone(),
                 public_key: req.public_key.clone(),
@@ -58,7 +61,7 @@ pub async fn join(
             // User exists - this is a workspace invite for an existing user
             let existing_user = server
                 .store
-                .get_user_by_email(&req.email)
+                .get_user_by_email(&email)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to get existing user: {}", e)))?;
 
@@ -233,10 +236,13 @@ pub async fn register(
     // Standard register flow (for human principals / new devices)
     let req = request.into_inner();
 
+    // Normalize email to lowercase for consistent comparison
+    let email = req.email.to_lowercase();
+
     let (user_id, principal_id) = server
         .store
         .create_user(&CreateUserParams {
-            email: req.email,
+            email,
             principal: Some(CreatePrincipalData {
                 name: req.principal_name.clone(),
                 public_key: req.public_key.clone(),
@@ -266,9 +272,12 @@ pub async fn login(
 ) -> Result<Response<LoginResponse>, Status> {
     let req = request.into_inner();
 
+    // Normalize email to lowercase for consistent comparison
+    let email = req.email.to_lowercase();
+
     let user = server
         .store
-        .get_user_by_email(&req.email)
+        .get_user_by_email(&email)
         .await
         .map_err(|e| Status::not_found(format!("User not found: {}", e)))?;
 

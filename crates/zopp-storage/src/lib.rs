@@ -49,6 +49,9 @@ pub struct EnvName(pub String);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GroupId(pub Uuid);
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PrincipalExportId(pub Uuid);
+
 /// Role for RBAC permissions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Role {
@@ -376,6 +379,38 @@ pub struct Environment {
     pub updated_at: DateTime<Utc>,
 }
 
+/// Principal export record for multi-device transfer
+#[derive(Clone, Debug)]
+pub struct PrincipalExport {
+    pub id: PrincipalExportId,
+    pub export_code: String, // Public identifier for lookup (e.g., "exp_a7k9m2x4")
+    pub token_hash: String,  // Argon2id(passphrase, verification_salt) for verification
+    pub verification_salt: Vec<u8>, // Salt for passphrase verification (separate from encryption)
+    pub user_id: UserId,
+    pub principal_id: PrincipalId,
+    pub encrypted_data: Vec<u8>, // Encrypted principal JSON
+    pub salt: Vec<u8>,           // Argon2id salt for encryption key derivation
+    pub nonce: Vec<u8>,          // XChaCha20-Poly1305 nonce
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub consumed: bool,
+    pub failed_attempts: i32, // Track failed passphrase attempts (delete after 3)
+}
+
+/// Parameters for creating a principal export
+#[derive(Clone, Debug)]
+pub struct CreatePrincipalExportParams {
+    pub export_code: String, // Public identifier for lookup (e.g., "exp_a7k9m2x4")
+    pub token_hash: String,  // Argon2id(passphrase, verification_salt) for verification
+    pub verification_salt: Vec<u8>, // Salt for passphrase verification (separate from encryption)
+    pub user_id: UserId,
+    pub principal_id: PrincipalId,
+    pub encrypted_data: Vec<u8>, // Encrypted principal JSON
+    pub salt: Vec<u8>,           // Argon2id salt for encryption key derivation
+    pub nonce: Vec<u8>,          // XChaCha20-Poly1305 nonce
+    pub expires_at: DateTime<Utc>,
+}
+
 /// The storage trait `zopp-core` depends on.
 ///
 /// All methods that act on project/env/secrets are **scoped by workspace**.
@@ -431,6 +466,39 @@ pub trait Store: Send + Sync {
 
     /// Revoke an invite.
     async fn revoke_invite(&self, invite_id: &InviteId) -> Result<(), StoreError>;
+
+    // ───────────────────────────────────── Principal Exports ──────────────────────────────
+
+    /// Create a principal export for multi-device transfer.
+    async fn create_principal_export(
+        &self,
+        params: &CreatePrincipalExportParams,
+    ) -> Result<PrincipalExport, StoreError>;
+
+    /// Get principal export by export code.
+    async fn get_principal_export_by_code(
+        &self,
+        export_code: &str,
+    ) -> Result<PrincipalExport, StoreError>;
+
+    /// Mark a principal export as consumed (can only be used once).
+    async fn consume_principal_export(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<(), StoreError>;
+
+    /// Increment failed attempts counter for a principal export.
+    /// Returns the new failed_attempts count.
+    async fn increment_export_failed_attempts(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<i32, StoreError>;
+
+    /// Delete a principal export (used after 3 failed attempts or manual cleanup).
+    async fn delete_principal_export(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<(), StoreError>;
 
     // ───────────────────────────────────── Workspaces ─────────────────────────────────────
 
@@ -985,6 +1053,55 @@ mod tests {
         }
 
         async fn revoke_invite(&self, _invite_id: &InviteId) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn create_principal_export(
+            &self,
+            params: &CreatePrincipalExportParams,
+        ) -> Result<PrincipalExport, StoreError> {
+            Ok(PrincipalExport {
+                id: PrincipalExportId(Uuid::new_v4()),
+                export_code: params.export_code.clone(),
+                token_hash: params.token_hash.clone(),
+                verification_salt: params.verification_salt.clone(),
+                user_id: params.user_id.clone(),
+                principal_id: params.principal_id.clone(),
+                encrypted_data: params.encrypted_data.clone(),
+                salt: params.salt.clone(),
+                nonce: params.nonce.clone(),
+                expires_at: params.expires_at,
+                created_at: Utc::now(),
+                consumed: false,
+                failed_attempts: 0,
+            })
+        }
+
+        async fn get_principal_export_by_code(
+            &self,
+            _export_code: &str,
+        ) -> Result<PrincipalExport, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn consume_principal_export(
+            &self,
+            _export_id: &PrincipalExportId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn increment_export_failed_attempts(
+            &self,
+            _export_id: &PrincipalExportId,
+        ) -> Result<i32, StoreError> {
+            Ok(1)
+        }
+
+        async fn delete_principal_export(
+            &self,
+            _export_id: &PrincipalExportId,
+        ) -> Result<(), StoreError> {
             Ok(())
         }
 

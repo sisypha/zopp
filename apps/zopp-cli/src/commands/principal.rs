@@ -1,11 +1,35 @@
 use crate::config::{get_current_principal, load_config, save_config, PrincipalConfig};
 use crate::grpc::{add_auth_metadata, connect};
 use ed25519_dalek::SigningKey;
+use rand_core::RngCore;
+use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, Zeroizing};
 use zopp_proto::{
-    Empty, GetWorkspaceKeysRequest, GrantPrincipalWorkspaceAccessRequest,
+    ConsumePrincipalExportRequest, CreatePrincipalExportRequest, Empty, GetPrincipalExportRequest,
+    GetWorkspaceKeysRequest, GrantPrincipalWorkspaceAccessRequest,
     ListWorkspaceServicePrincipalsRequest, RegisterRequest, RemovePrincipalFromWorkspaceRequest,
     RenamePrincipalRequest, RevokeAllPrincipalPermissionsRequest, Role,
 };
+
+/// Exported principal format (JSON before encryption)
+#[derive(Serialize, Deserialize)]
+struct ExportedPrincipal {
+    version: u32,
+    server_url: String,
+    email: String,
+    user_id: String,
+    principal: ExportedPrincipalData,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ExportedPrincipalData {
+    id: String,
+    name: String,
+    private_key: String,
+    public_key: String,
+    x25519_private_key: Option<String>,
+    x25519_public_key: Option<String>,
+}
 
 pub async fn cmd_principal_list() -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
@@ -433,4 +457,400 @@ pub async fn cmd_principal_revoke_all(
         response.permissions_revoked, principal_id, workspace
     );
     Ok(())
+}
+
+/// Export a principal to the server for retrieval on another device.
+///
+/// Generates a 6-word passphrase from the EFF wordlist, encrypts the principal
+/// data with a key derived from the passphrase, and uploads to the server.
+/// The passphrase is displayed to the user for use on the importing device.
+pub async fn cmd_principal_export(
+    server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
+    name: &str,
+    expires_hours: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config = load_config()?;
+    let caller_principal = get_current_principal(&config)?;
+
+    // Find the principal to export
+    let principal = config
+        .principals
+        .iter()
+        .find(|p| p.name == name)
+        .ok_or_else(|| format!("Principal '{}' not found", name))?;
+
+    // Generate passphrase (or use env var for testing)
+    let passphrase = if let Ok(p) = std::env::var("ZOPP_EXPORT_PASSPHRASE") {
+        p
+    } else {
+        crate::passphrase::generate_passphrase(6)
+    };
+
+    // Generate verification_salt for Argon2id passphrase verification
+    // This is separate from the encryption salt for defense-in-depth
+    let mut verification_salt = [0u8; 16];
+    rand_core::OsRng.fill_bytes(&mut verification_salt);
+
+    // Compute token_hash = hex(Argon2id(passphrase, verification_salt)) for server verification
+    // Using Argon2id makes offline brute-force infeasible if DB is compromised
+    let token_hash = compute_verification_hash(&passphrase, &verification_salt)?;
+
+    // Create export structure
+    let export = ExportedPrincipal {
+        version: 1,
+        server_url: server.to_string(),
+        email: config.email.clone(),
+        user_id: config.user_id.clone(),
+        principal: ExportedPrincipalData {
+            id: principal.id.clone(),
+            name: principal.name.clone(),
+            private_key: principal.private_key.clone(),
+            public_key: principal.public_key.clone(),
+            x25519_private_key: principal.x25519_private_key.clone(),
+            x25519_public_key: principal.x25519_public_key.clone(),
+        },
+    };
+
+    // Serialize to JSON (wrap in Zeroizing since it contains private keys)
+    let mut json = Zeroizing::new(serde_json::to_string(&export)?);
+
+    // Generate salt and derive encryption key
+    let mut salt = [0u8; 16];
+    rand_core::OsRng.fill_bytes(&mut salt);
+
+    let key = derive_export_key(&passphrase, &salt)?;
+    let dek = zopp_crypto::Dek::from_bytes(&key)?;
+
+    // Encrypt with AEAD
+    let aad = b"zopp-principal-export-v2";
+    let (nonce, ciphertext) = zopp_crypto::encrypt(json.as_bytes(), &dek, aad)?;
+
+    // Clear JSON from memory now that it's encrypted
+    json.zeroize();
+
+    // Calculate expiration timestamp
+    let expires_at = chrono::Utc::now().timestamp() + (expires_hours as i64 * 3600);
+
+    // Upload to server
+    let mut client = connect(server, tls_ca_cert).await?;
+    let mut request = tonic::Request::new(CreatePrincipalExportRequest {
+        token_hash,
+        verification_salt: verification_salt.to_vec(),
+        encrypted_data: ciphertext.0,
+        salt: salt.to_vec(),
+        nonce: nonce.0.to_vec(),
+        expires_at,
+    });
+    add_auth_metadata(
+        &mut request,
+        caller_principal,
+        "/zopp.ZoppService/CreatePrincipalExport",
+    )?;
+
+    let response = client.create_principal_export(request).await?.into_inner();
+
+    // Display export code and passphrase to user
+    println!();
+    println!("Principal '{}' export created successfully.", name);
+    println!();
+    println!("Export code:");
+    println!("    {}", response.export_code);
+    println!();
+    println!("Passphrase (write this down):");
+    println!("    {}", passphrase);
+    println!();
+    println!("This export expires in {} hours.", expires_hours);
+    println!("After 3 failed passphrase attempts, the export is permanently deleted.");
+    println!();
+    println!("On your new device, run:");
+    println!("    zopp --server {} principal import", server);
+    println!();
+
+    Ok(())
+}
+
+/// Import a principal from the server using export code and passphrase.
+///
+/// Two-phase protocol:
+/// 1. Send export_code to get verification_salt
+/// 2. Compute Argon2id(passphrase, verification_salt), send for verification
+///
+/// This prevents offline brute-force - encrypted data only returned after server verification.
+pub async fn cmd_principal_import(
+    server: &str,
+    tls_ca_cert: Option<&std::path::Path>,
+    export_code_arg: Option<&str>,
+    passphrase_arg: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Get export code from arg, env (for testing), or prompt
+    let export_code = if let Some(c) = export_code_arg {
+        c.to_string()
+    } else if let Ok(c) = std::env::var("ZOPP_EXPORT_CODE") {
+        c
+    } else {
+        print!("Enter export code: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+        let mut code = String::new();
+        std::io::stdin().read_line(&mut code)?;
+        code.trim().to_string()
+    };
+
+    let mut client = connect(server, tls_ca_cert).await?;
+
+    // Phase 1: Get verification_salt from server (send empty token_hash)
+    let phase1_request = tonic::Request::new(GetPrincipalExportRequest {
+        export_code: export_code.clone(),
+        token_hash: String::new(), // Empty = request verification_salt only
+    });
+
+    let phase1_response = client
+        .get_principal_export(phase1_request)
+        .await
+        .map_err(|e| {
+            if e.code() == tonic::Code::NotFound {
+                "Export not found - invalid code or expired".to_string()
+            } else {
+                format!("Failed to retrieve export: {}", e)
+            }
+        })?
+        .into_inner();
+
+    let verification_salt = phase1_response.verification_salt;
+    if verification_salt.len() != 16 {
+        return Err("Invalid verification salt from server".into());
+    }
+
+    // Get passphrase from arg, env (for testing), or prompt
+    let passphrase = if let Some(p) = passphrase_arg {
+        p.to_string()
+    } else if let Ok(p) = std::env::var("ZOPP_EXPORT_PASSPHRASE") {
+        p
+    } else {
+        rpassword::prompt_password("Enter passphrase: ")?
+    };
+
+    // Phase 2: Compute Argon2id hash and send for verification
+    // Server verifies the hash before returning encrypted data
+    let token_hash = compute_verification_hash(&passphrase, &verification_salt)?;
+
+    let phase2_request = tonic::Request::new(GetPrincipalExportRequest {
+        export_code: export_code.clone(),
+        token_hash: token_hash.clone(),
+    });
+
+    let response = client
+        .get_principal_export(phase2_request)
+        .await
+        .map_err(|e| {
+            if e.code() == tonic::Code::NotFound {
+                "Export not found - invalid code or expired".to_string()
+            } else if e.code() == tonic::Code::PermissionDenied {
+                // Server returns detailed message about failed attempts
+                e.message().to_string()
+            } else {
+                format!("Failed to retrieve export: {}", e)
+            }
+        })?
+        .into_inner();
+
+    // Server verified passphrase - now derive key and decrypt
+    // Validate salt length (16 bytes for Argon2id)
+    if response.salt.len() != 16 {
+        return Err("Invalid encryption salt length from server".into());
+    }
+    let key = derive_export_key(&passphrase, &response.salt)?;
+    let dek = zopp_crypto::Dek::from_bytes(&key)?;
+
+    let mut nonce_array = [0u8; 24];
+    if response.nonce.len() != 24 {
+        return Err("Invalid nonce length from server".into());
+    }
+    nonce_array.copy_from_slice(&response.nonce);
+    let nonce = zopp_crypto::Nonce(nonce_array);
+
+    let aad = b"zopp-principal-export-v2";
+    // Wrap plaintext in Zeroizing since it contains private keys
+    let mut plaintext = Zeroizing::new(
+        zopp_crypto::decrypt(&response.encrypted_data, &nonce, &dek, aad)
+            .map_err(|_| "Decryption failed - wrong passphrase?")?,
+    );
+
+    // Parse JSON
+    let export: ExportedPrincipal =
+        serde_json::from_slice(&plaintext).map_err(|_| "Invalid export format")?;
+
+    // Clear plaintext from memory now that it's parsed
+    plaintext.zeroize();
+
+    if export.version != 1 {
+        return Err(format!("Unsupported export version: {}", export.version).into());
+    }
+
+    // Load or create config
+    let mut config = match load_config() {
+        Ok(c) => {
+            // Validate user_id matches - we don't support multiple users in one config yet
+            // See: https://github.com/faiscadev/zopp/issues/40
+            if c.user_id != export.user_id {
+                return Err(format!(
+                    "Cannot import: principal belongs to user '{}' but this device is configured for user '{}'.\n\
+                     Multi-user support is planned: https://github.com/faiscadev/zopp/issues/40\n\
+                     For now, use a separate device or config directory for different users.",
+                    export.email, c.email
+                )
+                .into());
+            }
+            c
+        }
+        Err(_) => {
+            // Create new config with this principal
+            crate::config::CliConfig {
+                user_id: export.user_id.clone(),
+                email: export.email.clone(),
+                principals: vec![],
+                current_principal: None,
+            }
+        }
+    };
+
+    // Check if principal already exists
+    if config
+        .principals
+        .iter()
+        .any(|p| p.id == export.principal.id)
+    {
+        return Err(format!(
+            "Principal '{}' (ID: {}) already exists in config",
+            export.principal.name, export.principal.id
+        )
+        .into());
+    }
+
+    // Check if name conflicts and find a unique name
+    let final_name = if config
+        .principals
+        .iter()
+        .any(|p| p.name == export.principal.name)
+    {
+        // Find a unique name by appending -imported, -imported-2, etc.
+        let base_name = format!("{}-imported", export.principal.name);
+        let mut candidate = base_name.clone();
+        let mut counter = 2;
+        while config.principals.iter().any(|p| p.name == candidate) {
+            candidate = format!("{}-{}", base_name, counter);
+            counter += 1;
+        }
+        eprintln!(
+            "Note: Principal name '{}' already exists, importing as '{}'",
+            export.principal.name, candidate
+        );
+        candidate
+    } else {
+        export.principal.name.clone()
+    };
+
+    // Add principal
+    config.principals.push(PrincipalConfig {
+        id: export.principal.id.clone(),
+        name: final_name.clone(),
+        private_key: export.principal.private_key,
+        public_key: export.principal.public_key,
+        x25519_private_key: export.principal.x25519_private_key,
+        x25519_public_key: export.principal.x25519_public_key,
+    });
+
+    // Set as current if it's the only one
+    if config.principals.len() == 1 {
+        config.current_principal = Some(final_name.clone());
+    }
+
+    save_config(&config)?;
+
+    // Mark export as consumed (one-time use) - done after saving config
+    // so the user doesn't lose data if consume succeeds but save fails.
+    // Retry up to 3 times with backoff for transient network issues.
+    for attempt in 1..=3 {
+        let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
+            export_code: export_code.clone(),
+            token_hash: token_hash.clone(),
+        });
+        match client.consume_principal_export(consume_request).await {
+            Ok(_) => break,
+            Err(_) if attempt < 3 => {
+                // Retry after brief delay for transient failures
+                tokio::time::sleep(tokio::time::Duration::from_millis(100 * attempt as u64)).await;
+                eprintln!("Retrying consume (attempt {}/3)...", attempt + 1);
+            }
+            Err(e) => {
+                // Final attempt failed - warn user prominently
+                eprintln!();
+                eprintln!(
+                    "WARNING: Failed to mark export as consumed after 3 attempts: {}",
+                    e
+                );
+                eprintln!("The export may still be active. For security, you should:");
+                eprintln!(
+                    "  1. Create a new export with: zopp principal export {}",
+                    final_name
+                );
+                eprintln!("  2. The old export will expire automatically in 24 hours");
+                eprintln!();
+            }
+        }
+    }
+
+    println!("Principal '{}' imported successfully.", final_name);
+    println!();
+    println!("You are now authenticated as:");
+    println!("  Email: {}", config.email);
+    println!("  Principal: {}", final_name);
+    println!();
+    println!("Test with: zopp workspace list");
+
+    Ok(())
+}
+
+/// Derive encryption key from passphrase using Argon2id
+/// Returns Zeroizing wrapper to ensure key is cleared from memory when dropped
+fn derive_export_key(
+    passphrase: &str,
+    salt: &[u8],
+) -> Result<Zeroizing<[u8; 32]>, Box<dyn std::error::Error>> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+
+    // Use lighter params for export (still secure, but faster)
+    // 64 MiB memory, 3 iterations
+    let params =
+        Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let mut key = Zeroizing::new([0u8; 32]);
+    argon2
+        .hash_password_into(passphrase.as_bytes(), salt, &mut *key)
+        .map_err(|e| format!("Key derivation failed: {}", e))?;
+
+    Ok(key)
+}
+
+/// Compute Argon2id verification hash for passphrase
+/// Returns hex-encoded 32-byte hash for server verification
+fn compute_verification_hash(
+    passphrase: &str,
+    verification_salt: &[u8],
+) -> Result<String, Box<dyn std::error::Error>> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+
+    // Same Argon2id params as derive_export_key for consistency
+    // 64 MiB memory, 3 iterations - provides strong brute-force resistance
+    let params =
+        Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let mut hash = Zeroizing::new([0u8; 32]);
+    argon2
+        .hash_password_into(passphrase.as_bytes(), verification_salt, &mut *hash)
+        .map_err(|e| format!("Hash computation failed: {}", e))?;
+
+    Ok(hex::encode(*hash))
 }

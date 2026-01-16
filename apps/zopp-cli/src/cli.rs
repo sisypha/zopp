@@ -139,6 +139,9 @@ pub enum PrincipalCommand {
         /// Workspace to add service principal to (required for --service)
         #[arg(long, short = 'w')]
         workspace: Option<String>,
+        /// Export the principal immediately after creation (for easy setup on this device)
+        #[arg(long)]
+        export: bool,
     },
     /// Switch to a different principal (set as default)
     Use {
@@ -180,6 +183,25 @@ pub enum PrincipalCommand {
         /// Principal ID (UUID)
         #[arg(long)]
         principal: String,
+    },
+    /// Export a principal to the server (generates passphrase for retrieval)
+    Export {
+        /// Principal name to export
+        name: String,
+        /// Expiration time in hours (default: 24)
+        #[arg(long, default_value = "24")]
+        expires_hours: u32,
+    },
+    /// Import a principal from the server using export code and passphrase
+    Import {
+        /// Export code from export (if not provided, will prompt)
+        #[arg(long, short = 'c')]
+        code: Option<String>,
+        /// Passphrase from export (if not provided, will prompt).
+        /// WARNING: Passing via CLI exposes the passphrase in shell history.
+        /// Prefer interactive prompt or ZOPP_EXPORT_PASSPHRASE env var.
+        #[arg(long, short = 'p', hide = true, env = "ZOPP_EXPORT_PASSPHRASE")]
+        passphrase: Option<String>,
     },
 }
 
@@ -355,7 +377,7 @@ pub enum SecretCommand {
 
 #[derive(Subcommand)]
 pub enum InviteCommand {
-    /// Create a workspace invite
+    /// Create a workspace invite (requires admin)
     Create {
         /// Workspace name
         #[arg(long, short = 'w')]
