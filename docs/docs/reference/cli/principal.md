@@ -191,7 +191,7 @@ zopp principal export <NAME> [--expires-hours <HOURS>]
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `--expires-hours <HOURS>` | No | Expiration time in hours (default: 24, max: 24) |
+| `--expires-hours <HOURS>` | No | Expiration time in hours (default: 24) |
 | `-h, --help` | No | Print help |
 
 ### Example
@@ -201,11 +201,14 @@ $ zopp principal export laptop
 
 Principal 'laptop' export created successfully.
 
-Passphrase (write this down):
+Export code:
+    exp_a7k9m2x4
 
+Passphrase (write this down):
     correct horse battery staple purple llama
 
 This export expires in 24 hours.
+After 3 failed passphrase attempts, the export is permanently deleted.
 
 On your new device, run:
     zopp --server https://zopp.example.com:50051 principal import
