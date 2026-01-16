@@ -4515,6 +4515,7 @@ dependencies = [
  "tonic",
  "url",
  "uuid",
+ "zeroize",
  "zopp-crypto",
  "zopp-proto",
  "zopp-secrets",

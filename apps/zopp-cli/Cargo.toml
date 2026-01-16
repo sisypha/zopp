@@ -40,6 +40,7 @@ base64 = { workspace = true }
 url = { workspace = true }
 rpassword = { workspace = true }
 argon2 = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }

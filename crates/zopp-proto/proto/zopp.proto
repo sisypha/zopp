@@ -328,7 +328,8 @@ message GetPrincipalExportResponse {
 }
 
 message ConsumePrincipalExportRequest {
-  string export_id = 1;
+  string export_code = 1; // Same export_code used in GetPrincipalExport
+  string token_hash = 2;  // Argon2id(passphrase, verification_salt) - same verification as GetPrincipalExport
 }
 
 // Project messages

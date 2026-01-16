@@ -750,19 +750,39 @@ pub async fn get_principal_export(
 }
 
 /// Mark a principal export as consumed after successful import.
-/// This is unauthenticated - called by client after successful decryption.
+/// Requires export_code + token_hash verification (same as GetPrincipalExport).
 pub async fn consume_principal_export(
     server: &ZoppServer,
     request: Request<ConsumePrincipalExportRequest>,
 ) -> Result<Response<Empty>, Status> {
     let req = request.into_inner();
 
-    let export_id = uuid::Uuid::try_parse(&req.export_id)
-        .map_err(|_| Status::invalid_argument("Invalid export ID"))?;
+    // Fetch export by code
+    let export = server
+        .store
+        .get_principal_export_by_code(&req.export_code)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => {
+                Status::not_found("Export not found, expired, or already consumed")
+            }
+            _ => Status::internal(format!("Failed to get principal export: {}", e)),
+        })?;
 
+    // Verify token_hash matches (constant-time comparison to prevent timing attacks)
+    let hashes_match: bool = export
+        .token_hash
+        .as_bytes()
+        .ct_eq(req.token_hash.as_bytes())
+        .into();
+    if !hashes_match {
+        return Err(Status::permission_denied("Invalid passphrase"));
+    }
+
+    // Token verified - mark as consumed
     server
         .store
-        .consume_principal_export(&zopp_storage::PrincipalExportId(export_id))
+        .consume_principal_export(&export.id)
         .await
         .map_err(|e| match e {
             zopp_storage::StoreError::NotFound => {

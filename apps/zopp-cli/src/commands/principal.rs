@@ -3,6 +3,7 @@ use crate::grpc::{add_auth_metadata, connect};
 use ed25519_dalek::SigningKey;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, Zeroizing};
 use zopp_proto::{
     ConsumePrincipalExportRequest, CreatePrincipalExportRequest, Empty, GetPrincipalExportRequest,
     GetWorkspaceKeysRequest, GrantPrincipalWorkspaceAccessRequest,
@@ -511,8 +512,8 @@ pub async fn cmd_principal_export(
         },
     };
 
-    // Serialize to JSON
-    let json = serde_json::to_string(&export)?;
+    // Serialize to JSON (wrap in Zeroizing since it contains private keys)
+    let mut json = Zeroizing::new(serde_json::to_string(&export)?);
 
     // Generate salt and derive encryption key
     let mut salt = [0u8; 16];
@@ -524,6 +525,9 @@ pub async fn cmd_principal_export(
     // Encrypt with AEAD
     let aad = b"zopp-principal-export-v2";
     let (nonce, ciphertext) = zopp_crypto::encrypt(json.as_bytes(), &dek, aad)?;
+
+    // Clear JSON from memory now that it's encrypted
+    json.zeroize();
 
     // Calculate expiration timestamp
     let expires_at = chrono::Utc::now().timestamp() + (expires_hours as i64 * 3600);
@@ -632,7 +636,7 @@ pub async fn cmd_principal_import(
 
     let phase2_request = tonic::Request::new(GetPrincipalExportRequest {
         export_code: export_code.clone(),
-        token_hash,
+        token_hash: token_hash.clone(),
     });
 
     let response = client
@@ -666,12 +670,18 @@ pub async fn cmd_principal_import(
     let nonce = zopp_crypto::Nonce(nonce_array);
 
     let aad = b"zopp-principal-export-v2";
-    let plaintext = zopp_crypto::decrypt(&response.encrypted_data, &nonce, &dek, aad)
-        .map_err(|_| "Decryption failed - wrong passphrase?")?;
+    // Wrap plaintext in Zeroizing since it contains private keys
+    let mut plaintext = Zeroizing::new(
+        zopp_crypto::decrypt(&response.encrypted_data, &nonce, &dek, aad)
+            .map_err(|_| "Decryption failed - wrong passphrase?")?,
+    );
 
     // Parse JSON
     let export: ExportedPrincipal =
         serde_json::from_slice(&plaintext).map_err(|_| "Invalid export format")?;
+
+    // Clear plaintext from memory now that it's parsed
+    plaintext.zeroize();
 
     if export.version != 1 {
         return Err(format!("Unsupported export version: {}", export.version).into());
@@ -679,7 +689,20 @@ pub async fn cmd_principal_import(
 
     // Load or create config
     let mut config = match load_config() {
-        Ok(c) => c,
+        Ok(c) => {
+            // Validate user_id matches - we don't support multiple users in one config yet
+            // See: https://github.com/faiscadev/zopp/issues/40
+            if c.user_id != export.user_id {
+                return Err(format!(
+                    "Cannot import: principal belongs to user '{}' but this device is configured for user '{}'.\n\
+                     Multi-user support is planned: https://github.com/faiscadev/zopp/issues/40\n\
+                     For now, use a separate device or config directory for different users.",
+                    export.email, c.email
+                )
+                .into());
+            }
+            c
+        }
         Err(_) => {
             // Create new config with this principal
             crate::config::CliConfig {
@@ -749,7 +772,8 @@ pub async fn cmd_principal_import(
     // Retry up to 3 times with backoff for transient network issues.
     for attempt in 1..=3 {
         let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
-            export_id: response.export_id.clone(),
+            export_code: export_code.clone(),
+            token_hash: token_hash.clone(),
         });
         match client.consume_principal_export(consume_request).await {
             Ok(_) => break,
@@ -788,10 +812,11 @@ pub async fn cmd_principal_import(
 }
 
 /// Derive encryption key from passphrase using Argon2id
+/// Returns Zeroizing wrapper to ensure key is cleared from memory when dropped
 fn derive_export_key(
     passphrase: &str,
     salt: &[u8],
-) -> Result<[u8; 32], Box<dyn std::error::Error>> {
+) -> Result<Zeroizing<[u8; 32]>, Box<dyn std::error::Error>> {
     use argon2::{Algorithm, Argon2, Params, Version};
 
     // Use lighter params for export (still secure, but faster)
@@ -800,9 +825,9 @@ fn derive_export_key(
         Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    let mut key = [0u8; 32];
+    let mut key = Zeroizing::new([0u8; 32]);
     argon2
-        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .hash_password_into(passphrase.as_bytes(), salt, &mut *key)
         .map_err(|e| format!("Key derivation failed: {}", e))?;
 
     Ok(key)
@@ -822,10 +847,10 @@ fn compute_verification_hash(
         Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    let mut hash = [0u8; 32];
+    let mut hash = Zeroizing::new([0u8; 32]);
     argon2
-        .hash_password_into(passphrase.as_bytes(), verification_salt, &mut hash)
+        .hash_password_into(passphrase.as_bytes(), verification_salt, &mut *hash)
         .map_err(|e| format!("Hash computation failed: {}", e))?;
 
-    Ok(hex::encode(hash))
+    Ok(hex::encode(*hash))
 }
