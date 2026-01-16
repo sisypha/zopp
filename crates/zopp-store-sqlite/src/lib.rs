@@ -570,10 +570,11 @@ impl Store for SqliteStore {
         let principal_id_str = params.principal_id.0.to_string();
 
         let row = sqlx::query!(
-            r#"INSERT INTO principal_exports(id, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            r#"INSERT INTO principal_exports(id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
                RETURNING created_at as "created_at: DateTime<Utc>""#,
             export_id_str,
+            params.export_code,
             params.token_hash,
             user_id_str,
             principal_id_str,
@@ -588,6 +589,7 @@ impl Store for SqliteStore {
 
         Ok(PrincipalExport {
             id: PrincipalExportId(export_id),
+            export_code: params.export_code.clone(),
             token_hash: params.token_hash.clone(),
             user_id: params.user_id.clone(),
             principal_id: params.principal_id.clone(),
@@ -597,23 +599,24 @@ impl Store for SqliteStore {
             expires_at: params.expires_at,
             created_at: row.created_at,
             consumed: false,
+            failed_attempts: 0,
         })
     }
 
-    async fn get_principal_export_by_token(
+    async fn get_principal_export_by_code(
         &self,
-        token_hash: &str,
+        export_code: &str,
     ) -> Result<PrincipalExport, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id as "id!", token_hash as "token_hash!", user_id as "user_id!",
-               principal_id as "principal_id!", encrypted_data as "encrypted_data!",
-               salt as "salt!", nonce as "nonce!",
+            r#"SELECT id as "id!", export_code as "export_code!", token_hash as "token_hash!",
+               user_id as "user_id!", principal_id as "principal_id!",
+               encrypted_data as "encrypted_data!", salt as "salt!", nonce as "nonce!",
                expires_at as "expires_at!: DateTime<Utc>",
                created_at as "created_at!: DateTime<Utc>",
-               consumed as "consumed!"
+               consumed as "consumed!", failed_attempts as "failed_attempts!"
                FROM principal_exports
-               WHERE token_hash = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP"#,
-            token_hash
+               WHERE export_code = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP"#,
+            export_code
         )
         .fetch_optional(&self.pool)
         .await
@@ -631,6 +634,7 @@ impl Store for SqliteStore {
 
                 Ok(PrincipalExport {
                     id: PrincipalExportId(id),
+                    export_code: row.export_code,
                     token_hash: row.token_hash,
                     user_id: UserId(user_id),
                     principal_id: PrincipalId(principal_id),
@@ -640,6 +644,7 @@ impl Store for SqliteStore {
                     expires_at: row.expires_at,
                     created_at: row.created_at,
                     consumed: row.consumed,
+                    failed_attempts: row.failed_attempts as i32,
                 })
             }
         }
@@ -657,6 +662,44 @@ impl Store for SqliteStore {
         .execute(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn increment_export_failed_attempts(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<i32, StoreError> {
+        let export_id_str = export_id.0.to_string();
+        let row = sqlx::query!(
+            r#"UPDATE principal_exports SET failed_attempts = failed_attempts + 1
+               WHERE id = ?
+               RETURNING failed_attempts as "failed_attempts!""#,
+            export_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => Ok(row.failed_attempts as i32),
+        }
+    }
+
+    async fn delete_principal_export(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<(), StoreError> {
+        let export_id_str = export_id.0.to_string();
+        let result = sqlx::query!("DELETE FROM principal_exports WHERE id = ?", export_id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             Err(StoreError::NotFound)

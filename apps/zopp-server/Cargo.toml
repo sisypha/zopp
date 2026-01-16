@@ -27,6 +27,7 @@ zopp-events-memory = { path = "../../crates/zopp-events-memory", version = "0.1.
 zopp-events-postgres = { path = "../../crates/zopp-events-postgres", version = "0.1.0" }
 uuid = { workspace = true }
 thiserror = { workspace = true }
+rand = { workspace = true }
 rand_core = { workspace = true }
 chrono = { workspace = true }
 ed25519-dalek = { workspace = true }

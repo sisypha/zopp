@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, token_hash, user_id, principal_id, encrypted_data, salt, nonce,\n               expires_at, created_at, consumed\n               FROM principal_exports\n               WHERE token_hash = $1 AND consumed = FALSE AND expires_at > NOW()",
+  "query": "SELECT id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce,\n               expires_at, created_at, consumed, failed_attempts\n               FROM principal_exports\n               WHERE export_code = $1 AND consumed = FALSE AND expires_at > NOW()",
   "describe": {
     "columns": [
       {
@@ -10,48 +10,58 @@
       },
       {
         "ordinal": 1,
-        "name": "token_hash",
+        "name": "export_code",
         "type_info": "Text"
       },
       {
         "ordinal": 2,
+        "name": "token_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
         "name": "user_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "principal_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "encrypted_data",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "salt",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "nonce",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "expires_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "consumed",
         "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "failed_attempts",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -69,8 +79,10 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "e75644ead623f0f745d52a5d8bc72e925e6223676d67bcb30e31f02ddb38b9d3"
+  "hash": "d9f406c88c6827d6437dfe9e771129488814773da1d87b3ceb306fe6aa05889a"
 }

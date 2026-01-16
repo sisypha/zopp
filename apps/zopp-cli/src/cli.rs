@@ -192,9 +192,13 @@ pub enum PrincipalCommand {
         #[arg(long, default_value = "24")]
         expires_hours: u32,
     },
-    /// Import a principal from the server using passphrase
+    /// Import a principal from the server using export code and passphrase
     Import {
+        /// Export code from export (if not provided, will prompt)
+        #[arg(long, short = 'c')]
+        code: Option<String>,
         /// Passphrase from export (if not provided, will prompt)
+        #[arg(long, short = 'p')]
         passphrase: Option<String>,
     },
 }

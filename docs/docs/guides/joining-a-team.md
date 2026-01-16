@@ -155,17 +155,23 @@ Export your principal from your current device and import it on your new device.
 # On your existing device - create an export
 zopp principal export laptop
 
-# Output shows a passphrase like:
+# Output shows an export code and passphrase:
+#   Export code:
+#       exp_a7k9m2x4
+#
 #   Passphrase (write this down):
 #       correct horse battery staple purple llama
+#
 #   This export expires in 24 hours.
+#   After 3 failed passphrase attempts, the export is permanently deleted.
 ```
 
-Write down or securely copy the 6-word passphrase, then on your new device:
+Write down both the export code and the 6-word passphrase, then on your new device:
 
 ```bash
-# On your new device - import using the passphrase
+# On your new device - import using the export code and passphrase
 zopp --server https://zopp.yourcompany.com:50051 principal import
+# Enter export code: exp_a7k9m2x4
 # Enter passphrase: correct horse battery staple purple llama
 
 # You're now authenticated!
@@ -180,6 +186,7 @@ Create an export before you leave, so you can set up your new device without nee
 - The passphrase provides ~77 bits of entropy (6 words from a 7776-word list)
 - The server only stores encrypted data—it cannot decrypt your principal
 - Each export can only be used once (consumed on import)
+- Exports self-destruct after 3 failed passphrase attempts to prevent brute-force attacks
 :::
 
 ### Option 2: Create a New Principal

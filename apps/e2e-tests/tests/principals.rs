@@ -700,6 +700,18 @@ async fn run_principals_use_test(config: BackendConfig) -> Result<(), Box<dyn st
     Ok(())
 }
 
+/// Extract export code from CLI output (e.g., "exp_a7k9m2x4")
+fn extract_export_code(output: &str) -> Option<String> {
+    // Look for "exp_" followed by 8 alphanumeric characters
+    for line in output.lines() {
+        let line = line.trim();
+        if line.starts_with("exp_") && line.len() >= 12 {
+            return Some(line[..12].to_string());
+        }
+    }
+    None
+}
+
 /// Test principal export/import for multi-device support (server-mediated)
 async fn run_principals_export_import_test(
     config: BackendConfig,
@@ -730,15 +742,22 @@ async fn run_principals_export_import_test(
         output
     );
 
+    // Extract export code from output
+    let export_code = extract_export_code(&output)
+        .ok_or_else(|| format!("Could not find export code in output: {}", output))?;
+
     // Test 2: Create a second user (simulating new device) and import
     // Note: This simulates a fresh device with no config
     println!("  Test 2: Import principal on new device...");
     let bob = harness.create_user("bob");
 
-    // Bob imports alice's principal using the passphrase
+    // Bob imports alice's principal using the export code and passphrase
     let result = bob.exec_with_env(
         &["principal", "import"],
-        &[("ZOPP_EXPORT_PASSPHRASE", passphrase)],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code),
+            ("ZOPP_EXPORT_PASSPHRASE", passphrase),
+        ],
     );
     result.success()?;
 
@@ -760,33 +779,85 @@ async fn run_principals_export_import_test(
         output
     );
 
-    // Test 5: Test wrong passphrase
-    // Note: The export was already consumed by bob, so this tests both wrong passphrase
-    // and the one-time use nature of exports
-    println!("  Test 5: Test wrong passphrase...");
-    let carol = harness.create_user("carol");
-    let result = carol.exec_with_env(
-        &["principal", "import"],
-        &[("ZOPP_EXPORT_PASSPHRASE", "wrong-passphrase-here")],
-    );
-    assert!(result.failed(), "Import with wrong passphrase should fail");
-
-    // Test 6: Test that export is consumed after successful import
-    println!("  Test 6: Test export is consumed after import...");
-    // Create a fresh export for this test
+    // Test 5: Test wrong passphrase (with failed attempts tracking)
+    println!("  Test 5: Test wrong passphrase with self-destruct...");
+    // Create a fresh export for wrong passphrase test
     let passphrase2 = "another test passphrase words here";
-    alice
+    let output = alice
         .exec_with_env(
             &["principal", "export", "alice-laptop"],
             &[("ZOPP_EXPORT_PASSPHRASE", passphrase2)],
         )
         .success()?;
+    let export_code2 = extract_export_code(&output)
+        .ok_or_else(|| format!("Could not find export code in output: {}", output))?;
 
-    // Carol imports it (fresh user, no principals yet)
+    let carol = harness.create_user("carol");
+
+    // First wrong attempt
+    let result = carol.exec_with_env(
+        &["principal", "import"],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code2),
+            ("ZOPP_EXPORT_PASSPHRASE", "wrong-passphrase-1"),
+        ],
+    );
+    assert!(result.failed(), "Import with wrong passphrase should fail");
+
+    // Second wrong attempt
+    let result = carol.exec_with_env(
+        &["principal", "import"],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code2),
+            ("ZOPP_EXPORT_PASSPHRASE", "wrong-passphrase-2"),
+        ],
+    );
+    assert!(result.failed(), "Import with wrong passphrase should fail");
+
+    // Third wrong attempt - should trigger self-destruct
+    let result = carol.exec_with_env(
+        &["principal", "import"],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code2),
+            ("ZOPP_EXPORT_PASSPHRASE", "wrong-passphrase-3"),
+        ],
+    );
+    assert!(result.failed(), "Import with wrong passphrase should fail");
+
+    // Fourth attempt - export should be deleted
+    let result = carol.exec_with_env(
+        &["principal", "import"],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code2),
+            ("ZOPP_EXPORT_PASSPHRASE", passphrase2),
+        ],
+    );
+    assert!(
+        result.failed(),
+        "Import should fail because export was deleted after 3 failed attempts"
+    );
+
+    // Test 6: Test that export is consumed after successful import
+    println!("  Test 6: Test export is consumed after import...");
+    // Create a fresh export for this test
+    let passphrase3 = "yet another passphrase for testing";
+    let output = alice
+        .exec_with_env(
+            &["principal", "export", "alice-laptop"],
+            &[("ZOPP_EXPORT_PASSPHRASE", passphrase3)],
+        )
+        .success()?;
+    let export_code3 = extract_export_code(&output)
+        .ok_or_else(|| format!("Could not find export code in output: {}", output))?;
+
+    // Carol imports it (fresh config)
     carol
         .exec_with_env(
             &["principal", "import"],
-            &[("ZOPP_EXPORT_PASSPHRASE", passphrase2)],
+            &[
+                ("ZOPP_EXPORT_CODE", &export_code3),
+                ("ZOPP_EXPORT_PASSPHRASE", passphrase3),
+            ],
         )
         .success()?;
 
@@ -794,7 +865,10 @@ async fn run_principals_export_import_test(
     let dan = harness.create_user("dan");
     let result = dan.exec_with_env(
         &["principal", "import"],
-        &[("ZOPP_EXPORT_PASSPHRASE", passphrase2)],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code3),
+            ("ZOPP_EXPORT_PASSPHRASE", passphrase3),
+        ],
     );
     assert!(
         result.failed(),

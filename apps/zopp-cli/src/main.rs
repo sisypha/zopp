@@ -140,10 +140,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .await?;
             }
-            PrincipalCommand::Import { passphrase } => {
+            PrincipalCommand::Import { code, passphrase } => {
                 cmd_principal_import(
                     &cli.server,
                     cli.tls_ca_cert.as_deref(),
+                    code.as_deref(),
                     passphrase.as_deref(),
                 )
                 .await?;

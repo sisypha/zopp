@@ -1,12 +1,14 @@
 //! Principal handlers: get, rename, list, service principals, remove, revoke, export/import
 
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 use zopp_proto::{
-    CreatePrincipalExportRequest, CreatePrincipalExportResponse, EffectivePermissionsResponse,
-    Empty, GetEffectivePermissionsRequest, GetPrincipalExportRequest, GetPrincipalExportResponse,
-    GetPrincipalRequest, ListWorkspaceServicePrincipalsRequest, PrincipalList,
+    ConsumePrincipalExportRequest, CreatePrincipalExportRequest, CreatePrincipalExportResponse,
+    EffectivePermissionsResponse, Empty, GetEffectivePermissionsRequest, GetPrincipalExportRequest,
+    GetPrincipalExportResponse, GetPrincipalRequest, ListWorkspaceServicePrincipalsRequest,
+    PrincipalList, RecordExportFailedAttemptRequest, RecordExportFailedAttemptResponse,
     RemovePrincipalFromWorkspaceRequest, RenamePrincipalRequest,
     RevokeAllPrincipalPermissionsRequest, RevokeAllPrincipalPermissionsResponse,
     ServicePrincipalList,
@@ -586,8 +588,17 @@ pub async fn get_effective_permissions(
     }))
 }
 
-/// Create a principal export for multi-device transfer.
-/// This stores encrypted principal data on the server, keyed by a hash of the passphrase.
+/// Generate a unique export code (8 alphanumeric chars with exp_ prefix).
+fn generate_export_code() -> String {
+    let mut rng = rand::rng();
+    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
+    let code: String = (0..8)
+        .map(|_| chars[rng.random_range(0..chars.len())])
+        .collect();
+    format!("exp_{}", code)
+}
+
+/// This stores encrypted principal data on the server, keyed by a unique export code.
 /// The client derives a key from a passphrase and encrypts the principal locally,
 /// then sends only the encrypted data and hash to the server.
 pub async fn create_principal_export(
@@ -630,10 +641,14 @@ pub async fn create_principal_export(
         ));
     }
 
+    // Generate unique export code
+    let export_code = generate_export_code();
+
     // Create the export record
     let export = server
         .store
         .create_principal_export(&CreatePrincipalExportParams {
+            export_code,
             token_hash: req.token_hash,
             user_id,
             principal_id,
@@ -646,41 +661,106 @@ pub async fn create_principal_export(
         .map_err(|e| Status::internal(format!("Failed to create principal export: {}", e)))?;
 
     Ok(Response::new(CreatePrincipalExportResponse {
-        export_id: export.id.0.to_string(),
+        export_code: export.export_code,
     }))
 }
 
 /// Get a principal export for importing on a new device.
-/// This is unauthenticated - anyone with the correct passphrase hash can retrieve it.
+/// This is unauthenticated - anyone with the export code can retrieve the encrypted data.
 /// The encrypted data can only be decrypted with the original passphrase.
+/// Client verifies passphrase against token_hash before decryption.
 pub async fn get_principal_export(
     server: &ZoppServer,
     request: Request<GetPrincipalExportRequest>,
 ) -> Result<Response<GetPrincipalExportResponse>, Status> {
     let req = request.into_inner();
 
-    // Look up the export by token hash (unauthenticated)
+    // Look up the export by export code (unauthenticated)
     let export = server
         .store
-        .get_principal_export_by_token(&req.token_hash)
+        .get_principal_export_by_code(&req.export_code)
         .await
         .map_err(|e| match e {
             zopp_storage::StoreError::NotFound => Status::not_found("Export not found or expired"),
             _ => Status::internal(format!("Failed to get principal export: {}", e)),
         })?;
 
-    // Mark as consumed (one-time use)
-    server
-        .store
-        .consume_principal_export(&export.id)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to consume principal export: {}", e)))?;
-
+    // Return the data but don't consume yet - client will verify passphrase first
     Ok(Response::new(GetPrincipalExportResponse {
         export_id: export.id.0.to_string(),
+        token_hash: export.token_hash,
         encrypted_data: export.encrypted_data,
         salt: export.salt,
         nonce: export.nonce,
         expires_at: export.expires_at.timestamp(),
+    }))
+}
+
+/// Mark a principal export as consumed after successful import.
+/// This is unauthenticated - called by client after successful decryption.
+pub async fn consume_principal_export(
+    server: &ZoppServer,
+    request: Request<ConsumePrincipalExportRequest>,
+) -> Result<Response<Empty>, Status> {
+    let req = request.into_inner();
+
+    let export_id = uuid::Uuid::try_parse(&req.export_id)
+        .map_err(|_| Status::invalid_argument("Invalid export ID"))?;
+
+    server
+        .store
+        .consume_principal_export(&zopp_storage::PrincipalExportId(export_id))
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => {
+                Status::not_found("Export not found or already consumed")
+            }
+            _ => Status::internal(format!("Failed to consume principal export: {}", e)),
+        })?;
+
+    Ok(Response::new(Empty {}))
+}
+
+/// Record a failed passphrase attempt for an export.
+/// After 3 failed attempts, the export is automatically deleted (self-destruct).
+pub async fn record_export_failed_attempt(
+    server: &ZoppServer,
+    request: Request<RecordExportFailedAttemptRequest>,
+) -> Result<Response<RecordExportFailedAttemptResponse>, Status> {
+    let req = request.into_inner();
+
+    let export_id = uuid::Uuid::try_parse(&req.export_id)
+        .map_err(|_| Status::invalid_argument("Invalid export ID"))?;
+
+    let export_id = zopp_storage::PrincipalExportId(export_id);
+
+    // Increment failed attempts
+    let failed_attempts = server
+        .store
+        .increment_export_failed_attempts(&export_id)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => Status::not_found("Export not found"),
+            _ => Status::internal(format!("Failed to record failed attempt: {}", e)),
+        })?;
+
+    // Self-destruct after 3 failed attempts
+    const MAX_FAILED_ATTEMPTS: i32 = 3;
+    if failed_attempts >= MAX_FAILED_ATTEMPTS {
+        server
+            .store
+            .delete_principal_export(&export_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete export: {}", e)))?;
+
+        return Ok(Response::new(RecordExportFailedAttemptResponse {
+            deleted: true,
+            remaining_attempts: 0,
+        }));
+    }
+
+    Ok(Response::new(RecordExportFailedAttemptResponse {
+        deleted: false,
+        remaining_attempts: MAX_FAILED_ATTEMPTS - failed_attempts,
     }))
 }

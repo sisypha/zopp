@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE principal_exports SET failed_attempts = failed_attempts + 1\n               WHERE id = ?\n               RETURNING failed_attempts as \"failed_attempts!\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "failed_attempts!",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "60962506cb41d09e4cd6c94a7cf91838f0107e05ee8e0768b2d09656b92f7add"
+}

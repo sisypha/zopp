@@ -430,10 +430,11 @@ impl Store for PostgresStore {
         let export_id = uuid::Uuid::now_v7();
 
         let row = sqlx::query!(
-            r#"INSERT INTO principal_exports(id, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
-               VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+            r#"INSERT INTO principal_exports(id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
+               VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
                RETURNING created_at"#,
             export_id,
+            params.export_code,
             params.token_hash,
             params.user_id.0,
             params.principal_id.0,
@@ -448,6 +449,7 @@ impl Store for PostgresStore {
 
         Ok(PrincipalExport {
             id: PrincipalExportId(export_id),
+            export_code: params.export_code.clone(),
             token_hash: params.token_hash.clone(),
             user_id: params.user_id.clone(),
             principal_id: params.principal_id.clone(),
@@ -457,19 +459,20 @@ impl Store for PostgresStore {
             expires_at: params.expires_at,
             created_at: row.created_at,
             consumed: false,
+            failed_attempts: 0,
         })
     }
 
-    async fn get_principal_export_by_token(
+    async fn get_principal_export_by_code(
         &self,
-        token_hash: &str,
+        export_code: &str,
     ) -> Result<PrincipalExport, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, token_hash, user_id, principal_id, encrypted_data, salt, nonce,
-               expires_at, created_at, consumed
+            r#"SELECT id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce,
+               expires_at, created_at, consumed, failed_attempts
                FROM principal_exports
-               WHERE token_hash = $1 AND consumed = FALSE AND expires_at > NOW()"#,
-            token_hash
+               WHERE export_code = $1 AND consumed = FALSE AND expires_at > NOW()"#,
+            export_code
         )
         .fetch_optional(&self.pool)
         .await
@@ -479,6 +482,7 @@ impl Store for PostgresStore {
             None => Err(StoreError::NotFound),
             Some(row) => Ok(PrincipalExport {
                 id: PrincipalExportId(row.id),
+                export_code: row.export_code,
                 token_hash: row.token_hash,
                 user_id: UserId(row.user_id),
                 principal_id: PrincipalId(row.principal_id),
@@ -488,6 +492,7 @@ impl Store for PostgresStore {
                 expires_at: row.expires_at,
                 created_at: row.created_at,
                 consumed: row.consumed,
+                failed_attempts: row.failed_attempts,
             }),
         }
     }
@@ -503,6 +508,42 @@ impl Store for PostgresStore {
         .execute(&self.pool)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn increment_export_failed_attempts(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<i32, StoreError> {
+        let row = sqlx::query!(
+            r#"UPDATE principal_exports SET failed_attempts = failed_attempts + 1
+               WHERE id = $1
+               RETURNING failed_attempts"#,
+            export_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => Ok(row.failed_attempts),
+        }
+    }
+
+    async fn delete_principal_export(
+        &self,
+        export_id: &PrincipalExportId,
+    ) -> Result<(), StoreError> {
+        let result = sqlx::query!("DELETE FROM principal_exports WHERE id = $1", export_id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             Err(StoreError::NotFound)

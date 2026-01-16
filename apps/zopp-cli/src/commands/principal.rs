@@ -5,8 +5,9 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zopp_proto::{
-    CreatePrincipalExportRequest, Empty, GetPrincipalExportRequest, GetWorkspaceKeysRequest,
-    GrantPrincipalWorkspaceAccessRequest, ListWorkspaceServicePrincipalsRequest, RegisterRequest,
+    ConsumePrincipalExportRequest, CreatePrincipalExportRequest, Empty, GetPrincipalExportRequest,
+    GetWorkspaceKeysRequest, GrantPrincipalWorkspaceAccessRequest,
+    ListWorkspaceServicePrincipalsRequest, RecordExportFailedAttemptRequest, RegisterRequest,
     RemovePrincipalFromWorkspaceRequest, RenamePrincipalRequest,
     RevokeAllPrincipalPermissionsRequest, Role,
 };
@@ -539,17 +540,20 @@ pub async fn cmd_principal_export(
         "/zopp.ZoppService/CreatePrincipalExport",
     )?;
 
-    client.create_principal_export(request).await?;
+    let response = client.create_principal_export(request).await?.into_inner();
 
-    // Display passphrase to user
+    // Display export code and passphrase to user
     println!();
     println!("Principal '{}' export created successfully.", name);
     println!();
-    println!("Passphrase (write this down):");
+    println!("Export code:");
+    println!("    {}", response.export_code);
     println!();
+    println!("Passphrase (write this down):");
     println!("    {}", passphrase);
     println!();
     println!("This export expires in {} hours.", expires_hours);
+    println!("After 3 failed passphrase attempts, the export is permanently deleted.");
     println!();
     println!("On your new device, run:");
     println!("    zopp --server {} principal import", server);
@@ -558,32 +562,34 @@ pub async fn cmd_principal_export(
     Ok(())
 }
 
-/// Import a principal from the server using a passphrase.
+/// Import a principal from the server using export code and passphrase.
 ///
-/// Prompts for the passphrase (or accepts it as argument), fetches the
-/// encrypted principal data from the server, decrypts it, and adds it
-/// to the local configuration.
+/// Prompts for export code first, then passphrase. Fetches the encrypted
+/// principal data from the server, verifies passphrase, decrypts it, and
+/// adds it to the local configuration.
 pub async fn cmd_principal_import(
     server: &str,
     tls_ca_cert: Option<&std::path::Path>,
+    export_code_arg: Option<&str>,
     passphrase_arg: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Get passphrase from arg, env (for testing), or prompt
-    let passphrase = if let Some(p) = passphrase_arg {
-        p.to_string()
-    } else if let Ok(p) = std::env::var("ZOPP_EXPORT_PASSPHRASE") {
-        p
+    // Get export code from arg, env (for testing), or prompt
+    let export_code = if let Some(c) = export_code_arg {
+        c.to_string()
+    } else if let Ok(c) = std::env::var("ZOPP_EXPORT_CODE") {
+        c
     } else {
-        rpassword::prompt_password("Enter passphrase from export: ")?
+        print!("Enter export code: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+        let mut code = String::new();
+        std::io::stdin().read_line(&mut code)?;
+        code.trim().to_string()
     };
 
-    // Compute token_hash = hex(SHA256(passphrase)) for server lookup
-    let token_hash = hex::encode(Sha256::digest(passphrase.as_bytes()));
-
-    // Fetch from server (unauthenticated - anyone with passphrase can retrieve)
+    // Fetch from server by export code (unauthenticated)
     let mut client = connect(server, tls_ca_cert).await?;
     let request = tonic::Request::new(GetPrincipalExportRequest {
-        token_hash: token_hash.clone(),
+        export_code: export_code.clone(),
     });
 
     let response = client
@@ -591,12 +597,49 @@ pub async fn cmd_principal_import(
         .await
         .map_err(|e| {
             if e.code() == tonic::Code::NotFound {
-                "Export not found - invalid passphrase or expired".into()
+                "Export not found - invalid code or expired".into()
             } else {
                 format!("Failed to retrieve export: {}", e)
             }
         })?
         .into_inner();
+
+    // Get passphrase from arg, env (for testing), or prompt
+    let passphrase = if let Some(p) = passphrase_arg {
+        p.to_string()
+    } else if let Ok(p) = std::env::var("ZOPP_EXPORT_PASSPHRASE") {
+        p
+    } else {
+        rpassword::prompt_password("Enter passphrase: ")?
+    };
+
+    // Verify passphrase against token_hash before attempting decryption
+    let computed_hash = hex::encode(Sha256::digest(passphrase.as_bytes()));
+    if computed_hash != response.token_hash {
+        // Report failed attempt to server
+        let fail_request = tonic::Request::new(RecordExportFailedAttemptRequest {
+            export_id: response.export_id.clone(),
+        });
+        match client.record_export_failed_attempt(fail_request).await {
+            Ok(resp) => {
+                let resp = resp.into_inner();
+                if resp.deleted {
+                    return Err(
+                        "Incorrect passphrase. Export deleted after 3 failed attempts.".into(),
+                    );
+                } else {
+                    return Err(format!(
+                        "Incorrect passphrase. {} attempt(s) remaining before export is deleted.",
+                        resp.remaining_attempts
+                    )
+                    .into());
+                }
+            }
+            Err(_) => {
+                return Err("Incorrect passphrase".into());
+            }
+        }
+    }
 
     // Derive key and decrypt
     let key = derive_export_key(&passphrase, &response.salt)?;
@@ -620,6 +663,15 @@ pub async fn cmd_principal_import(
     if export.version != 1 {
         return Err(format!("Unsupported export version: {}", export.version).into());
     }
+
+    // Mark export as consumed (one-time use)
+    let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
+        export_id: response.export_id.clone(),
+    });
+    client
+        .consume_principal_export(consume_request)
+        .await
+        .map_err(|e| format!("Failed to consume export: {}", e))?;
 
     // Load or create config
     let mut config = match load_config() {

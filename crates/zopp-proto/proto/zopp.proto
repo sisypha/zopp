@@ -30,6 +30,8 @@ service ZoppService {
   // Principal Export/Import (multi-device support)
   rpc CreatePrincipalExport(CreatePrincipalExportRequest) returns (CreatePrincipalExportResponse);
   rpc GetPrincipalExport(GetPrincipalExportRequest) returns (GetPrincipalExportResponse);
+  rpc ConsumePrincipalExport(ConsumePrincipalExportRequest) returns (Empty);
+  rpc RecordExportFailedAttempt(RecordExportFailedAttemptRequest) returns (RecordExportFailedAttemptResponse);
 
   // Projects
   rpc CreateProject(CreateProjectRequest) returns (Project);
@@ -300,7 +302,7 @@ message RevokeAllPrincipalPermissionsResponse {
 
 // Principal Export/Import messages (multi-device support)
 message CreatePrincipalExportRequest {
-  string token_hash = 1;        // SHA256(passphrase-derived secret), for server lookup
+  string token_hash = 1;        // SHA256(passphrase) for verification
   bytes encrypted_data = 2;     // Principal data encrypted with passphrase-derived key
   bytes salt = 3;               // Argon2id salt for key derivation
   bytes nonce = 4;              // XChaCha20-Poly1305 nonce
@@ -308,19 +310,33 @@ message CreatePrincipalExportRequest {
 }
 
 message CreatePrincipalExportResponse {
-  string export_id = 1;
+  string export_code = 1;       // Public code for lookup (e.g., "exp_a7k9m2x4")
 }
 
 message GetPrincipalExportRequest {
-  string token_hash = 1;        // SHA256(passphrase-derived secret)
+  string export_code = 1;       // Public code for lookup
 }
 
 message GetPrincipalExportResponse {
   string export_id = 1;
-  bytes encrypted_data = 2;     // Principal data encrypted with passphrase-derived key
-  bytes salt = 3;               // Argon2id salt for key derivation
-  bytes nonce = 4;              // XChaCha20-Poly1305 nonce
-  int64 expires_at = 5;         // Unix timestamp for expiration
+  string token_hash = 2;        // SHA256(passphrase) for client-side verification
+  bytes encrypted_data = 3;     // Principal data encrypted with passphrase-derived key
+  bytes salt = 4;               // Argon2id salt for key derivation
+  bytes nonce = 5;              // XChaCha20-Poly1305 nonce
+  int64 expires_at = 6;         // Unix timestamp for expiration
+}
+
+message ConsumePrincipalExportRequest {
+  string export_id = 1;
+}
+
+message RecordExportFailedAttemptRequest {
+  string export_id = 1;
+}
+
+message RecordExportFailedAttemptResponse {
+  bool deleted = 1;             // True if export was deleted (3 failed attempts)
+  int32 remaining_attempts = 2; // Remaining attempts (0 if deleted)
 }
 
 // Project messages
