@@ -698,7 +698,12 @@ pub async fn get_principal_export(
         // Self-destruct after 3 failed attempts
         const MAX_FAILED_ATTEMPTS: i32 = 3;
         if failed_attempts >= MAX_FAILED_ATTEMPTS {
-            let _ = server.store.delete_principal_export(&export.id).await;
+            if let Err(e) = server.store.delete_principal_export(&export.id).await {
+                eprintln!(
+                    "ERROR: Failed to delete principal export {} after max failed attempts: {}",
+                    export.id.0, e
+                );
+            }
             return Err(Status::permission_denied(
                 "Incorrect passphrase. Export deleted after 3 failed attempts.",
             ));

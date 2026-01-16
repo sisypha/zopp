@@ -644,15 +644,6 @@ pub async fn cmd_principal_import(
         return Err(format!("Unsupported export version: {}", export.version).into());
     }
 
-    // Mark export as consumed (one-time use)
-    let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
-        export_id: response.export_id.clone(),
-    });
-    client
-        .consume_principal_export(consume_request)
-        .await
-        .map_err(|e| format!("Failed to consume export: {}", e))?;
-
     // Load or create config
     let mut config = match load_config() {
         Ok(c) => c,
@@ -719,6 +710,17 @@ pub async fn cmd_principal_import(
     }
 
     save_config(&config)?;
+
+    // Mark export as consumed (one-time use) - done after saving config
+    // so the user doesn't lose data if consume succeeds but save fails
+    let consume_request = tonic::Request::new(ConsumePrincipalExportRequest {
+        export_id: response.export_id.clone(),
+    });
+    if let Err(e) = client.consume_principal_export(consume_request).await {
+        // Export may have been consumed by another import or expired - that's okay
+        // since we already have the data saved locally
+        eprintln!("Warning: Could not mark export as consumed: {}", e);
+    }
 
     println!("Principal '{}' imported successfully.", final_name);
     println!();
