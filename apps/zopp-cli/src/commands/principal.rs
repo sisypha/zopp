@@ -3,7 +3,6 @@ use crate::grpc::{add_auth_metadata, connect};
 use ed25519_dalek::SigningKey;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use zopp_proto::{
     ConsumePrincipalExportRequest, CreatePrincipalExportRequest, Empty, GetPrincipalExportRequest,
     GetWorkspaceKeysRequest, GrantPrincipalWorkspaceAccessRequest,
@@ -487,8 +486,14 @@ pub async fn cmd_principal_export(
         crate::passphrase::generate_passphrase(6)
     };
 
-    // Compute token_hash = hex(SHA256(passphrase)) for server lookup
-    let token_hash = hex::encode(Sha256::digest(passphrase.as_bytes()));
+    // Generate verification_salt for Argon2id passphrase verification
+    // This is separate from the encryption salt for defense-in-depth
+    let mut verification_salt = [0u8; 16];
+    rand_core::OsRng.fill_bytes(&mut verification_salt);
+
+    // Compute token_hash = hex(Argon2id(passphrase, verification_salt)) for server verification
+    // Using Argon2id makes offline brute-force infeasible if DB is compromised
+    let token_hash = compute_verification_hash(&passphrase, &verification_salt)?;
 
     // Create export structure
     let export = ExportedPrincipal {
@@ -527,7 +532,8 @@ pub async fn cmd_principal_export(
     // Upload to server
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(CreatePrincipalExportRequest {
-        token_hash: token_hash.clone(),
+        token_hash,
+        verification_salt: verification_salt.to_vec(),
         encrypted_data: ciphertext.0,
         salt: salt.to_vec(),
         nonce: nonce.0.to_vec(),
@@ -563,9 +569,11 @@ pub async fn cmd_principal_export(
 
 /// Import a principal from the server using export code and passphrase.
 ///
-/// Prompts for export code first, then passphrase. Server verifies both
-/// before returning encrypted data (prevents offline brute-force).
-/// Then decrypts and adds to local configuration.
+/// Two-phase protocol:
+/// 1. Send export_code to get verification_salt
+/// 2. Compute Argon2id(passphrase, verification_salt), send for verification
+///
+/// This prevents offline brute-force - encrypted data only returned after server verification.
 pub async fn cmd_principal_import(
     server: &str,
     tls_ca_cert: Option<&std::path::Path>,
@@ -585,6 +593,31 @@ pub async fn cmd_principal_import(
         code.trim().to_string()
     };
 
+    let mut client = connect(server, tls_ca_cert).await?;
+
+    // Phase 1: Get verification_salt from server (send empty token_hash)
+    let phase1_request = tonic::Request::new(GetPrincipalExportRequest {
+        export_code: export_code.clone(),
+        token_hash: String::new(), // Empty = request verification_salt only
+    });
+
+    let phase1_response = client
+        .get_principal_export(phase1_request)
+        .await
+        .map_err(|e| {
+            if e.code() == tonic::Code::NotFound {
+                "Export not found - invalid code or expired".to_string()
+            } else {
+                format!("Failed to retrieve export: {}", e)
+            }
+        })?
+        .into_inner();
+
+    let verification_salt = phase1_response.verification_salt;
+    if verification_salt.len() != 16 {
+        return Err("Invalid verification salt from server".into());
+    }
+
     // Get passphrase from arg, env (for testing), or prompt
     let passphrase = if let Some(p) = passphrase_arg {
         p.to_string()
@@ -594,20 +627,17 @@ pub async fn cmd_principal_import(
         rpassword::prompt_password("Enter passphrase: ")?
     };
 
-    // Compute token_hash to send to server for verification
-    // Server verifies BOTH export_code AND token_hash before returning data
-    // This prevents offline brute-force - you can't get encrypted data without knowing passphrase
-    let token_hash = hex::encode(Sha256::digest(passphrase.as_bytes()));
+    // Phase 2: Compute Argon2id hash and send for verification
+    // Server verifies the hash before returning encrypted data
+    let token_hash = compute_verification_hash(&passphrase, &verification_salt)?;
 
-    // Fetch from server - requires both export_code and correct token_hash
-    let mut client = connect(server, tls_ca_cert).await?;
-    let request = tonic::Request::new(GetPrincipalExportRequest {
+    let phase2_request = tonic::Request::new(GetPrincipalExportRequest {
         export_code: export_code.clone(),
         token_hash,
     });
 
     let response = client
-        .get_principal_export(request)
+        .get_principal_export(phase2_request)
         .await
         .map_err(|e| {
             if e.code() == tonic::Code::NotFound {
@@ -773,4 +803,26 @@ fn derive_export_key(
         .map_err(|e| format!("Key derivation failed: {}", e))?;
 
     Ok(key)
+}
+
+/// Compute Argon2id verification hash for passphrase
+/// Returns hex-encoded 32-byte hash for server verification
+fn compute_verification_hash(
+    passphrase: &str,
+    verification_salt: &[u8],
+) -> Result<String, Box<dyn std::error::Error>> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+
+    // Use lighter params for verification (still secure, but faster than encryption KDF)
+    // 64 MiB memory, 3 iterations - same as derive_export_key for consistency
+    let params =
+        Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let mut hash = [0u8; 32];
+    argon2
+        .hash_password_into(passphrase.as_bytes(), verification_salt, &mut hash)
+        .map_err(|e| format!("Hash computation failed: {}", e))?;
+
+    Ok(hex::encode(hash))
 }

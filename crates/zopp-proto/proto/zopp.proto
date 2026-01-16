@@ -302,11 +302,12 @@ message RevokeAllPrincipalPermissionsResponse {
 
 // Principal Export/Import messages (multi-device support)
 message CreatePrincipalExportRequest {
-  string token_hash = 1;        // SHA256(passphrase) for verification
-  bytes encrypted_data = 2;     // Principal data encrypted with passphrase-derived key
-  bytes salt = 3;               // Argon2id salt for key derivation
-  bytes nonce = 4;              // XChaCha20-Poly1305 nonce
-  int64 expires_at = 5;         // Unix timestamp for expiration
+  string token_hash = 1;        // Argon2id(passphrase, verification_salt) for verification
+  bytes verification_salt = 2;  // Salt for passphrase verification (separate from encryption)
+  bytes encrypted_data = 3;     // Principal data encrypted with passphrase-derived key
+  bytes salt = 4;               // Argon2id salt for encryption key derivation
+  bytes nonce = 5;              // XChaCha20-Poly1305 nonce
+  int64 expires_at = 6;         // Unix timestamp for expiration
 }
 
 message CreatePrincipalExportResponse {
@@ -315,15 +316,16 @@ message CreatePrincipalExportResponse {
 
 message GetPrincipalExportRequest {
   string export_code = 1;       // Public code for lookup
-  string token_hash = 2;        // SHA256(passphrase) - server verifies before returning data
+  string token_hash = 2;        // Argon2id(passphrase, verification_salt) - empty for first request to get salt
 }
 
 message GetPrincipalExportResponse {
-  string export_id = 1;
-  bytes encrypted_data = 2;     // Principal data encrypted with passphrase-derived key
-  bytes salt = 3;               // Argon2id salt for key derivation
-  bytes nonce = 4;              // XChaCha20-Poly1305 nonce
-  int64 expires_at = 5;         // Unix timestamp for expiration
+  string export_id = 1;         // Empty if only returning verification_salt
+  bytes verification_salt = 2;  // Salt for passphrase verification (always returned)
+  bytes encrypted_data = 3;     // Principal data encrypted with passphrase-derived key (only if verified)
+  bytes salt = 4;               // Argon2id salt for encryption key derivation (only if verified)
+  bytes nonce = 5;              // XChaCha20-Poly1305 nonce (only if verified)
+  int64 expires_at = 6;         // Unix timestamp for expiration
 }
 
 message ConsumePrincipalExportRequest {

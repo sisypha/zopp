@@ -430,12 +430,13 @@ impl Store for PostgresStore {
         let export_id = uuid::Uuid::now_v7();
 
         let row = sqlx::query!(
-            r#"INSERT INTO principal_exports(id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
-               VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            r#"INSERT INTO principal_exports(id, export_code, token_hash, verification_salt, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
+               VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                RETURNING created_at"#,
             export_id,
             params.export_code,
             params.token_hash,
+            &params.verification_salt,
             params.user_id.0,
             params.principal_id.0,
             &params.encrypted_data,
@@ -451,6 +452,7 @@ impl Store for PostgresStore {
             id: PrincipalExportId(export_id),
             export_code: params.export_code.clone(),
             token_hash: params.token_hash.clone(),
+            verification_salt: params.verification_salt.clone(),
             user_id: params.user_id.clone(),
             principal_id: params.principal_id.clone(),
             encrypted_data: params.encrypted_data.clone(),
@@ -468,7 +470,7 @@ impl Store for PostgresStore {
         export_code: &str,
     ) -> Result<PrincipalExport, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce,
+            r#"SELECT id, export_code, token_hash, verification_salt, user_id, principal_id, encrypted_data, salt, nonce,
                expires_at, created_at, consumed, failed_attempts
                FROM principal_exports
                WHERE export_code = $1 AND consumed = FALSE AND expires_at > NOW() AND failed_attempts < 3"#,
@@ -484,6 +486,7 @@ impl Store for PostgresStore {
                 id: PrincipalExportId(row.id),
                 export_code: row.export_code,
                 token_hash: row.token_hash,
+                verification_salt: row.verification_salt,
                 user_id: UserId(row.user_id),
                 principal_id: PrincipalId(row.principal_id),
                 encrypted_data: row.encrypted_data,

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!\", export_code as \"export_code!\", token_hash as \"token_hash!\",\n               user_id as \"user_id!\", principal_id as \"principal_id!\",\n               encrypted_data as \"encrypted_data!\", salt as \"salt!\", nonce as \"nonce!\",\n               expires_at as \"expires_at!: DateTime<Utc>\",\n               created_at as \"created_at!: DateTime<Utc>\",\n               consumed as \"consumed!\", failed_attempts as \"failed_attempts!\"\n               FROM principal_exports\n               WHERE export_code = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP AND failed_attempts < 3",
+  "query": "SELECT id as \"id!\", export_code as \"export_code!\", token_hash as \"token_hash!\",\n               verification_salt as \"verification_salt!\", user_id as \"user_id!\", principal_id as \"principal_id!\",\n               encrypted_data as \"encrypted_data!\", salt as \"salt!\", nonce as \"nonce!\",\n               expires_at as \"expires_at!: DateTime<Utc>\",\n               created_at as \"created_at!: DateTime<Utc>\",\n               consumed as \"consumed!\", failed_attempts as \"failed_attempts!\"\n               FROM principal_exports\n               WHERE export_code = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP AND failed_attempts < 3",
   "describe": {
     "columns": [
       {
@@ -19,48 +19,53 @@
         "type_info": "Text"
       },
       {
-        "name": "user_id!",
+        "name": "verification_salt!",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Blob"
       },
       {
-        "name": "principal_id!",
+        "name": "user_id!",
         "ordinal": 4,
         "type_info": "Text"
       },
       {
-        "name": "encrypted_data!",
+        "name": "principal_id!",
         "ordinal": 5,
-        "type_info": "Blob"
+        "type_info": "Text"
       },
       {
-        "name": "salt!",
+        "name": "encrypted_data!",
         "ordinal": 6,
         "type_info": "Blob"
       },
       {
-        "name": "nonce!",
+        "name": "salt!",
         "ordinal": 7,
         "type_info": "Blob"
       },
       {
-        "name": "expires_at!: DateTime<Utc>",
+        "name": "nonce!",
         "ordinal": 8,
-        "type_info": "Text"
+        "type_info": "Blob"
       },
       {
-        "name": "created_at!: DateTime<Utc>",
+        "name": "expires_at!: DateTime<Utc>",
         "ordinal": 9,
         "type_info": "Text"
       },
       {
-        "name": "consumed!",
+        "name": "created_at!: DateTime<Utc>",
         "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "consumed!",
+        "ordinal": 11,
         "type_info": "Bool"
       },
       {
         "name": "failed_attempts!",
-        "ordinal": 11,
+        "ordinal": 12,
         "type_info": "Integer"
       }
     ],
@@ -71,6 +76,7 @@
       true,
       true,
       false,
+      true,
       false,
       false,
       false,
@@ -82,5 +88,5 @@
       false
     ]
   },
-  "hash": "bd1b40d699d8adef2816a0e9ae1124ed5cc404539c605eeaaef882957ad804f7"
+  "hash": "4177f00b188423c45d61d81bd3e771ab8a347209aadcb289da9bddbde2bcff97"
 }

@@ -625,6 +625,13 @@ pub async fn create_principal_export(
 
     let req = request.into_inner();
 
+    // Validate verification_salt
+    if req.verification_salt.len() != 16 {
+        return Err(Status::invalid_argument(
+            "verification_salt must be 16 bytes",
+        ));
+    }
+
     // Validate the expiration timestamp
     let expires_at = DateTime::<Utc>::from_timestamp(req.expires_at, 0)
         .ok_or_else(|| Status::invalid_argument("Invalid expiration timestamp"))?;
@@ -650,6 +657,7 @@ pub async fn create_principal_export(
         .create_principal_export(&CreatePrincipalExportParams {
             export_code,
             token_hash: req.token_hash,
+            verification_salt: req.verification_salt,
             user_id,
             principal_id,
             encrypted_data: req.encrypted_data,
@@ -666,9 +674,12 @@ pub async fn create_principal_export(
 }
 
 /// Get a principal export for importing on a new device.
-/// Requires both export_code AND correct token_hash (SHA256 of passphrase).
-/// This prevents offline brute-force attacks - encrypted data is only returned
-/// if you already know the passphrase.
+///
+/// Two-phase protocol:
+/// - Phase 1: Client sends export_code only (empty token_hash) -> returns verification_salt
+/// - Phase 2: Client sends export_code + Argon2id(passphrase, verification_salt) -> returns encrypted data
+///
+/// This prevents offline brute-force - encrypted data is only returned if passphrase is verified server-side.
 pub async fn get_principal_export(
     server: &ZoppServer,
     request: Request<GetPrincipalExportRequest>,
@@ -685,9 +696,22 @@ pub async fn get_principal_export(
             _ => Status::internal(format!("Failed to get principal export: {}", e)),
         })?;
 
-    // Verify token_hash matches - this prevents offline brute-force attacks
-    // because encrypted data is only returned if you already know the passphrase
-    if export.token_hash != req.token_hash {
+    // Phase 1: If token_hash is empty, return only verification_salt
+    // Client needs this to compute Argon2id(passphrase, verification_salt)
+    if req.token_hash.is_empty() {
+        return Ok(Response::new(GetPrincipalExportResponse {
+            export_id: String::new(), // Empty indicates phase 1 response
+            verification_salt: export.verification_salt,
+            encrypted_data: Vec::new(),
+            salt: Vec::new(),
+            nonce: Vec::new(),
+            expires_at: export.expires_at.timestamp(),
+        }));
+    }
+
+    // Phase 2: Verify token_hash matches stored Argon2id hash
+    // This is a constant-time comparison to prevent timing attacks
+    if !constant_time_eq(export.token_hash.as_bytes(), req.token_hash.as_bytes()) {
         // Increment failed attempts
         let failed_attempts = server
             .store
@@ -718,11 +742,23 @@ pub async fn get_principal_export(
     // Both export_code and token_hash verified - return encrypted data
     Ok(Response::new(GetPrincipalExportResponse {
         export_id: export.id.0.to_string(),
+        verification_salt: export.verification_salt,
         encrypted_data: export.encrypted_data,
         salt: export.salt,
         nonce: export.nonce,
         expires_at: export.expires_at.timestamp(),
     }))
+}
+
+/// Constant-time byte comparison to prevent timing attacks
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// Mark a principal export as consumed after successful import.

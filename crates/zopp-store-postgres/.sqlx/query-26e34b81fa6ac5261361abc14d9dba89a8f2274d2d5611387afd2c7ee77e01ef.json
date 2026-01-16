@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO principal_exports(id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)\n               VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)\n               RETURNING created_at",
+  "query": "INSERT INTO principal_exports(id, export_code, token_hash, verification_salt, user_id, principal_id, encrypted_data, salt, nonce, expires_at)\n               VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n               RETURNING created_at",
   "describe": {
     "columns": [
       {
@@ -14,6 +14,7 @@
         "Uuid",
         "Text",
         "Text",
+        "Bytea",
         "Uuid",
         "Uuid",
         "Bytea",
@@ -26,5 +27,5 @@
       false
     ]
   },
-  "hash": "b3d2a0903e78b65141584eb28b63dedae9749829ae2211a120fe7022fdc60bd7"
+  "hash": "26e34b81fa6ac5261361abc14d9dba89a8f2274d2d5611387afd2c7ee77e01ef"
 }

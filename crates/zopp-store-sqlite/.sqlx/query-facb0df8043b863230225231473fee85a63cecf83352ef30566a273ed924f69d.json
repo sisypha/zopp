@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO principal_exports(id, export_code, token_hash, verification_salt, user_id, principal_id, encrypted_data, salt, nonce, expires_at)\n               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n               RETURNING created_at as \"created_at: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "facb0df8043b863230225231473fee85a63cecf83352ef30566a273ed924f69d"
+}

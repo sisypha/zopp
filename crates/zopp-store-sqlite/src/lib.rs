@@ -570,12 +570,13 @@ impl Store for SqliteStore {
         let principal_id_str = params.principal_id.0.to_string();
 
         let row = sqlx::query!(
-            r#"INSERT INTO principal_exports(id, export_code, token_hash, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
-               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            r#"INSERT INTO principal_exports(id, export_code, token_hash, verification_salt, user_id, principal_id, encrypted_data, salt, nonce, expires_at)
+               VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                RETURNING created_at as "created_at: DateTime<Utc>""#,
             export_id_str,
             params.export_code,
             params.token_hash,
+            params.verification_salt,
             user_id_str,
             principal_id_str,
             params.encrypted_data,
@@ -591,6 +592,7 @@ impl Store for SqliteStore {
             id: PrincipalExportId(export_id),
             export_code: params.export_code.clone(),
             token_hash: params.token_hash.clone(),
+            verification_salt: params.verification_salt.clone(),
             user_id: params.user_id.clone(),
             principal_id: params.principal_id.clone(),
             encrypted_data: params.encrypted_data.clone(),
@@ -609,7 +611,7 @@ impl Store for SqliteStore {
     ) -> Result<PrincipalExport, StoreError> {
         let row = sqlx::query!(
             r#"SELECT id as "id!", export_code as "export_code!", token_hash as "token_hash!",
-               user_id as "user_id!", principal_id as "principal_id!",
+               verification_salt as "verification_salt!", user_id as "user_id!", principal_id as "principal_id!",
                encrypted_data as "encrypted_data!", salt as "salt!", nonce as "nonce!",
                expires_at as "expires_at!: DateTime<Utc>",
                created_at as "created_at!: DateTime<Utc>",
@@ -636,6 +638,7 @@ impl Store for SqliteStore {
                     id: PrincipalExportId(id),
                     export_code: row.export_code,
                     token_hash: row.token_hash,
+                    verification_salt: row.verification_salt,
                     user_id: UserId(user_id),
                     principal_id: PrincipalId(principal_id),
                     encrypted_data: row.encrypted_data,

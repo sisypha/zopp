@@ -384,11 +384,12 @@ pub struct Environment {
 pub struct PrincipalExport {
     pub id: PrincipalExportId,
     pub export_code: String, // Public identifier for lookup (e.g., "exp_a7k9m2x4")
-    pub token_hash: String,  // SHA256(passphrase) for verification
+    pub token_hash: String,  // Argon2id(passphrase, verification_salt) for verification
+    pub verification_salt: Vec<u8>, // Salt for passphrase verification (separate from encryption)
     pub user_id: UserId,
     pub principal_id: PrincipalId,
     pub encrypted_data: Vec<u8>, // Encrypted principal JSON
-    pub salt: Vec<u8>,           // Argon2id salt
+    pub salt: Vec<u8>,           // Argon2id salt for encryption key derivation
     pub nonce: Vec<u8>,          // XChaCha20-Poly1305 nonce
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -400,11 +401,12 @@ pub struct PrincipalExport {
 #[derive(Clone, Debug)]
 pub struct CreatePrincipalExportParams {
     pub export_code: String, // Public identifier for lookup (e.g., "exp_a7k9m2x4")
-    pub token_hash: String,  // SHA256(passphrase) for verification
+    pub token_hash: String,  // Argon2id(passphrase, verification_salt) for verification
+    pub verification_salt: Vec<u8>, // Salt for passphrase verification (separate from encryption)
     pub user_id: UserId,
     pub principal_id: PrincipalId,
     pub encrypted_data: Vec<u8>, // Encrypted principal JSON
-    pub salt: Vec<u8>,           // Argon2id salt
+    pub salt: Vec<u8>,           // Argon2id salt for encryption key derivation
     pub nonce: Vec<u8>,          // XChaCha20-Poly1305 nonce
     pub expires_at: DateTime<Utc>,
 }
@@ -1062,6 +1064,7 @@ mod tests {
                 id: PrincipalExportId(Uuid::new_v4()),
                 export_code: params.export_code.clone(),
                 token_hash: params.token_hash.clone(),
+                verification_salt: params.verification_salt.clone(),
                 user_id: params.user_id.clone(),
                 principal_id: params.principal_id.clone(),
                 encrypted_data: params.encrypted_data.clone(),
