@@ -12,10 +12,12 @@ pub struct CliConfig {
 pub struct PrincipalConfig {
     pub id: String,
     pub name: String,
-    pub user_id: String,
-    pub email: String,
-    pub private_key: String, // Ed25519 private key (hex-encoded)
-    pub public_key: String,  // Ed25519 public key (hex-encoded)
+    #[serde(default)]
+    pub user_id: Option<String>, // Only for human principals (CLI users)
+    #[serde(default)]
+    pub email: Option<String>, // Only for human principals (CLI users)
+    pub private_key: String,   // Ed25519 private key (hex-encoded)
+    pub public_key: String,    // Ed25519 public key (hex-encoded)
     #[serde(default)]
     pub x25519_private_key: Option<String>, // X25519 private key (hex-encoded)
     #[serde(default)]
@@ -67,8 +69,8 @@ mod tests {
         PrincipalConfig {
             id: id.to_string(),
             name: name.to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "a".repeat(64), // 32 bytes hex
             public_key: "b".repeat(64),
             x25519_private_key: None,
@@ -160,7 +162,28 @@ mod tests {
 
     #[test]
     fn test_cli_config_deserialization_missing_optional() {
-        // Test that optional fields default correctly when missing
+        // Test that optional fields default correctly when missing (service principal)
+        let json = r#"{
+            "principals": [{
+                "id": "p1",
+                "name": "service-principal",
+                "private_key": "abcd",
+                "public_key": "efgh"
+            }]
+        }"#;
+
+        let config: CliConfig = serde_json::from_str(json).unwrap();
+        assert!(config.current_principal.is_none());
+        // Service principals don't have user_id/email
+        assert!(config.principals[0].user_id.is_none());
+        assert!(config.principals[0].email.is_none());
+        assert!(config.principals[0].x25519_private_key.is_none());
+        assert!(config.principals[0].x25519_public_key.is_none());
+    }
+
+    #[test]
+    fn test_cli_config_deserialization_with_user_identity() {
+        // Test that user identity fields are parsed correctly (human principal)
         let json = r#"{
             "principals": [{
                 "id": "p1",
@@ -173,9 +196,11 @@ mod tests {
         }"#;
 
         let config: CliConfig = serde_json::from_str(json).unwrap();
-        assert!(config.current_principal.is_none());
-        assert!(config.principals[0].x25519_private_key.is_none());
-        assert!(config.principals[0].x25519_public_key.is_none());
+        assert_eq!(config.principals[0].user_id, Some("user-123".to_string()));
+        assert_eq!(
+            config.principals[0].email,
+            Some("test@example.com".to_string())
+        );
     }
 
     #[test]
@@ -192,8 +217,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "device1".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "a".repeat(64),
             public_key: "b".repeat(64),
             x25519_private_key: Some("c".repeat(64)),

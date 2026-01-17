@@ -29,10 +29,12 @@ pub struct CliConfig {
 pub struct PrincipalConfig {
     pub id: String,
     pub name: String,
-    pub user_id: String,
-    pub email: String,
-    pub private_key: String, // Ed25519 private key (hex-encoded)
-    pub public_key: String,  // Ed25519 public key (hex-encoded)
+    #[serde(default)]
+    pub user_id: Option<String>, // Only for human principals (CLI users)
+    #[serde(default)]
+    pub email: Option<String>, // Only for human principals (CLI users)
+    pub private_key: String,   // Ed25519 private key (hex-encoded)
+    pub public_key: String,    // Ed25519 public key (hex-encoded)
     #[serde(default)]
     pub x25519_private_key: Option<String>, // X25519 private key (hex-encoded)
     #[serde(default)]
@@ -165,8 +167,8 @@ mod tests {
             principals: vec![PrincipalConfig {
                 id: "principal-123".to_string(),
                 name: "test-device".to_string(),
-                user_id: "user-123".to_string(),
-                email: "test@example.com".to_string(),
+                user_id: Some("user-123".to_string()),
+                email: Some("test@example.com".to_string()),
                 private_key: "abcd1234".to_string(),
                 public_key: "efgh5678".to_string(),
                 x25519_private_key: Some("x25519priv".to_string()),
@@ -190,8 +192,8 @@ mod tests {
                 PrincipalConfig {
                     id: "p1".to_string(),
                     name: "device1".to_string(),
-                    user_id: "user-123".to_string(),
-                    email: "test@example.com".to_string(),
+                    user_id: Some("user-123".to_string()),
+                    email: Some("test@example.com".to_string()),
                     private_key: "key1".to_string(),
                     public_key: "pub1".to_string(),
                     x25519_private_key: None,
@@ -200,8 +202,8 @@ mod tests {
                 PrincipalConfig {
                     id: "p2".to_string(),
                     name: "device2".to_string(),
-                    user_id: "user-123".to_string(),
-                    email: "test@example.com".to_string(),
+                    user_id: Some("user-123".to_string()),
+                    email: Some("test@example.com".to_string()),
                     private_key: "key2".to_string(),
                     public_key: "pub2".to_string(),
                     x25519_private_key: None,
@@ -223,8 +225,8 @@ mod tests {
                 PrincipalConfig {
                     id: "p1".to_string(),
                     name: "device1".to_string(),
-                    user_id: "user-123".to_string(),
-                    email: "test@example.com".to_string(),
+                    user_id: Some("user-123".to_string()),
+                    email: Some("test@example.com".to_string()),
                     private_key: "key1".to_string(),
                     public_key: "pub1".to_string(),
                     x25519_private_key: None,
@@ -233,8 +235,8 @@ mod tests {
                 PrincipalConfig {
                     id: "p2".to_string(),
                     name: "device2".to_string(),
-                    user_id: "user-123".to_string(),
-                    email: "test@example.com".to_string(),
+                    user_id: Some("user-123".to_string()),
+                    email: Some("test@example.com".to_string()),
                     private_key: "key2".to_string(),
                     public_key: "pub2".to_string(),
                     x25519_private_key: None,
@@ -267,8 +269,8 @@ mod tests {
             principals: vec![PrincipalConfig {
                 id: "p1".to_string(),
                 name: "device1".to_string(),
-                user_id: "user-123".to_string(),
-                email: "test@example.com".to_string(),
+                user_id: Some("user-123".to_string()),
+                email: Some("test@example.com".to_string()),
                 private_key: "key1".to_string(),
                 public_key: "pub1".to_string(),
                 x25519_private_key: None,
@@ -288,8 +290,8 @@ mod tests {
                 PrincipalConfig {
                     id: "p1".to_string(),
                     name: "device1".to_string(),
-                    user_id: "user-123".to_string(),
-                    email: "test@example.com".to_string(),
+                    user_id: Some("user-123".to_string()),
+                    email: Some("test@example.com".to_string()),
                     private_key: "key1".to_string(),
                     public_key: "pub1".to_string(),
                     x25519_private_key: None,
@@ -298,8 +300,8 @@ mod tests {
                 PrincipalConfig {
                     id: "p2".to_string(),
                     name: "device2".to_string(),
-                    user_id: "user-123".to_string(),
-                    email: "test@example.com".to_string(),
+                    user_id: Some("user-123".to_string()),
+                    email: Some("test@example.com".to_string()),
                     private_key: "key2".to_string(),
                     public_key: "pub2".to_string(),
                     x25519_private_key: None,
@@ -335,8 +337,8 @@ mod tests {
             principals: vec![PrincipalConfig {
                 id: "p1".to_string(),
                 name: "laptop".to_string(),
-                user_id: "user-456".to_string(),
-                email: "test@example.com".to_string(),
+                user_id: Some("user-456".to_string()),
+                email: Some("test@example.com".to_string()),
                 private_key: "aabbccdd".to_string(),
                 public_key: "11223344".to_string(),
                 x25519_private_key: Some("x25519priv".to_string()),
@@ -354,8 +356,14 @@ mod tests {
         .unwrap();
 
         let loaded = CliConfig::load_from(temp_file.path()).unwrap();
-        assert_eq!(loaded.principals[0].user_id, "user-456");
-        assert_eq!(loaded.principals[0].email, "test@example.com");
+        assert_eq!(
+            loaded.principals[0].user_id,
+            Some("user-456".to_string())
+        );
+        assert_eq!(
+            loaded.principals[0].email,
+            Some("test@example.com".to_string())
+        );
         assert_eq!(loaded.principals.len(), 1);
         assert_eq!(loaded.principals[0].name, "laptop");
     }
@@ -381,8 +389,8 @@ mod tests {
             principals: vec![PrincipalConfig {
                 id: "p1".to_string(),
                 name: "phone".to_string(),
-                user_id: "user-789".to_string(),
-                email: "save@example.com".to_string(),
+                user_id: Some("user-789".to_string()),
+                email: Some("save@example.com".to_string()),
                 private_key: "deadbeef".to_string(),
                 public_key: "cafebabe".to_string(),
                 x25519_private_key: None,
@@ -395,8 +403,14 @@ mod tests {
         config.save_to(temp_file.path()).unwrap();
 
         let loaded = CliConfig::load_from(temp_file.path()).unwrap();
-        assert_eq!(loaded.principals[0].user_id, "user-789");
-        assert_eq!(loaded.principals[0].email, "save@example.com");
+        assert_eq!(
+            loaded.principals[0].user_id,
+            Some("user-789".to_string())
+        );
+        assert_eq!(
+            loaded.principals[0].email,
+            Some("save@example.com".to_string())
+        );
     }
 
     #[test]
@@ -427,8 +441,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: private_key_hex.to_string(),
             public_key: private_key_hex.to_string(),
             x25519_private_key: None,
@@ -446,8 +460,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "not_valid_hex".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: None,
@@ -464,8 +478,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "aabbccdd".to_string(), // Only 4 bytes
             public_key: "key".to_string(),
             x25519_private_key: None,
@@ -483,8 +497,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: public_key_hex.to_string(),
             public_key: public_key_hex.to_string(),
             x25519_private_key: None,
@@ -502,8 +516,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "invalid_hex!".to_string(),
             x25519_private_key: None,
@@ -521,8 +535,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: Some(x25519_key_hex.to_string()),
@@ -539,8 +553,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: None,
@@ -556,8 +570,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: Some("bad_hex".to_string()),
@@ -577,8 +591,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: None,
@@ -595,8 +609,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: None,
@@ -612,8 +626,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "test".to_string(),
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "key".to_string(),
             public_key: "key".to_string(),
             x25519_private_key: None,
@@ -640,7 +654,28 @@ mod tests {
 
     #[test]
     fn test_cli_config_with_optional_fields_absent() {
-        // Test deserialization with optional fields missing
+        // Test deserialization with optional fields missing (service principal)
+        let json = r#"{
+            "principals": [{
+                "id": "p1",
+                "name": "service-principal",
+                "private_key": "key1",
+                "public_key": "pub1"
+            }]
+        }"#;
+
+        let config: CliConfig = serde_json::from_str(json).unwrap();
+        // Service principals don't have user_id/email
+        assert!(config.principals[0].user_id.is_none());
+        assert!(config.principals[0].email.is_none());
+        assert!(config.current_principal.is_none());
+        assert!(config.principals[0].x25519_private_key.is_none());
+        assert!(config.principals[0].x25519_public_key.is_none());
+    }
+
+    #[test]
+    fn test_cli_config_with_user_identity() {
+        // Test deserialization with user identity fields (human principal)
         let json = r#"{
             "principals": [{
                 "id": "p1",
@@ -653,10 +688,14 @@ mod tests {
         }"#;
 
         let config: CliConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.principals[0].user_id, "user-123");
-        assert!(config.current_principal.is_none());
-        assert!(config.principals[0].x25519_private_key.is_none());
-        assert!(config.principals[0].x25519_public_key.is_none());
+        assert_eq!(
+            config.principals[0].user_id,
+            Some("user-123".to_string())
+        );
+        assert_eq!(
+            config.principals[0].email,
+            Some("test@example.com".to_string())
+        );
     }
 
     #[test]

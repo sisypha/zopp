@@ -45,9 +45,13 @@ pub async fn cmd_principal_list() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             " "
         };
+        let user_info = principal
+            .email
+            .as_deref()
+            .unwrap_or("service principal");
         println!(
             "{} {} (ID: {}, User: {})",
-            marker, principal.name, principal.id, principal.email
+            marker, principal.name, principal.id, user_info
         );
     }
     Ok(())
@@ -144,7 +148,7 @@ pub async fn cmd_principal_create(
     };
 
     let mut request = tonic::Request::new(RegisterRequest {
-        email: caller_principal.email.clone(),
+        email: caller_principal.email.clone().unwrap_or_default(),
         principal_name: name.to_string(),
         public_key,
         x25519_public_key: new_x25519_public_bytes.clone(),
@@ -163,11 +167,17 @@ pub async fn cmd_principal_create(
     let response = client.register(request).await?.into_inner();
 
     let principal_id = response.principal_id.clone();
+    // Service principals don't have user identity; device principals inherit from caller
+    let (user_id, email) = if is_service {
+        (None, None)
+    } else {
+        (caller_principal.user_id.clone(), caller_principal.email.clone())
+    };
     config.principals.push(PrincipalConfig {
         id: response.principal_id.clone(),
         name: name.to_string(),
-        user_id: caller_principal.user_id.clone(),
-        email: caller_principal.email.clone(),
+        user_id,
+        email,
         private_key: hex::encode(signing_key.to_bytes()),
         public_key: hex::encode(verifying_key.to_bytes()),
         x25519_private_key: Some(hex::encode(new_x25519_keypair.secret_key_bytes())),
@@ -501,12 +511,22 @@ pub async fn cmd_principal_export(
     // Using Argon2id makes offline brute-force infeasible if DB is compromised
     let token_hash = compute_verification_hash(&passphrase, &verification_salt)?;
 
+    // Service principals don't have user identity and cannot be exported this way
+    let email = principal
+        .email
+        .as_ref()
+        .ok_or("Cannot export service principal - no user identity")?;
+    let user_id = principal
+        .user_id
+        .as_ref()
+        .ok_or("Cannot export service principal - no user identity")?;
+
     // Create export structure
     let export = ExportedPrincipal {
         version: 1,
         server_url: server.to_string(),
-        email: principal.email.clone(),
-        user_id: principal.user_id.clone(),
+        email: email.clone(),
+        user_id: user_id.clone(),
         principal: ExportedPrincipalData {
             id: principal.id.clone(),
             name: principal.name.clone(),
@@ -744,8 +764,8 @@ pub async fn cmd_principal_import(
     config.principals.push(PrincipalConfig {
         id: export.principal.id.clone(),
         name: final_name.clone(),
-        user_id: export.user_id.clone(),
-        email: export.email.clone(),
+        user_id: Some(export.user_id.clone()),
+        email: Some(export.email.clone()),
         private_key: export.principal.private_key,
         public_key: export.principal.public_key,
         x25519_private_key: export.principal.x25519_private_key,

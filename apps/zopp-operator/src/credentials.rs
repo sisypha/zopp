@@ -28,8 +28,6 @@ pub enum CredentialError {
 pub mod env_vars {
     pub const PRINCIPAL_ID: &str = "ZOPP_PRINCIPAL_ID";
     pub const PRINCIPAL_NAME: &str = "ZOPP_PRINCIPAL_NAME";
-    pub const USER_ID: &str = "ZOPP_USER_ID";
-    pub const EMAIL: &str = "ZOPP_EMAIL";
     pub const PRIVATE_KEY: &str = "ZOPP_PRIVATE_KEY";
     pub const PUBLIC_KEY: &str = "ZOPP_PUBLIC_KEY";
     pub const X25519_PRIVATE_KEY: &str = "ZOPP_X25519_PRIVATE_KEY";
@@ -101,12 +99,6 @@ impl OperatorCredentials {
         let principal_name = std::env::var(env_vars::PRINCIPAL_NAME)
             .map_err(|_| CredentialError::MissingEnvVar(env_vars::PRINCIPAL_NAME.to_string()))?;
 
-        let user_id = std::env::var(env_vars::USER_ID)
-            .map_err(|_| CredentialError::MissingEnvVar(env_vars::USER_ID.to_string()))?;
-
-        let email = std::env::var(env_vars::EMAIL)
-            .map_err(|_| CredentialError::MissingEnvVar(env_vars::EMAIL.to_string()))?;
-
         let private_key = std::env::var(env_vars::PRIVATE_KEY)
             .map_err(|_| CredentialError::MissingEnvVar(env_vars::PRIVATE_KEY.to_string()))?;
 
@@ -123,8 +115,8 @@ impl OperatorCredentials {
         let principal = PrincipalConfig {
             id: principal_id,
             name: principal_name,
-            user_id,
-            email,
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key,
             public_key,
             x25519_private_key: Some(x25519_private_key),
@@ -230,8 +222,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "test-id".to_string(),
             name: "test-principal".to_string(),
-            user_id: "test-user-id".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key: "0".repeat(64), // 32 bytes in hex
             public_key: "1".repeat(64),
             x25519_private_key: Some("2".repeat(64)),
@@ -327,8 +319,6 @@ mod tests {
         // Set all required environment variables
         std::env::set_var(env_vars::PRINCIPAL_ID, "test-id");
         std::env::set_var(env_vars::PRINCIPAL_NAME, "test-principal");
-        std::env::set_var(env_vars::USER_ID, "test-user-id");
-        std::env::set_var(env_vars::EMAIL, "test@example.com");
         std::env::set_var(env_vars::PRIVATE_KEY, "0".repeat(64));
         std::env::set_var(env_vars::PUBLIC_KEY, "1".repeat(64));
         std::env::set_var(env_vars::X25519_PRIVATE_KEY, "2".repeat(64));
@@ -340,14 +330,13 @@ mod tests {
         let creds = result.unwrap();
         assert_eq!(creds.principal.id, "test-id");
         assert_eq!(creds.principal.name, "test-principal");
-        assert_eq!(creds.principal.user_id, "test-user-id");
-        assert_eq!(creds.principal.email, "test@example.com");
+        // Service principals don't have user identity
+        assert!(creds.principal.user_id.is_none());
+        assert!(creds.principal.email.is_none());
 
         // Clean up environment variables
         std::env::remove_var(env_vars::PRINCIPAL_ID);
         std::env::remove_var(env_vars::PRINCIPAL_NAME);
-        std::env::remove_var(env_vars::USER_ID);
-        std::env::remove_var(env_vars::EMAIL);
         std::env::remove_var(env_vars::PRIVATE_KEY);
         std::env::remove_var(env_vars::PUBLIC_KEY);
         std::env::remove_var(env_vars::X25519_PRIVATE_KEY);
@@ -376,8 +365,6 @@ mod tests {
     fn test_from_env_missing_private_key() {
         std::env::set_var(env_vars::PRINCIPAL_ID, "test-id");
         std::env::set_var(env_vars::PRINCIPAL_NAME, "test");
-        std::env::set_var(env_vars::USER_ID, "test-user-id");
-        std::env::set_var(env_vars::EMAIL, "test@example.com");
         std::env::remove_var(env_vars::PRIVATE_KEY);
 
         let result = OperatorCredentials::from_env();
@@ -390,8 +377,6 @@ mod tests {
 
         std::env::remove_var(env_vars::PRINCIPAL_ID);
         std::env::remove_var(env_vars::PRINCIPAL_NAME);
-        std::env::remove_var(env_vars::USER_ID);
-        std::env::remove_var(env_vars::EMAIL);
     }
 
     #[test]
@@ -399,8 +384,6 @@ mod tests {
     fn test_from_env_missing_public_key() {
         std::env::set_var(env_vars::PRINCIPAL_ID, "test-id");
         std::env::set_var(env_vars::PRINCIPAL_NAME, "test");
-        std::env::set_var(env_vars::USER_ID, "test-user-id");
-        std::env::set_var(env_vars::EMAIL, "test@example.com");
         std::env::set_var(env_vars::PRIVATE_KEY, "a".repeat(64));
         std::env::remove_var(env_vars::PUBLIC_KEY);
 
@@ -414,8 +397,6 @@ mod tests {
 
         std::env::remove_var(env_vars::PRINCIPAL_ID);
         std::env::remove_var(env_vars::PRINCIPAL_NAME);
-        std::env::remove_var(env_vars::USER_ID);
-        std::env::remove_var(env_vars::EMAIL);
         std::env::remove_var(env_vars::PRIVATE_KEY);
     }
 
@@ -424,8 +405,6 @@ mod tests {
     fn test_from_env_missing_x25519_private_key() {
         std::env::set_var(env_vars::PRINCIPAL_ID, "test-id");
         std::env::set_var(env_vars::PRINCIPAL_NAME, "test");
-        std::env::set_var(env_vars::USER_ID, "test-user-id");
-        std::env::set_var(env_vars::EMAIL, "test@example.com");
         std::env::set_var(env_vars::PRIVATE_KEY, "a".repeat(64));
         std::env::set_var(env_vars::PUBLIC_KEY, "b".repeat(64));
         std::env::remove_var(env_vars::X25519_PRIVATE_KEY);
@@ -440,8 +419,6 @@ mod tests {
 
         std::env::remove_var(env_vars::PRINCIPAL_ID);
         std::env::remove_var(env_vars::PRINCIPAL_NAME);
-        std::env::remove_var(env_vars::USER_ID);
-        std::env::remove_var(env_vars::EMAIL);
         std::env::remove_var(env_vars::PRIVATE_KEY);
         std::env::remove_var(env_vars::PUBLIC_KEY);
     }
@@ -451,8 +428,6 @@ mod tests {
     fn test_from_env_missing_x25519_public_key() {
         std::env::set_var(env_vars::PRINCIPAL_ID, "test-id");
         std::env::set_var(env_vars::PRINCIPAL_NAME, "test");
-        std::env::set_var(env_vars::USER_ID, "test-user-id");
-        std::env::set_var(env_vars::EMAIL, "test@example.com");
         std::env::set_var(env_vars::PRIVATE_KEY, "a".repeat(64));
         std::env::set_var(env_vars::PUBLIC_KEY, "b".repeat(64));
         std::env::set_var(env_vars::X25519_PRIVATE_KEY, "c".repeat(64));
@@ -468,8 +443,6 @@ mod tests {
 
         std::env::remove_var(env_vars::PRINCIPAL_ID);
         std::env::remove_var(env_vars::PRINCIPAL_NAME);
-        std::env::remove_var(env_vars::USER_ID);
-        std::env::remove_var(env_vars::EMAIL);
         std::env::remove_var(env_vars::PRIVATE_KEY);
         std::env::remove_var(env_vars::PUBLIC_KEY);
         std::env::remove_var(env_vars::X25519_PRIVATE_KEY);
@@ -481,8 +454,6 @@ mod tests {
         // Set environment variables
         std::env::set_var(env_vars::PRINCIPAL_ID, "env-id");
         std::env::set_var(env_vars::PRINCIPAL_NAME, "env-principal");
-        std::env::set_var(env_vars::USER_ID, "env-user-id");
-        std::env::set_var(env_vars::EMAIL, "env@example.com");
         std::env::set_var(env_vars::PRIVATE_KEY, "0".repeat(64));
         std::env::set_var(env_vars::PUBLIC_KEY, "1".repeat(64));
         std::env::set_var(env_vars::X25519_PRIVATE_KEY, "2".repeat(64));
@@ -498,8 +469,6 @@ mod tests {
         // Clean up
         std::env::remove_var(env_vars::PRINCIPAL_ID);
         std::env::remove_var(env_vars::PRINCIPAL_NAME);
-        std::env::remove_var(env_vars::USER_ID);
-        std::env::remove_var(env_vars::EMAIL);
         std::env::remove_var(env_vars::PRIVATE_KEY);
         std::env::remove_var(env_vars::PUBLIC_KEY);
         std::env::remove_var(env_vars::X25519_PRIVATE_KEY);
@@ -526,8 +495,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "id".to_string(),
             name: "name".to_string(),
-            user_id: "user-id".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key: "priv".to_string(),
             public_key: "pub".to_string(),
             x25519_private_key: None,
@@ -544,8 +513,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "test-id".to_string(),
             name: "test-principal".to_string(),
-            user_id: "test-user-id".to_string(),
-            email: "test@example.com".to_string(),
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key: "0".repeat(64),
             public_key: "1".repeat(64),
             x25519_private_key: None,
