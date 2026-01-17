@@ -33,8 +33,8 @@ pub struct PrincipalConfig {
     pub user_id: Option<String>, // Only for human principals (CLI users)
     #[serde(default)]
     pub email: Option<String>, // Only for human principals (CLI users)
-    pub private_key: String,   // Ed25519 private key (hex-encoded)
-    pub public_key: String,    // Ed25519 public key (hex-encoded)
+    pub private_key: String, // Ed25519 private key (hex-encoded)
+    pub public_key: String,  // Ed25519 public key (hex-encoded)
     #[serde(default)]
     pub x25519_private_key: Option<String>, // X25519 private key (hex-encoded)
     #[serde(default)]
@@ -356,10 +356,7 @@ mod tests {
         .unwrap();
 
         let loaded = CliConfig::load_from(temp_file.path()).unwrap();
-        assert_eq!(
-            loaded.principals[0].user_id,
-            Some("user-456".to_string())
-        );
+        assert_eq!(loaded.principals[0].user_id, Some("user-456".to_string()));
         assert_eq!(
             loaded.principals[0].email,
             Some("test@example.com".to_string())
@@ -403,10 +400,7 @@ mod tests {
         config.save_to(temp_file.path()).unwrap();
 
         let loaded = CliConfig::load_from(temp_file.path()).unwrap();
-        assert_eq!(
-            loaded.principals[0].user_id,
-            Some("user-789".to_string())
-        );
+        assert_eq!(loaded.principals[0].user_id, Some("user-789".to_string()));
         assert_eq!(
             loaded.principals[0].email,
             Some("save@example.com".to_string())
@@ -688,10 +682,7 @@ mod tests {
         }"#;
 
         let config: CliConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            config.principals[0].user_id,
-            Some("user-123".to_string())
-        );
+        assert_eq!(config.principals[0].user_id, Some("user-123".to_string()));
         assert_eq!(
             config.principals[0].email,
             Some("test@example.com".to_string())

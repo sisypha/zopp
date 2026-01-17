@@ -222,8 +222,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "test-id".to_string(),
             name: "test-principal".to_string(),
-            user_id: None, // Service principals don't have user identity
-            email: None,   // Service principals don't have user identity
+            user_id: None,               // Service principals don't have user identity
+            email: None,                 // Service principals don't have user identity
             private_key: "0".repeat(64), // 32 bytes in hex
             public_key: "1".repeat(64),
             x25519_private_key: Some("2".repeat(64)),

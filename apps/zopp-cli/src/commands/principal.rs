@@ -45,10 +45,7 @@ pub async fn cmd_principal_list() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             " "
         };
-        let user_info = principal
-            .email
-            .as_deref()
-            .unwrap_or("service principal");
+        let user_info = principal.email.as_deref().unwrap_or("service principal");
         println!(
             "{} {} (ID: {}, User: {})",
             marker, principal.name, principal.id, user_info
@@ -171,7 +168,10 @@ pub async fn cmd_principal_create(
     let (user_id, email) = if is_service {
         (None, None)
     } else {
-        (caller_principal.user_id.clone(), caller_principal.email.clone())
+        (
+            caller_principal.user_id.clone(),
+            caller_principal.email.clone(),
+        )
     };
     config.principals.push(PrincipalConfig {
         id: response.principal_id.clone(),

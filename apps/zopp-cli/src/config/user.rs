@@ -16,8 +16,8 @@ pub struct PrincipalConfig {
     pub user_id: Option<String>, // Only for human principals (CLI users)
     #[serde(default)]
     pub email: Option<String>, // Only for human principals (CLI users)
-    pub private_key: String,   // Ed25519 private key (hex-encoded)
-    pub public_key: String,    // Ed25519 public key (hex-encoded)
+    pub private_key: String, // Ed25519 private key (hex-encoded)
+    pub public_key: String,  // Ed25519 public key (hex-encoded)
     #[serde(default)]
     pub x25519_private_key: Option<String>, // X25519 private key (hex-encoded)
     #[serde(default)]
