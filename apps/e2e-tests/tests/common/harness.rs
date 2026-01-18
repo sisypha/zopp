@@ -5,7 +5,8 @@
 
 #![allow(dead_code)]
 
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read as _;
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
@@ -123,6 +124,10 @@ pub struct TestHarness {
     pg_db_name: Option<String>,
     /// PostgreSQL events database name (for cleanup)
     pg_events_db_name: Option<String>,
+    /// Server stdout log file path (for diagnostics on failure)
+    server_stdout_path: PathBuf,
+    /// Server stderr log file path (for diagnostics on failure)
+    server_stderr_path: PathBuf,
 }
 
 impl TestHarness {
@@ -186,6 +191,10 @@ impl TestHarness {
             }
         };
 
+        // Create log file paths for server output (for diagnostics on failure)
+        let server_stdout_path = test_dir.join("server_stdout.log");
+        let server_stderr_path = test_dir.join("server_stderr.log");
+
         let mut harness = Self {
             server_url: format!("http://127.0.0.1:{}", port),
             config,
@@ -199,6 +208,8 @@ impl TestHarness {
             events_database_url,
             pg_db_name,
             pg_events_db_name,
+            server_stdout_path,
+            server_stderr_path,
         };
 
         // Start the server
@@ -211,6 +222,10 @@ impl TestHarness {
     async fn start_server(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let server_addr = format!("0.0.0.0:{}", self.port);
         let health_addr = format!("0.0.0.0:{}", self.health_port);
+
+        // Create files to capture server output for diagnostics
+        let stdout_file = File::create(&self.server_stdout_path)?;
+        let stderr_file = File::create(&self.server_stderr_path)?;
 
         let mut cmd = Command::new(&self.zopp_server_bin);
         cmd.env("DATABASE_URL", &self.database_url).args([
@@ -235,31 +250,80 @@ impl TestHarness {
             }
         }
 
-        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        cmd.stdout(Stdio::from(stdout_file))
+            .stderr(Stdio::from(stderr_file));
 
         let server = cmd.spawn()?;
         self.server_process = Some(server);
 
-        // Wait for server to be ready using the /readyz endpoint (12 seconds timeout)
-        // This ensures the gRPC service is fully registered, not just TCP accepting
+        // Wait for server to be ready using the /readyz endpoint
+        // Timeout is configurable via ZOPP_E2E_SERVER_TIMEOUT_SECS (default: 30s for CI reliability)
+        let timeout_secs: u64 = std::env::var("ZOPP_E2E_SERVER_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30);
+
         let readiness_url = format!("http://127.0.0.1:{}/readyz", self.health_port);
         let client = reqwest::Client::new();
-        for i in 1..=60 {
-            sleep(Duration::from_millis(200)).await;
+
+        // Use exponential backoff: start at 100ms, double each time, cap at 2s
+        let mut delay_ms: u64 = 100;
+        let max_delay_ms: u64 = 2000;
+        let start = std::time::Instant::now();
+
+        loop {
+            sleep(Duration::from_millis(delay_ms)).await;
+
             if let Ok(resp) = client.get(&readiness_url).send().await {
                 if resp.status().is_success() {
                     return Ok(());
                 }
             }
-            if i == 60 {
+
+            let elapsed = start.elapsed();
+            if elapsed.as_secs() >= timeout_secs {
+                // Shutdown server and collect diagnostics
                 if let Some(ref mut server) = self.server_process {
                     graceful_shutdown(server);
                 }
-                return Err("Server failed to become ready within 12 seconds".into());
-            }
-        }
 
-        Ok(())
+                // Read server output for diagnostics
+                let stdout = self.read_server_log(&self.server_stdout_path.clone());
+                let stderr = self.read_server_log(&self.server_stderr_path.clone());
+
+                return Err(format!(
+                    "Server failed to become ready within {} seconds\n\
+                     Server stdout:\n{}\n\
+                     Server stderr:\n{}",
+                    timeout_secs,
+                    stdout.unwrap_or_else(|e| format!("<failed to read: {}>", e)),
+                    stderr.unwrap_or_else(|e| format!("<failed to read: {}>", e))
+                )
+                .into());
+            }
+
+            // Exponential backoff with cap
+            delay_ms = (delay_ms * 2).min(max_delay_ms);
+        }
+    }
+
+    /// Read server log file contents (last 100 lines max)
+    fn read_server_log(&self, path: &PathBuf) -> Result<String, std::io::Error> {
+        let mut file = File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        // Return last 100 lines to avoid overwhelming output
+        let lines: Vec<&str> = contents.lines().collect();
+        if lines.len() > 100 {
+            Ok(format!(
+                "... ({} lines truncated) ...\n{}",
+                lines.len() - 100,
+                lines[lines.len() - 100..].join("\n")
+            ))
+        } else {
+            Ok(contents)
+        }
     }
 
     /// Create a server invite token
