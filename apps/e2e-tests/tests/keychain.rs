@@ -10,21 +10,50 @@ use std::process::Command;
 
 /// Helper to check if keychain is available on the system
 fn is_keychain_available() -> bool {
-    // Try to create a keyring entry - this will fail if no keychain is available
+    // Try to actually store and delete a test secret to verify keychain works
+    #[cfg(target_os = "linux")]
+    {
+        // On Linux, try to store a secret using secret-tool
+        // This verifies D-Bus session and gnome-keyring are working
+        let store_result = Command::new("secret-tool")
+            .args([
+                "store",
+                "--label=zopp-test",
+                "service",
+                "zopp-availability-test",
+                "account",
+                "test",
+            ])
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut child| {
+                use std::io::Write;
+                if let Some(ref mut stdin) = child.stdin {
+                    stdin.write_all(b"test-secret")?;
+                }
+                child.wait()
+            });
+
+        if store_result.map(|s| s.success()).unwrap_or(false) {
+            // Clean up the test secret
+            let _ = Command::new("secret-tool")
+                .args([
+                    "clear",
+                    "service",
+                    "zopp-availability-test",
+                    "account",
+                    "test",
+                ])
+                .status();
+            true
+        } else {
+            false
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         // On macOS, keychain is always available
         true
-    }
-    #[cfg(target_os = "linux")]
-    {
-        // On Linux, check if secret-service is running
-        // Try to run secret-tool (part of libsecret)
-        Command::new("secret-tool")
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
     }
     #[cfg(target_os = "windows")]
     {
