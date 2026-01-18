@@ -639,6 +639,7 @@ pub async fn cmd_principal_import(
     tls_ca_cert: Option<&std::path::Path>,
     export_code_arg: Option<&str>,
     passphrase_arg: Option<&str>,
+    use_file_storage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Get export code from arg, env (for testing), or prompt
     let export_code = if let Some(c) = export_code_arg {
@@ -748,11 +749,12 @@ pub async fn cmd_principal_import(
     let mut config = match load_config() {
         Ok(c) => c,
         Err(_) => {
-            // Create new config with this principal
+            // Create new config - use keychain by default (use_file_storage=false)
+            // unless explicitly requested via --use-file-storage flag
             crate::config::CliConfig {
                 principals: vec![],
                 current_principal: None,
-                use_file_storage: true, // Default to file storage for new config
+                use_file_storage,
             }
         }
     };
@@ -793,15 +795,32 @@ pub async fn cmd_principal_import(
         export.principal.name.clone()
     };
 
+    // Store secrets appropriately based on storage mode
+    let (stored_private_key, stored_x25519_private_key) = if config.use_file_storage {
+        // File storage: store keys in config
+        (
+            Some(export.principal.private_key.clone()),
+            export.principal.x25519_private_key.clone(),
+        )
+    } else {
+        // Keychain storage: store keys in keychain, not in config
+        crate::config::store_principal_secrets(
+            &export.principal.id,
+            &export.principal.private_key,
+            export.principal.x25519_private_key.as_deref(),
+        )?;
+        (None, None)
+    };
+
     // Add principal
     config.principals.push(PrincipalConfig {
         id: export.principal.id.clone(),
         name: final_name.clone(),
         user_id: Some(export.user_id.clone()),
         email: Some(export.email.clone()),
-        private_key: Some(export.principal.private_key),
+        private_key: stored_private_key,
         public_key: export.principal.public_key,
-        x25519_private_key: export.principal.x25519_private_key,
+        x25519_private_key: stored_x25519_private_key,
         x25519_public_key: export.principal.x25519_public_key,
     });
 

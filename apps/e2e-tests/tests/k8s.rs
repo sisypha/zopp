@@ -830,7 +830,8 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         "user_id": "",
         "email": "",
         "principals": [service_principal],
-        "current_principal": "k8s-operator"
+        "current_principal": "k8s-operator",
+        "use_file_storage": true
     });
 
     let operator_config_dir = operator_home.join(".zopp");
