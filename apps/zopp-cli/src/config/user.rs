@@ -3,8 +3,6 @@ use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CliConfig {
-    pub user_id: String,
-    pub email: String,
     pub principals: Vec<PrincipalConfig>,
     #[serde(default)]
     pub current_principal: Option<String>, // Name of current principal
@@ -14,6 +12,10 @@ pub struct CliConfig {
 pub struct PrincipalConfig {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub user_id: Option<String>, // Only for human principals (CLI users)
+    #[serde(default)]
+    pub email: Option<String>, // Only for human principals (CLI users)
     pub private_key: String, // Ed25519 private key (hex-encoded)
     pub public_key: String,  // Ed25519 public key (hex-encoded)
     #[serde(default)]
@@ -67,6 +69,8 @@ mod tests {
         PrincipalConfig {
             id: id.to_string(),
             name: name.to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "a".repeat(64), // 32 bytes hex
             public_key: "b".repeat(64),
             x25519_private_key: None,
@@ -76,8 +80,6 @@ mod tests {
 
     fn make_config(principals: Vec<PrincipalConfig>, current: Option<String>) -> CliConfig {
         CliConfig {
-            user_id: "user-123".to_string(),
-            email: "test@example.com".to_string(),
             principals,
             current_principal: current,
         }
@@ -151,21 +153,20 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let parsed: CliConfig = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(config.user_id, parsed.user_id);
-        assert_eq!(config.email, parsed.email);
         assert_eq!(config.principals.len(), parsed.principals.len());
         assert_eq!(config.current_principal, parsed.current_principal);
+        // user_id and email are now per-principal
+        assert_eq!(config.principals[0].user_id, parsed.principals[0].user_id);
+        assert_eq!(config.principals[0].email, parsed.principals[0].email);
     }
 
     #[test]
     fn test_cli_config_deserialization_missing_optional() {
-        // Test that optional fields default correctly when missing
+        // Test that optional fields default correctly when missing (service principal)
         let json = r#"{
-            "user_id": "user-123",
-            "email": "test@example.com",
             "principals": [{
                 "id": "p1",
-                "name": "device1",
+                "name": "service-principal",
                 "private_key": "abcd",
                 "public_key": "efgh"
             }]
@@ -173,8 +174,33 @@ mod tests {
 
         let config: CliConfig = serde_json::from_str(json).unwrap();
         assert!(config.current_principal.is_none());
+        // Service principals don't have user_id/email
+        assert!(config.principals[0].user_id.is_none());
+        assert!(config.principals[0].email.is_none());
         assert!(config.principals[0].x25519_private_key.is_none());
         assert!(config.principals[0].x25519_public_key.is_none());
+    }
+
+    #[test]
+    fn test_cli_config_deserialization_with_user_identity() {
+        // Test that user identity fields are parsed correctly (human principal)
+        let json = r#"{
+            "principals": [{
+                "id": "p1",
+                "name": "device1",
+                "user_id": "user-123",
+                "email": "test@example.com",
+                "private_key": "abcd",
+                "public_key": "efgh"
+            }]
+        }"#;
+
+        let config: CliConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.principals[0].user_id, Some("user-123".to_string()));
+        assert_eq!(
+            config.principals[0].email,
+            Some("test@example.com".to_string())
+        );
     }
 
     #[test]
@@ -191,6 +217,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "p1".to_string(),
             name: "device1".to_string(),
+            user_id: Some("user-123".to_string()),
+            email: Some("test@example.com".to_string()),
             private_key: "a".repeat(64),
             public_key: "b".repeat(64),
             x25519_private_key: Some("c".repeat(64)),

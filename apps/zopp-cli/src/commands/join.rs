@@ -120,11 +120,11 @@ pub async fn cmd_join(
 
     // Save config
     let config = CliConfig {
-        user_id: response.user_id,
-        email: email.to_string(),
         principals: vec![PrincipalConfig {
             id: response.principal_id,
             name: principal_name.clone(),
+            user_id: Some(response.user_id),
+            email: Some(email.to_string()),
             private_key: hex::encode(signing_key.to_bytes()),
             public_key: hex::encode(verifying_key.to_bytes()),
             x25519_private_key: Some(hex::encode(x25519_keypair.secret_key_bytes())),

@@ -19,6 +19,10 @@ backend_test!(
 backend_test!(principals_current, run_principals_current_test);
 backend_test!(principals_use, run_principals_use_test);
 backend_test!(principals_export_import, run_principals_export_import_test);
+backend_test!(
+    principals_multi_user_identity,
+    run_principals_multi_user_identity_test
+);
 
 /// Test service principal creation and management
 async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -63,13 +67,25 @@ async fn run_principals_test(config: BackendConfig) -> Result<(), Box<dyn std::e
     // Extract principal ID from output
     let principal_id = parse_principal_id(&output).ok_or("Failed to parse principal ID")?;
 
-    // Test 2: List principals
+    // Test 2: List principals - verify service principal shows without user identity
     println!("  Test 2: List principals...");
     let output = admin.exec(&["principal", "list"]).success()?;
     assert!(output.contains("ci-bot"), "Should list ci-bot principal");
     assert!(
         output.contains("admin-device"),
         "Should list admin principal"
+    );
+    // Service principals show "service principal" instead of email
+    assert!(
+        output.contains("service principal"),
+        "Service principal should show 'service principal' instead of email, got: {}",
+        output
+    );
+    // Human principals still show their email
+    assert!(
+        output.contains("admin@example.com"),
+        "Human principal should show email, got: {}",
+        output
     );
 
     // Test 3: Grant READ permission to service principal
@@ -876,5 +892,118 @@ async fn run_principals_export_import_test(
     );
 
     println!("test_principals_export_import PASSED");
+    Ok(())
+}
+
+/// Test multi-user identity support (Issue #40)
+/// Verifies that a single config can contain principals from different users
+async fn run_principals_multi_user_identity_test(
+    config: BackendConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let harness = TestHarness::new("prin_multi_user", config).await?;
+
+    // Setup - alice and bob are DIFFERENT users with DIFFERENT emails
+    let invite = harness.create_server_invite()?;
+    let alice = harness.create_user("alice");
+    alice.join(&invite, "alice@company-a.com", "alice-laptop")?;
+
+    let invite2 = harness.create_server_invite()?;
+    let bob = harness.create_user("bob");
+    bob.join(&invite2, "bob@company-b.com", "bob-laptop")?;
+
+    // Alice creates a workspace
+    alice.exec(&["workspace", "create", "alice-ws"]).success()?;
+
+    // Test 1: Verify principal list shows email per principal
+    println!("  Test 1: Verify principal list shows email...");
+    let output = alice.exec(&["principal", "list"]).success()?;
+    assert!(
+        output.contains("alice@company-a.com"),
+        "Should show alice's email, got: {}",
+        output
+    );
+
+    // Test 2: Export alice's principal
+    println!("  Test 2: Export alice's principal...");
+    let passphrase = "multi user identity test passphrase";
+    let result = alice.exec_with_env(
+        &["principal", "export", "alice-laptop"],
+        &[("ZOPP_EXPORT_PASSPHRASE", passphrase)],
+    );
+    let output = result.success()?;
+    let export_code = extract_export_code(&output)
+        .ok_or_else(|| format!("Could not find export code in output: {}", output))?;
+
+    // Test 3: Bob imports alice's principal (different user!)
+    // This was previously blocked with "Cannot import: principal belongs to user..."
+    // Now it should work due to Issue #40 fix
+    println!("  Test 3: Bob imports alice's principal (multi-user config)...");
+    let result = bob.exec_with_env(
+        &["principal", "import"],
+        &[
+            ("ZOPP_EXPORT_CODE", &export_code),
+            ("ZOPP_EXPORT_PASSPHRASE", passphrase),
+        ],
+    );
+    result.success()?;
+
+    // Test 4: Bob's config now has principals from TWO different users
+    println!("  Test 4: Verify bob has principals from both users...");
+    let output = bob.exec(&["principal", "list"]).success()?;
+    assert!(
+        output.contains("bob-laptop"),
+        "Bob should still have bob-laptop, got: {}",
+        output
+    );
+    assert!(
+        output.contains("alice-laptop"),
+        "Bob should now also have alice-laptop, got: {}",
+        output
+    );
+
+    // The output should show both emails since principals now have per-principal user info
+    // (This is the key feature of Issue #40)
+
+    // Test 5: Bob can switch between principals (multi-identity switching)
+    println!("  Test 5: Switch to alice's principal...");
+    bob.exec(&["principal", "use", "alice-laptop"]).success()?;
+
+    let output = bob.exec(&["principal", "current"]).success()?;
+    assert!(
+        output.contains("alice-laptop"),
+        "Current should be alice-laptop, got: {}",
+        output
+    );
+
+    // Test 6: Using alice's principal, bob can access alice's workspace
+    println!("  Test 6: Access alice's workspace using imported principal...");
+    let output = bob.exec(&["workspace", "list"]).success()?;
+    assert!(
+        output.contains("alice-ws"),
+        "Bob should see alice-ws when using alice's principal, got: {}",
+        output
+    );
+
+    // Test 7: Switch back to bob's principal
+    println!("  Test 7: Switch back to bob's principal...");
+    bob.exec(&["principal", "use", "bob-laptop"]).success()?;
+
+    let output = bob.exec(&["principal", "current"]).success()?;
+    assert!(
+        output.contains("bob-laptop"),
+        "Current should be bob-laptop, got: {}",
+        output
+    );
+
+    // Using bob's principal, bob should NOT see alice's workspace
+    // (different user, no workspace access for bob's own principal)
+    let output = bob.exec(&["workspace", "list"]).success()?;
+    assert!(
+        !output.contains("alice-ws"),
+        "Bob should NOT see alice-ws when using bob's own principal, got: {}",
+        output
+    );
+
+    println!("test_principals_multi_user_identity PASSED");
     Ok(())
 }

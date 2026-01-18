@@ -115,6 +115,8 @@ impl OperatorCredentials {
         let principal = PrincipalConfig {
             id: principal_id,
             name: principal_name,
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key,
             public_key,
             x25519_private_key: Some(x25519_private_key),
@@ -220,6 +222,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "test-id".to_string(),
             name: "test-principal".to_string(),
+            user_id: None,               // Service principals don't have user identity
+            email: None,                 // Service principals don't have user identity
             private_key: "0".repeat(64), // 32 bytes in hex
             public_key: "1".repeat(64),
             x25519_private_key: Some("2".repeat(64)),
@@ -326,6 +330,9 @@ mod tests {
         let creds = result.unwrap();
         assert_eq!(creds.principal.id, "test-id");
         assert_eq!(creds.principal.name, "test-principal");
+        // Service principals don't have user identity
+        assert!(creds.principal.user_id.is_none());
+        assert!(creds.principal.email.is_none());
 
         // Clean up environment variables
         std::env::remove_var(env_vars::PRINCIPAL_ID);
@@ -488,6 +495,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "id".to_string(),
             name: "name".to_string(),
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key: "priv".to_string(),
             public_key: "pub".to_string(),
             x25519_private_key: None,
@@ -504,6 +513,8 @@ mod tests {
         let principal = PrincipalConfig {
             id: "test-id".to_string(),
             name: "test-principal".to_string(),
+            user_id: None, // Service principals don't have user identity
+            email: None,   // Service principals don't have user identity
             private_key: "0".repeat(64),
             public_key: "1".repeat(64),
             x25519_private_key: None,
