@@ -169,6 +169,7 @@ pub fn RegisterPage() -> impl IntoView {
 }
 
 /// Result of joining a workspace
+#[allow(dead_code)]
 struct JoinResult {
     principal_id: String,
     user_id: String,
