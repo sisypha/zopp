@@ -64,6 +64,7 @@ pub fn format_env_content(secrets: &BTreeMap<String, String>) -> String {
 async fn create_secret_context(
     client: &mut zopp_proto::zopp_service_client::ZoppServiceClient<tonic::transport::Channel>,
     principal: &crate::config::PrincipalConfig,
+    secrets: &crate::config::PrincipalSecrets,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
@@ -75,6 +76,7 @@ async fn create_secret_context(
     add_auth_metadata(
         &mut request,
         principal,
+        secrets,
         "/zopp.ZoppService/GetWorkspaceKeys",
     )?;
     let workspace_keys = client.get_workspace_keys(request).await?.into_inner();
@@ -85,11 +87,16 @@ async fn create_secret_context(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetEnvironment")?;
+    add_auth_metadata(
+        &mut request,
+        principal,
+        secrets,
+        "/zopp.ZoppService/GetEnvironment",
+    )?;
     let environment = client.get_environment(request).await?.into_inner();
 
     // Extract X25519 private key
-    let x25519_private_key = principal
+    let x25519_private_key = secrets
         .x25519_private_key
         .as_ref()
         .ok_or("Principal missing X25519 private key")?;
@@ -117,11 +124,12 @@ pub async fn cmd_secret_set(
     key: &str,
     value: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let ctx = create_secret_context(
         &mut client,
         &principal,
+        &secrets,
         workspace_name,
         project_name,
         environment_name,
@@ -138,7 +146,12 @@ pub async fn cmd_secret_set(
         nonce: encrypted.nonce,
         ciphertext: encrypted.ciphertext,
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/UpsertSecret")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/UpsertSecret",
+    )?;
 
     client.upsert_secret(request).await?;
 
@@ -155,7 +168,7 @@ pub async fn cmd_secret_get(
     environment_name: &str,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetSecretRequest {
         workspace_name: workspace_name.to_string(),
@@ -163,13 +176,19 @@ pub async fn cmd_secret_get(
         environment_name: environment_name.to_string(),
         key: key.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetSecret")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/GetSecret",
+    )?;
 
     let response = client.get_secret(request).await?.into_inner();
 
     let ctx = create_secret_context(
         &mut client,
         &principal,
+        &secrets,
         workspace_name,
         project_name,
         environment_name,
@@ -190,14 +209,19 @@ pub async fn cmd_secret_list(
     project_name: &str,
     environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListSecretsRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListSecrets")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/ListSecrets",
+    )?;
 
     let response = client.list_secrets(request).await?.into_inner();
 
@@ -221,7 +245,7 @@ pub async fn cmd_secret_delete(
     environment_name: &str,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteSecretRequest {
         workspace_name: workspace_name.to_string(),
@@ -229,7 +253,12 @@ pub async fn cmd_secret_delete(
         environment_name: environment_name.to_string(),
         key: key.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteSecret")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/DeleteSecret",
+    )?;
 
     client.delete_secret(request).await?;
 
@@ -246,12 +275,13 @@ pub async fn cmd_secret_export(
     environment_name: &str,
     output: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     // Fetch and decrypt all secrets
     let secret_data = fetch_and_decrypt_secrets(
         &mut client,
         &principal,
+        &secrets,
         workspace_name,
         project_name,
         environment_name,
@@ -306,12 +336,13 @@ pub async fn cmd_secret_import(
         return Err("No secrets found in input".into());
     }
 
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, principal_secrets) = setup_client(server, tls_ca_cert).await?;
 
     // Create SecretContext once
     let ctx = create_secret_context(
         &mut client,
         &principal,
+        &principal_secrets,
         workspace_name,
         project_name,
         environment_name,
@@ -329,7 +360,12 @@ pub async fn cmd_secret_import(
             nonce: encrypted.nonce,
             ciphertext: encrypted.ciphertext,
         });
-        add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/UpsertSecret")?;
+        add_auth_metadata(
+            &mut request,
+            &principal,
+            &principal_secrets,
+            "/zopp.ZoppService/UpsertSecret",
+        )?;
 
         client.upsert_secret(request).await?;
     }
@@ -351,12 +387,13 @@ pub async fn cmd_secret_run(
         return Err("No command specified".into());
     }
 
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     // Fetch and decrypt all secrets
     let env_vars = fetch_and_decrypt_secrets(
         &mut client,
         &principal,
+        &secrets,
         workspace_name,
         project_name,
         environment_name,

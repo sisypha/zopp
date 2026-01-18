@@ -1,4 +1,6 @@
-use crate::config::{get_current_principal, load_config, save_config, PrincipalConfig};
+use crate::config::{
+    get_current_principal, load_config, load_principal_with_secrets, save_config, PrincipalConfig,
+};
 use crate::grpc::{add_auth_metadata, connect};
 use ed25519_dalek::SigningKey;
 use rand_core::RngCore;
@@ -94,6 +96,7 @@ pub async fn cmd_principal_create(
 
     let mut client = connect(server, tls_ca_cert).await?;
     let caller_principal = get_current_principal(&config)?.clone();
+    let caller_secrets = load_principal_with_secrets(&caller_principal, config.use_file_storage)?;
 
     // For service principals, wrap KEK for the new principal
     let (ephemeral_pub, kek_wrapped, kek_nonce) = if let Some(ws_name) = workspace {
@@ -104,12 +107,13 @@ pub async fn cmd_principal_create(
         add_auth_metadata(
             &mut keys_request,
             &caller_principal,
+            &caller_secrets,
             "/zopp.ZoppService/GetWorkspaceKeys",
         )?;
         let keys = client.get_workspace_keys(keys_request).await?.into_inner();
 
         // Unwrap KEK using caller's X25519 private key
-        let caller_x25519_private = caller_principal
+        let caller_x25519_private = caller_secrets
             .x25519_private_key
             .as_ref()
             .ok_or("Caller principal missing X25519 private key")?;
@@ -158,6 +162,7 @@ pub async fn cmd_principal_create(
     add_auth_metadata(
         &mut request,
         &caller_principal,
+        &caller_secrets,
         "/zopp.ZoppService/Register",
     )?;
 
@@ -178,7 +183,7 @@ pub async fn cmd_principal_create(
         name: name.to_string(),
         user_id,
         email,
-        private_key: hex::encode(signing_key.to_bytes()),
+        private_key: Some(hex::encode(signing_key.to_bytes())),
         public_key: hex::encode(verifying_key.to_bytes()),
         x25519_private_key: Some(hex::encode(new_x25519_keypair.secret_key_bytes())),
         x25519_public_key: Some(hex::encode(new_x25519_keypair.public_key_bytes())),
@@ -204,6 +209,7 @@ pub async fn cmd_principal_create(
         add_auth_metadata(
             &mut ws_request,
             &caller_principal,
+            &caller_secrets,
             "/zopp.ZoppService/ListWorkspaces",
         )?;
         let workspaces = client
@@ -214,7 +220,7 @@ pub async fn cmd_principal_create(
 
         if !workspaces.is_empty() {
             println!("  Granting access to workspaces...");
-            let caller_x25519_private = caller_principal
+            let caller_x25519_private = caller_secrets
                 .x25519_private_key
                 .as_ref()
                 .ok_or("Caller principal missing X25519 private key")?;
@@ -231,6 +237,7 @@ pub async fn cmd_principal_create(
                 add_auth_metadata(
                     &mut keys_request,
                     &caller_principal,
+                    &caller_secrets,
                     "/zopp.ZoppService/GetWorkspaceKeys",
                 )?;
                 let keys = client.get_workspace_keys(keys_request).await?.into_inner();
@@ -262,6 +269,7 @@ pub async fn cmd_principal_create(
                 add_auth_metadata(
                     &mut grant_request,
                     &caller_principal,
+                    &caller_secrets,
                     "/zopp.ZoppService/GrantPrincipalWorkspaceAccess",
                 )?;
                 client
@@ -306,6 +314,7 @@ pub async fn cmd_principal_rename(
     }
 
     let principal = config.principals.iter().find(|p| p.name == name).unwrap();
+    let secrets = load_principal_with_secrets(principal, config.use_file_storage)?;
 
     let principal_id = principal.id.clone();
 
@@ -314,7 +323,12 @@ pub async fn cmd_principal_rename(
         principal_id: principal_id.clone(),
         new_name: new_name.to_string(),
     });
-    add_auth_metadata(&mut request, principal, "/zopp.ZoppService/RenamePrincipal")?;
+    add_auth_metadata(
+        &mut request,
+        principal,
+        &secrets,
+        "/zopp.ZoppService/RenamePrincipal",
+    )?;
 
     client.rename_principal(request).await?;
 
@@ -347,6 +361,15 @@ pub async fn cmd_principal_delete(name: &str) -> Result<(), Box<dyn std::error::
         .position(|p| p.name == name)
         .ok_or_else(|| format!("Principal '{}' not found", name))?;
 
+    let principal_id = config.principals[idx].id.clone();
+
+    // Delete keys from keychain if not using file storage
+    if !config.use_file_storage {
+        if let Err(e) = crate::config::delete_principal_secrets(&principal_id) {
+            eprintln!("Warning: Failed to delete keys from keychain: {}", e);
+        }
+    }
+
     config.principals.remove(idx);
 
     if config.current_principal.as_deref() == Some(name) {
@@ -369,6 +392,7 @@ pub async fn cmd_principal_service_list(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
+    let secrets = load_principal_with_secrets(principal, config.use_file_storage)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(ListWorkspaceServicePrincipalsRequest {
@@ -377,6 +401,7 @@ pub async fn cmd_principal_service_list(
     add_auth_metadata(
         &mut request,
         principal,
+        &secrets,
         "/zopp.ZoppService/ListWorkspaceServicePrincipals",
     )?;
 
@@ -421,6 +446,7 @@ pub async fn cmd_principal_workspace_remove(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
+    let secrets = load_principal_with_secrets(principal, config.use_file_storage)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(RemovePrincipalFromWorkspaceRequest {
@@ -430,6 +456,7 @@ pub async fn cmd_principal_workspace_remove(
     add_auth_metadata(
         &mut request,
         principal,
+        &secrets,
         "/zopp.ZoppService/RemovePrincipalFromWorkspace",
     )?;
 
@@ -450,6 +477,7 @@ pub async fn cmd_principal_revoke_all(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
+    let secrets = load_principal_with_secrets(principal, config.use_file_storage)?;
 
     let mut client = connect(server, tls_ca_cert).await?;
     let mut request = tonic::Request::new(RevokeAllPrincipalPermissionsRequest {
@@ -459,6 +487,7 @@ pub async fn cmd_principal_revoke_all(
     add_auth_metadata(
         &mut request,
         principal,
+        &secrets,
         "/zopp.ZoppService/RevokeAllPrincipalPermissions",
     )?;
 
@@ -487,6 +516,7 @@ pub async fn cmd_principal_export(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let config = load_config()?;
     let caller_principal = get_current_principal(&config)?;
+    let caller_secrets = load_principal_with_secrets(caller_principal, config.use_file_storage)?;
 
     // Find the principal to export
     let principal = config
@@ -494,6 +524,7 @@ pub async fn cmd_principal_export(
         .iter()
         .find(|p| p.name == name)
         .ok_or_else(|| format!("Principal '{}' not found", name))?;
+    let principal_secrets = load_principal_with_secrets(principal, config.use_file_storage)?;
 
     // Generate passphrase (or use env var for testing)
     let passphrase = if let Ok(p) = std::env::var("ZOPP_EXPORT_PASSPHRASE") {
@@ -530,9 +561,9 @@ pub async fn cmd_principal_export(
         principal: ExportedPrincipalData {
             id: principal.id.clone(),
             name: principal.name.clone(),
-            private_key: principal.private_key.clone(),
+            private_key: principal_secrets.ed25519_private_key.clone(),
             public_key: principal.public_key.clone(),
-            x25519_private_key: principal.x25519_private_key.clone(),
+            x25519_private_key: principal_secrets.x25519_private_key.clone(),
             x25519_public_key: principal.x25519_public_key.clone(),
         },
     };
@@ -570,6 +601,7 @@ pub async fn cmd_principal_export(
     add_auth_metadata(
         &mut request,
         caller_principal,
+        &caller_secrets,
         "/zopp.ZoppService/CreatePrincipalExport",
     )?;
 
@@ -720,6 +752,7 @@ pub async fn cmd_principal_import(
             crate::config::CliConfig {
                 principals: vec![],
                 current_principal: None,
+                use_file_storage: true, // Default to file storage for new config
             }
         }
     };
@@ -766,7 +799,7 @@ pub async fn cmd_principal_import(
         name: final_name.clone(),
         user_id: Some(export.user_id.clone()),
         email: Some(export.email.clone()),
-        private_key: export.principal.private_key,
+        private_key: Some(export.principal.private_key),
         public_key: export.principal.public_key,
         x25519_private_key: export.principal.x25519_private_key,
         x25519_public_key: export.principal.x25519_public_key,

@@ -61,11 +61,12 @@ pub async fn cmd_sync_k8s(
     force: bool,
     dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let secret_data = fetch_and_decrypt_secrets(
         &mut client,
         &principal,
+        &secrets,
         workspace_name,
         project_name,
         environment_name,

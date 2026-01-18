@@ -14,7 +14,7 @@ pub async fn cmd_group_create(
     name: String,
     description: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -25,7 +25,12 @@ pub async fn cmd_group_create(
         name,
         description: description.unwrap_or_default(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateGroup")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/CreateGroup",
+    )?;
 
     let response = client.create_group(request).await?.into_inner();
 
@@ -43,14 +48,19 @@ pub async fn cmd_group_list(
     tls_ca_cert: Option<&std::path::Path>,
     workspace: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
         .ok_or("Workspace name required (use -w or --workspace)")?;
 
     let mut request = tonic::Request::new(ListGroupsRequest { workspace_name });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListGroups")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/ListGroups",
+    )?;
 
     let response = client.list_groups(request).await?.into_inner();
 
@@ -73,7 +83,7 @@ pub async fn cmd_group_delete(
     workspace: Option<&str>,
     name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -83,7 +93,12 @@ pub async fn cmd_group_delete(
         workspace_name,
         group_name: name.clone(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteGroup")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/DeleteGroup",
+    )?;
 
     client.delete_group(request).await?;
     println!("Deleted group: {}", name);
@@ -99,7 +114,7 @@ pub async fn cmd_group_update(
     new_name: Option<String>,
     description: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -115,7 +130,12 @@ pub async fn cmd_group_update(
         new_name: new_name.clone().unwrap_or_default(),
         new_description: description.clone().unwrap_or_default(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/UpdateGroup")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/UpdateGroup",
+    )?;
 
     let response = client.update_group(request).await?.into_inner();
 
@@ -137,7 +157,7 @@ pub async fn cmd_group_add_member(
     group_name: String,
     user_email: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -148,7 +168,12 @@ pub async fn cmd_group_add_member(
         group_name: group_name.clone(),
         user_email: user_email.clone(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/AddGroupMember")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/AddGroupMember",
+    )?;
 
     client.add_group_member(request).await?;
     println!("Added {} to group {}", user_email, group_name);
@@ -163,7 +188,7 @@ pub async fn cmd_group_remove_member(
     group_name: String,
     user_email: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -177,6 +202,7 @@ pub async fn cmd_group_remove_member(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/RemoveGroupMember",
     )?;
 
@@ -192,7 +218,7 @@ pub async fn cmd_group_list_members(
     workspace: Option<&str>,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -205,6 +231,7 @@ pub async fn cmd_group_list_members(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/ListGroupMembers",
     )?;
 
@@ -230,7 +257,7 @@ pub async fn cmd_group_set_permission(
     group_name: String,
     role: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -251,6 +278,7 @@ pub async fn cmd_group_set_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/SetGroupWorkspacePermission",
     )?;
 
@@ -266,7 +294,7 @@ pub async fn cmd_group_remove_permission(
     workspace: Option<&str>,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -279,6 +307,7 @@ pub async fn cmd_group_remove_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/RemoveGroupWorkspacePermission",
     )?;
 
@@ -296,7 +325,7 @@ pub async fn cmd_group_set_project_permission(
     group_name: String,
     role: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -318,6 +347,7 @@ pub async fn cmd_group_set_project_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/SetGroupProjectPermission",
     )?;
 
@@ -337,7 +367,7 @@ pub async fn cmd_group_remove_project_permission(
     project: &str,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -351,6 +381,7 @@ pub async fn cmd_group_remove_project_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/RemoveGroupProjectPermission",
     )?;
 
@@ -372,7 +403,7 @@ pub async fn cmd_group_set_environment_permission(
     group_name: String,
     role: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -395,6 +426,7 @@ pub async fn cmd_group_set_environment_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/SetGroupEnvironmentPermission",
     )?;
 
@@ -415,7 +447,7 @@ pub async fn cmd_group_remove_environment_permission(
     environment: &str,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -430,6 +462,7 @@ pub async fn cmd_group_remove_environment_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/RemoveGroupEnvironmentPermission",
     )?;
 
@@ -450,7 +483,7 @@ pub async fn cmd_group_get_permission(
     workspace: Option<&str>,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -463,6 +496,7 @@ pub async fn cmd_group_get_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/GetGroupWorkspacePermission",
     )?;
 
@@ -491,7 +525,7 @@ pub async fn cmd_group_list_permissions(
     tls_ca_cert: Option<&std::path::Path>,
     workspace: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -503,6 +537,7 @@ pub async fn cmd_group_list_permissions(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/ListGroupWorkspacePermissions",
     )?;
 
@@ -537,7 +572,7 @@ pub async fn cmd_group_get_project_permission(
     project: &str,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -551,6 +586,7 @@ pub async fn cmd_group_get_project_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/GetGroupProjectPermission",
     )?;
 
@@ -580,7 +616,7 @@ pub async fn cmd_group_list_project_permissions(
     workspace: Option<&str>,
     project: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -593,6 +629,7 @@ pub async fn cmd_group_list_project_permissions(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/ListGroupProjectPermissions",
     )?;
 
@@ -634,7 +671,7 @@ pub async fn cmd_group_get_environment_permission(
     environment: &str,
     group_name: String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -649,6 +686,7 @@ pub async fn cmd_group_get_environment_permission(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/GetGroupEnvironmentPermission",
     )?;
 
@@ -679,7 +717,7 @@ pub async fn cmd_group_list_environment_permissions(
     project: &str,
     environment: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let workspace_name = workspace
         .map(|s| s.to_string())
@@ -693,6 +731,7 @@ pub async fn cmd_group_list_environment_permissions(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/ListGroupEnvironmentPermissions",
     )?;
 

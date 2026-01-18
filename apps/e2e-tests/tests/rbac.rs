@@ -151,6 +151,7 @@ impl TestEnv {
     fn join_server(&self, user: &User, invite: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -174,6 +175,7 @@ impl TestEnv {
     fn create_workspace(&self, user: &User, name: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args(["--server", &self.server_url, "workspace", "create", name])
             .output()?;
         if !output.status.success() {
@@ -194,6 +196,7 @@ impl TestEnv {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -223,6 +226,7 @@ impl TestEnv {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -252,6 +256,7 @@ impl TestEnv {
     ) -> Result<String, Box<dyn std::error::Error>> {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -425,6 +430,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -534,6 +540,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -826,6 +833,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -853,6 +861,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1173,6 +1182,7 @@ impl TestEnv {
     fn user_permission_list(&self, user: &User, workspace: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1188,6 +1198,7 @@ impl TestEnv {
     fn user_project_permission_list(&self, user: &User, workspace: &str, project: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1211,6 +1222,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1230,6 +1242,7 @@ impl TestEnv {
     fn group_permission_list(&self, user: &User, workspace: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1245,6 +1258,7 @@ impl TestEnv {
     fn group_project_permission_list(&self, user: &User, workspace: &str, project: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1268,6 +1282,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1299,6 +1314,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1327,6 +1343,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1354,6 +1371,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1374,6 +1392,7 @@ impl TestEnv {
     fn secret_export(&self, user: &User, workspace: &str, project: &str, env: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1397,6 +1416,7 @@ impl TestEnv {
     fn project_create(&self, user: &User, workspace: &str, name: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1413,6 +1433,7 @@ impl TestEnv {
     fn project_delete(&self, user: &User, workspace: &str, name: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1435,6 +1456,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1459,6 +1481,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1477,6 +1500,7 @@ impl TestEnv {
     fn group_create_check(&self, user: &User, workspace: &str, name: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1493,6 +1517,7 @@ impl TestEnv {
     fn group_delete(&self, user: &User, workspace: &str, name: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1515,6 +1540,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1539,6 +1565,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1558,6 +1585,7 @@ impl TestEnv {
     fn invite_create_check(&self, user: &User, workspace: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1580,6 +1608,7 @@ impl TestEnv {
     fn invite_revoke_check(&self, user: &User, token: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args(["--server", &self.server_url, "invite", "revoke", token])
             .output()
             .expect("Failed to execute invite revoke")
@@ -1593,6 +1622,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1616,6 +1646,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1634,6 +1665,7 @@ impl TestEnv {
     fn principal_rename_check(&self, user: &User, principal_id: &str, new_name: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1650,6 +1682,7 @@ impl TestEnv {
     fn principal_use(&self, user: &User, name: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args(["principal", "use", name])
             .output()
             .expect("Failed to execute principal use")
@@ -1664,6 +1697,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1690,6 +1724,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1719,6 +1754,7 @@ impl TestEnv {
     ) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1746,6 +1782,7 @@ impl TestEnv {
     fn audit_list(&self, user: &User, workspace: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1761,6 +1798,7 @@ impl TestEnv {
     fn audit_count(&self, user: &User, workspace: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,
@@ -1777,6 +1815,7 @@ impl TestEnv {
     fn audit_get(&self, user: &User, workspace: &str, id: &str) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &user.home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args([
                 "--server",
                 &self.server_url,

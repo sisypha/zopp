@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &token,
                 &email,
                 principal.as_deref(),
+                cli.use_file_storage,
             )
             .await?;
         }

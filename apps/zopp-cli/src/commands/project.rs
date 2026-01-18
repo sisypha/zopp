@@ -5,12 +5,17 @@ pub async fn cmd_project_list(
     tls_ca_cert: Option<&std::path::Path>,
     workspace_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListProjectsRequest {
         workspace_name: workspace_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListProjects")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/ListProjects",
+    )?;
 
     let response = client.list_projects(request).await?.into_inner();
 
@@ -32,13 +37,18 @@ pub async fn cmd_project_create(
     workspace_name: &str,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::CreateProjectRequest {
         workspace_name: workspace_name.to_string(),
         name: name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateProject")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/CreateProject",
+    )?;
 
     let response = client.create_project(request).await?.into_inner();
 
@@ -53,13 +63,18 @@ pub async fn cmd_project_get(
     workspace_name: &str,
     project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetProjectRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetProject")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/GetProject",
+    )?;
 
     let response = client.get_project(request).await?.into_inner();
 
@@ -88,13 +103,18 @@ pub async fn cmd_project_delete(
     workspace_name: &str,
     project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteProjectRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/DeleteProject")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/DeleteProject",
+    )?;
 
     client.delete_project(request).await?;
 

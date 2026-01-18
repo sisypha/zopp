@@ -1,4 +1,4 @@
-use crate::config::PrincipalConfig;
+use crate::config::{PrincipalConfig, PrincipalSecrets};
 use std::collections::BTreeMap;
 use tonic::transport::Channel;
 use zopp_proto::zopp_service_client::ZoppServiceClient;
@@ -9,6 +9,7 @@ use zopp_secrets::SecretContext;
 pub async fn unwrap_workspace_kek(
     client: &mut ZoppServiceClient<Channel>,
     principal: &PrincipalConfig,
+    secrets: &PrincipalSecrets,
     workspace_name: &str,
 ) -> Result<[u8; 32], Box<dyn std::error::Error>> {
     let mut request = tonic::Request::new(zopp_proto::GetWorkspaceKeysRequest {
@@ -17,12 +18,13 @@ pub async fn unwrap_workspace_kek(
     crate::grpc::add_auth_metadata(
         &mut request,
         principal,
+        secrets,
         "/zopp.ZoppService/GetWorkspaceKeys",
     )?;
 
     let response = client.get_workspace_keys(request).await?.into_inner();
 
-    let x25519_private_key = principal
+    let x25519_private_key = secrets
         .x25519_private_key
         .as_ref()
         .ok_or("Principal missing X25519 private key")?;
@@ -55,6 +57,7 @@ pub async fn unwrap_workspace_kek(
 pub async fn fetch_and_decrypt_secrets(
     client: &mut ZoppServiceClient<Channel>,
     principal: &PrincipalConfig,
+    secrets: &PrincipalSecrets,
     workspace_name: &str,
     project_name: &str,
     environment_name: &str,
@@ -66,6 +69,7 @@ pub async fn fetch_and_decrypt_secrets(
     crate::grpc::add_auth_metadata(
         &mut request,
         principal,
+        secrets,
         "/zopp.ZoppService/GetWorkspaceKeys",
     )?;
     let workspace_keys = client.get_workspace_keys(request).await?.into_inner();
@@ -76,7 +80,12 @@ pub async fn fetch_and_decrypt_secrets(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    crate::grpc::add_auth_metadata(&mut request, principal, "/zopp.ZoppService/GetEnvironment")?;
+    crate::grpc::add_auth_metadata(
+        &mut request,
+        principal,
+        secrets,
+        "/zopp.ZoppService/GetEnvironment",
+    )?;
     let environment = client.get_environment(request).await?.into_inner();
 
     // List all secrets
@@ -85,11 +94,16 @@ pub async fn fetch_and_decrypt_secrets(
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    crate::grpc::add_auth_metadata(&mut request, principal, "/zopp.ZoppService/ListSecrets")?;
+    crate::grpc::add_auth_metadata(
+        &mut request,
+        principal,
+        secrets,
+        "/zopp.ZoppService/ListSecrets",
+    )?;
     let secrets_response = client.list_secrets(request).await?.into_inner();
 
     // Create SecretContext to hide all crypto details
-    let x25519_private_key = principal
+    let x25519_private_key = secrets
         .x25519_private_key
         .as_ref()
         .ok_or("Principal missing X25519 private key")?;
