@@ -4,13 +4,16 @@ members = [
     "apps/zopp-cli",
     "apps/zopp-operator",
     "apps/zopp-server",
+    "apps/zopp-web",
     "crates/zopp-audit",
     "crates/zopp-config",
     "crates/zopp-crypto",
+    "crates/zopp-crypto-wasm",
     "crates/zopp-events",
     "crates/zopp-events-memory",
     "crates/zopp-events-postgres",
     "crates/zopp-proto",
+    "crates/zopp-proto-web",
     "crates/zopp-secrets",
     "crates/zopp-storage",
     "crates/zopp-store-postgres",
@@ -78,3 +81,48 @@ url = "2.5"
 uuid = { version = "1.18.1", features = ["v4", "v7", "fast-rng"] }
 x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 zeroize = { version = "1.8.2", features = ["derive"] }
+
+# WASM dependencies
+getrandom = { version = "0.2", default-features = false }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Window",
+    "Crypto",
+    "SubtleCrypto",
+    "CryptoKey",
+    "DomStringList",
+    "IdbFactory",
+    "IdbDatabase",
+    "IdbIndex",
+    "IdbIndexParameters",
+    "IdbObjectStore",
+    "IdbObjectStoreParameters",
+    "IdbOpenDbRequest",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+    "IdbKeyRange",
+    "IdbCursorWithValue",
+    "IdbVersionChangeEvent",
+    "Storage",
+    "Location",
+    "Event",
+    "EventTarget",
+    "console",
+] }
+serde-wasm-bindgen = "0.6"
+gloo-utils = "0.2"
+
+# Leptos dependencies
+leptos = "0.7"
+leptos_router = "0.7"
+leptos_axum = "0.7"
+leptos_meta = "0.7"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+http = "1.2"
+
+# gRPC-web
+tonic-web = "0.14"

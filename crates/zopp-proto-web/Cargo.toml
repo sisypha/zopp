@@ -1,0 +1,41 @@
+[package]
+name = "zopp-proto-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "gRPC-web client for zopp"
+
+[dependencies]
+# Use prost directly for message types
+prost = { workspace = true }
+http = { workspace = true }
+serde = { workspace = true }
+
+# gRPC-web client for WASM - provides transport without tokio
+tonic-web-wasm-client = "0.8"
+
+# Tonic without transport feature (compatible with WASM)
+# Override workspace tonic to avoid pulling in tokio/mio
+tonic = { version = "0.14", default-features = false, features = ["codegen"] }
+tonic-prost = "0.14"
+
+# Async/Future support
+futures = "0.3"
+
+# Time handling (with WASM support)
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "wasmbind"] }
+
+# For request signing (Ed25519)
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# WASM support
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+
+[build-dependencies]
+tonic-prost-build = { workspace = true }

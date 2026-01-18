@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Envoy proxy for gRPC-web
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    ports:
+      - "8080:8080"
+      - "9901:9901"
+    volumes:
+      - ./envoy-grpc-web.yaml:/etc/envoy/envoy.yaml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - zopp-server
+
+  # zopp-server (SQLite mode for development)
+  zopp-server:
+    build:
+      context: ..
+      dockerfile: server.Dockerfile
+    ports:
+      - "50051:50051"
+    volumes:
+      - zopp-data:/data
+    environment:
+      - ZOPP_DATA_DIR=/data
+    command: ["serve", "--db", "/data/zopp.db"]
+
+volumes:
+  zopp-data:
