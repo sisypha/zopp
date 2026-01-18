@@ -42,7 +42,9 @@ pub fn LoginPage() -> impl IntoView {
         let pass = passphrase.get();
 
         if code.is_empty() || pass.is_empty() {
-            set_error.set(Some("Please enter both export code and passphrase".to_string()));
+            set_error.set(Some(
+                "Please enter both export code and passphrase".to_string(),
+            ));
             return;
         }
 
@@ -61,12 +63,20 @@ pub fn LoginPage() -> impl IntoView {
                     {
                         if let Some(window) = web_sys::window() {
                             if let Ok(Some(storage)) = window.local_storage() {
-                                let _ = storage.set_item("zopp_principal_id", &principal.principal.id);
-                                let _ = storage.set_item("zopp_principal_name", &principal.principal.name);
+                                let _ =
+                                    storage.set_item("zopp_principal_id", &principal.principal.id);
+                                let _ = storage
+                                    .set_item("zopp_principal_name", &principal.principal.name);
                                 let _ = storage.set_item("zopp_principal_email", &principal.email);
                                 let _ = storage.set_item("zopp_user_id", &principal.user_id);
-                                let _ = storage.set_item("zopp_ed25519_private", &principal.principal.private_key);
-                                let _ = storage.set_item("zopp_x25519_private", &principal.principal.x25519_private_key);
+                                let _ = storage.set_item(
+                                    "zopp_ed25519_private",
+                                    &principal.principal.private_key,
+                                );
+                                let _ = storage.set_item(
+                                    "zopp_x25519_private",
+                                    &principal.principal.x25519_private_key,
+                                );
                                 let _ = storage.set_item("zopp_server_url", &principal.server_url);
                             }
                         }
@@ -177,7 +187,9 @@ async fn import_principal(
     {
         use argon2::Argon2;
         use zopp_crypto::{decrypt, Dek, Nonce};
-        use zopp_proto_web::{ConsumePrincipalExportRequest, GetPrincipalExportRequest, ZoppWebClient};
+        use zopp_proto_web::{
+            ConsumePrincipalExportRequest, GetPrincipalExportRequest, ZoppWebClient,
+        };
 
         let client = ZoppWebClient::new("http://localhost:8080");
 
@@ -237,8 +249,8 @@ async fn import_principal(
         let plaintext = decrypt(&response.encrypted_data, &nonce, &dek, aad)
             .map_err(|_| "Decryption failed - wrong passphrase?")?;
 
-        let json_str = String::from_utf8(plaintext.to_vec())
-            .map_err(|e| format!("Invalid UTF-8: {}", e))?;
+        let json_str =
+            String::from_utf8(plaintext.to_vec()).map_err(|e| format!("Invalid UTF-8: {}", e))?;
 
         let principal: ExportedPrincipal = serde_json::from_str(&json_str)
             .map_err(|e| format!("Failed to parse principal data: {}", e))?;

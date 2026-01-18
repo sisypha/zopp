@@ -29,7 +29,9 @@ pub fn RegisterPage() -> impl IntoView {
 
         // Validate invite token format
         if !token.starts_with("inv_") {
-            set_error.set(Some("Invalid invite token format (must start with 'inv_')".to_string()));
+            set_error.set(Some(
+                "Invalid invite token format (must start with 'inv_')".to_string(),
+            ));
             return;
         }
 
@@ -51,8 +53,10 @@ pub fn RegisterPage() -> impl IntoView {
                                 let _ = storage.set_item("zopp_principal_name", &device);
                                 let _ = storage.set_item("zopp_principal_email", &mail);
                                 let _ = storage.set_item("zopp_user_id", &result.user_id);
-                                let _ = storage.set_item("zopp_ed25519_private", &result.ed25519_private_key);
-                                let _ = storage.set_item("zopp_x25519_private", &result.x25519_private_key);
+                                let _ = storage
+                                    .set_item("zopp_ed25519_private", &result.ed25519_private_key);
+                                let _ = storage
+                                    .set_item("zopp_x25519_private", &result.x25519_private_key);
                             }
                         }
                     }
@@ -189,8 +193,8 @@ async fn join_workspace(
         let secret_hex = invite_code
             .strip_prefix("inv_")
             .ok_or("Invalid invite code format")?;
-        let invite_secret = hex::decode(secret_hex)
-            .map_err(|e| format!("Invalid hex in invite code: {}", e))?;
+        let invite_secret =
+            hex::decode(secret_hex).map_err(|e| format!("Invalid hex in invite code: {}", e))?;
         if invite_secret.len() != 32 {
             return Err("Invalid invite code length".to_string());
         }
@@ -224,8 +228,7 @@ async fn join_workspace(
 
         // Decrypt KEK using invite secret
         let (ephemeral_pub, kek_wrapped, kek_nonce) = if !invite.kek_encrypted.is_empty() {
-            let dek = Dek::from_bytes(&secret_array)
-                .map_err(|e| format!("Invalid DEK: {}", e))?;
+            let dek = Dek::from_bytes(&secret_array).map_err(|e| format!("Invalid DEK: {}", e))?;
 
             let workspace_id = invite
                 .workspace_ids
