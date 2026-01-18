@@ -49,7 +49,8 @@ keyring = { workspace = true, features = ["apple-native"] }
 keyring = { workspace = true, features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-keyring = { workspace = true, features = ["sync-secret-service"] }
+# Use linux-native which uses zbus (pure Rust D-Bus) instead of sync-secret-service (requires libdbus)
+keyring = { workspace = true, features = ["linux-native"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }
