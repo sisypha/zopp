@@ -290,7 +290,12 @@ async fn create_workspace_api(
         .map_err(|e| format!("Invalid public key: {}", e))?;
     let shared_secret = ephemeral.shared_secret(&our_public);
 
-    let aad = format!("workspace:{}", name).into_bytes();
+    // Generate a UUID v4 for the workspace ID (v7 requires timestamp which is more complex)
+    // Must generate ID first since it's used in AAD for key wrapping
+    let id = generate_uuid();
+
+    // AAD must use workspace_id (UUID), not workspace name - must match unwrap AAD
+    let aad = format!("workspace:{}", id).into_bytes();
     let (nonce, wrapped) = wrap_key(kek.as_bytes(), &shared_secret, &aad)
         .map_err(|e| format!("Wrap failed: {}", e))?;
 
@@ -299,9 +304,6 @@ async fn create_workspace_api(
         principal_id: creds.principal_id,
         ed25519_private_key: creds.ed25519_private_key,
     };
-
-    // Generate a UUID v4 for the workspace ID (v7 requires timestamp which is more complex)
-    let id = generate_uuid();
 
     let request = CreateWorkspaceRequest {
         id,
