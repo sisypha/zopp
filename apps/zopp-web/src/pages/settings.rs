@@ -58,15 +58,16 @@ pub fn SettingsPage() -> impl IntoView {
         });
     }
 
-    // Switch principal handler
-    let switch_principal = move |principal_id: String| {
+    // Switch principal handler - stored for use in For loop
+    let navigate_for_switch = navigate.clone();
+    let switch_principal = StoredValue::new(move |principal_id: String| {
         set_switching.set(true);
         set_error.set(None);
 
         #[cfg(target_arch = "wasm32")]
         {
             let auth_clone = auth;
-            let navigate_clone = navigate.clone();
+            let navigate_clone = navigate_for_switch.clone();
             spawn_local(async move {
                 match do_switch_principal(&principal_id, auth_clone).await {
                     Ok(()) => {
@@ -90,7 +91,7 @@ pub fn SettingsPage() -> impl IntoView {
             let _ = principal_id;
             set_switching.set(false);
         }
-    };
+    });
 
     let on_export = move |_| {
         set_exporting.set(true);
@@ -227,7 +228,6 @@ pub fn SettingsPage() -> impl IntoView {
                                         let principal_id_for_class = principal_id.clone();
                                         let principal_id_for_show = principal_id.clone();
                                         let principal_id_for_click = principal_id.clone();
-                                        let switch_principal_clone = switch_principal;
 
                                         view! {
                                             <div class=move || {
@@ -253,11 +253,13 @@ pub fn SettingsPage() -> impl IntoView {
                                                     when=move || auth.principal().map(|p| p.id == principal_id_for_show).unwrap_or(false)
                                                     fallback=move || {
                                                         let id = principal_id_for_click.clone();
-                                                        let handler = switch_principal_clone;
                                                         view! {
                                                             <button
                                                                 class="btn btn-sm btn-ghost"
-                                                                on:click=move |_| handler(id.clone())
+                                                                on:click=move |_| {
+                                                                    let id_clone = id.clone();
+                                                                    switch_principal.with_value(|f| f(id_clone));
+                                                                }
                                                                 disabled=move || switching.get()
                                                             >
                                                                 <Show when=move || switching.get()>
