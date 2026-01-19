@@ -59,6 +59,7 @@ pub fn SettingsPage() -> impl IntoView {
     }
 
     // Switch principal handler - stored for use in For loop
+    #[cfg(target_arch = "wasm32")]
     let navigate_for_switch = navigate.clone();
     let switch_principal = StoredValue::new(move |principal_id: String| {
         set_switching.set(true);
