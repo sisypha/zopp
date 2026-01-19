@@ -59,8 +59,8 @@ pub async fn cmd_join(
     // Determine if this is a workspace invite (has KEK) or bootstrap invite (no KEK)
     let (ephemeral_pub, kek_wrapped, kek_nonce) = if !invite.kek_encrypted.is_empty() {
         // Workspace invite: decrypt KEK and re-wrap for our principal
-        let secret_array = invite_secret
-            .ok_or("Workspace invite requires inv_ prefix with secret")?;
+        let secret_array =
+            invite_secret.ok_or("Workspace invite requires inv_ prefix with secret")?;
 
         let dek_for_decryption = zopp_crypto::Dek::from_bytes(&secret_array)?;
 

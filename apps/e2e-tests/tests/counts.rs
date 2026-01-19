@@ -12,9 +12,18 @@ use common::{BackendConfig, TestHarness};
 // Count Tests
 // ═══════════════════════════════════════════════════════════════════════════
 
-backend_test!(test_workspace_project_count, run_test_workspace_project_count);
-backend_test!(test_project_environment_count, run_test_project_environment_count);
-backend_test!(test_environment_secret_count, run_test_environment_secret_count);
+backend_test!(
+    test_workspace_project_count,
+    run_test_workspace_project_count
+);
+backend_test!(
+    test_project_environment_count,
+    run_test_project_environment_count
+);
+backend_test!(
+    test_environment_secret_count,
+    run_test_environment_secret_count
+);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Test Implementations
@@ -82,7 +91,9 @@ async fn run_test_project_environment_count(
 
     // List projects - should show 0 environments
     println!("  Test 1: Empty project shows 0 environments...");
-    let output = alice.exec(&["project", "list", "-w", "test-ws"]).success()?;
+    let output = alice
+        .exec(&["project", "list", "-w", "test-ws"])
+        .success()?;
     assert!(
         output.contains("0 environment") || output.contains("(0)"),
         "Project list should show 0 environments for empty project. Got: {}",
@@ -107,7 +118,9 @@ async fn run_test_project_environment_count(
 
     // List projects - should show 3 environments
     println!("  Test 3: Project shows 3 environments...");
-    let output = alice.exec(&["project", "list", "-w", "test-ws"]).success()?;
+    let output = alice
+        .exec(&["project", "list", "-w", "test-ws"])
+        .success()?;
     assert!(
         output.contains("3 environment") || output.contains("(3)"),
         "Project list should show 3 environments. Got: {}",

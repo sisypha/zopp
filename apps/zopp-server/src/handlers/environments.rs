@@ -179,7 +179,9 @@ pub async fn list_environments(
         });
     }
 
-    Ok(Response::new(EnvironmentList { environments: result }))
+    Ok(Response::new(EnvironmentList {
+        environments: result,
+    }))
 }
 
 pub async fn get_environment(

@@ -20,30 +20,49 @@ async fn run_secret_update_test(config: BackendConfig) -> Result<(), Box<dyn std
 
     // Create workspace, project, environment
     alice.exec(&["workspace", "create", "test-ws"]).success()?;
-    alice.exec(&["project", "create", "-w", "test-ws", "test-proj"]).success()?;
     alice
-        .exec(&["environment", "create", "-w", "test-ws", "-p", "test-proj", "dev"])
+        .exec(&["project", "create", "-w", "test-ws", "test-proj"])
+        .success()?;
+    alice
+        .exec(&[
+            "environment",
+            "create",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "dev",
+        ])
         .success()?;
 
     // Create initial secret
     let initial_value = "initial-secret-value";
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws",
-            "-p", "test-proj",
-            "-e", "dev",
-            "MY_SECRET", initial_value,
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "MY_SECRET",
+            initial_value,
         ])
         .success()?;
 
     // Verify initial value
     let retrieved = alice
         .exec(&[
-            "secret", "get",
-            "-w", "test-ws",
-            "-p", "test-proj",
-            "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
             "MY_SECRET",
         ])
         .success()?;
@@ -53,21 +72,30 @@ async fn run_secret_update_test(config: BackendConfig) -> Result<(), Box<dyn std
     let updated_value = "updated-secret-value";
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws",
-            "-p", "test-proj",
-            "-e", "dev",
-            "MY_SECRET", updated_value,
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "MY_SECRET",
+            updated_value,
         ])
         .success()?;
 
     // Verify updated value
     let retrieved_after_update = alice
         .exec(&[
-            "secret", "get",
-            "-w", "test-ws",
-            "-p", "test-proj",
-            "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
             "MY_SECRET",
         ])
         .success()?;
@@ -85,7 +113,10 @@ async fn run_secret_update_test(config: BackendConfig) -> Result<(), Box<dyn std
 // Secret Update Preserves Other Secrets
 // ═══════════════════════════════════════════════════════════════════════════
 
-backend_test!(test_secret_update_preserves_others, run_secret_update_preserves_others_test);
+backend_test!(
+    test_secret_update_preserves_others,
+    run_secret_update_preserves_others_test
+);
 
 async fn run_secret_update_preserves_others_test(
     config: BackendConfig,
@@ -99,48 +130,92 @@ async fn run_secret_update_preserves_others_test(
 
     // Create workspace, project, environment
     alice.exec(&["workspace", "create", "test-ws"]).success()?;
-    alice.exec(&["project", "create", "-w", "test-ws", "test-proj"]).success()?;
     alice
-        .exec(&["environment", "create", "-w", "test-ws", "-p", "test-proj", "dev"])
+        .exec(&["project", "create", "-w", "test-ws", "test-proj"])
+        .success()?;
+    alice
+        .exec(&[
+            "environment",
+            "create",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "dev",
+        ])
         .success()?;
 
     // Create multiple secrets
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
-            "SECRET_A", "value-a",
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "SECRET_A",
+            "value-a",
         ])
         .success()?;
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
-            "SECRET_B", "value-b",
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "SECRET_B",
+            "value-b",
         ])
         .success()?;
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
-            "SECRET_C", "value-c",
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "SECRET_C",
+            "value-c",
         ])
         .success()?;
 
     // Update only SECRET_B
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
-            "SECRET_B", "updated-value-b",
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "SECRET_B",
+            "updated-value-b",
         ])
         .success()?;
 
     // Verify SECRET_A is unchanged
     let secret_a = alice
         .exec(&[
-            "secret", "get",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
             "SECRET_A",
         ])
         .success()?;
@@ -149,8 +224,14 @@ async fn run_secret_update_preserves_others_test(
     // Verify SECRET_B is updated
     let secret_b = alice
         .exec(&[
-            "secret", "get",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
             "SECRET_B",
         ])
         .success()?;
@@ -159,8 +240,14 @@ async fn run_secret_update_preserves_others_test(
     // Verify SECRET_C is unchanged
     let secret_c = alice
         .exec(&[
-            "secret", "get",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
             "SECRET_C",
         ])
         .success()?;
@@ -174,7 +261,10 @@ async fn run_secret_update_preserves_others_test(
 // Secret Update With Special Characters
 // ═══════════════════════════════════════════════════════════════════════════
 
-backend_test!(test_secret_update_special_chars, run_secret_update_special_chars_test);
+backend_test!(
+    test_secret_update_special_chars,
+    run_secret_update_special_chars_test
+);
 
 async fn run_secret_update_special_chars_test(
     config: BackendConfig,
@@ -188,17 +278,34 @@ async fn run_secret_update_special_chars_test(
 
     // Create workspace, project, environment
     alice.exec(&["workspace", "create", "test-ws"]).success()?;
-    alice.exec(&["project", "create", "-w", "test-ws", "test-proj"]).success()?;
     alice
-        .exec(&["environment", "create", "-w", "test-ws", "-p", "test-proj", "dev"])
+        .exec(&["project", "create", "-w", "test-ws", "test-proj"])
+        .success()?;
+    alice
+        .exec(&[
+            "environment",
+            "create",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "dev",
+        ])
         .success()?;
 
     // Create secret with simple value
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
-            "CONNECTION_STRING", "simple-value",
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "CONNECTION_STRING",
+            "simple-value",
         ])
         .success()?;
 
@@ -206,17 +313,30 @@ async fn run_secret_update_special_chars_test(
     let special_value = "postgres://user:p@ss=word!@localhost:5432/db?ssl=true&timeout=30";
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
-            "CONNECTION_STRING", special_value,
+            "secret",
+            "set",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
+            "CONNECTION_STRING",
+            special_value,
         ])
         .success()?;
 
     // Verify special characters are preserved
     let retrieved = alice
         .exec(&[
-            "secret", "get",
-            "-w", "test-ws", "-p", "test-proj", "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "test-ws",
+            "-p",
+            "test-proj",
+            "-e",
+            "dev",
             "CONNECTION_STRING",
         ])
         .success()?;
@@ -233,7 +353,10 @@ async fn run_secret_update_special_chars_test(
 // Multi-User Secret Update
 // ═══════════════════════════════════════════════════════════════════════════
 
-backend_test!(test_secret_update_multi_user, run_secret_update_multi_user_test);
+backend_test!(
+    test_secret_update_multi_user,
+    run_secret_update_multi_user_test
+);
 
 async fn run_secret_update_multi_user_test(
     config: BackendConfig,
@@ -246,18 +369,37 @@ async fn run_secret_update_multi_user_test(
     alice.join(&invite, &alice.email(), &alice.principal())?;
 
     // Create workspace, project, environment
-    alice.exec(&["workspace", "create", "shared-ws"]).success()?;
-    alice.exec(&["project", "create", "-w", "shared-ws", "shared-proj"]).success()?;
     alice
-        .exec(&["environment", "create", "-w", "shared-ws", "-p", "shared-proj", "dev"])
+        .exec(&["workspace", "create", "shared-ws"])
+        .success()?;
+    alice
+        .exec(&["project", "create", "-w", "shared-ws", "shared-proj"])
+        .success()?;
+    alice
+        .exec(&[
+            "environment",
+            "create",
+            "-w",
+            "shared-ws",
+            "-p",
+            "shared-proj",
+            "dev",
+        ])
         .success()?;
 
     // Alice creates a secret
     alice
         .exec(&[
-            "secret", "set",
-            "-w", "shared-ws", "-p", "shared-proj", "-e", "dev",
-            "SHARED_SECRET", "alice-initial-value",
+            "secret",
+            "set",
+            "-w",
+            "shared-ws",
+            "-p",
+            "shared-proj",
+            "-e",
+            "dev",
+            "SHARED_SECRET",
+            "alice-initial-value",
         ])
         .success()?;
 
@@ -275,36 +417,62 @@ async fn run_secret_update_multi_user_test(
     // Alice grants Bob write permission
     alice
         .exec(&[
-            "permission", "user-set",
-            "-w", "shared-ws",
-            "--email", &bob.email(),
-            "--role", "write",
+            "permission",
+            "user-set",
+            "-w",
+            "shared-ws",
+            "--email",
+            &bob.email(),
+            "--role",
+            "write",
         ])
         .success()?;
 
     // Bob reads the secret (verifies access)
     let bob_read = bob
         .exec(&[
-            "secret", "get",
-            "-w", "shared-ws", "-p", "shared-proj", "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "shared-ws",
+            "-p",
+            "shared-proj",
+            "-e",
+            "dev",
             "SHARED_SECRET",
         ])
         .success()?;
-    assert_eq!(bob_read, "alice-initial-value", "Bob should read Alice's secret");
+    assert_eq!(
+        bob_read, "alice-initial-value",
+        "Bob should read Alice's secret"
+    );
 
     // Bob updates the secret
     bob.exec(&[
-            "secret", "set",
-            "-w", "shared-ws", "-p", "shared-proj", "-e", "dev",
-            "SHARED_SECRET", "bob-updated-value",
-        ])
-        .success()?;
+        "secret",
+        "set",
+        "-w",
+        "shared-ws",
+        "-p",
+        "shared-proj",
+        "-e",
+        "dev",
+        "SHARED_SECRET",
+        "bob-updated-value",
+    ])
+    .success()?;
 
     // Alice reads the updated value
     let alice_read = alice
         .exec(&[
-            "secret", "get",
-            "-w", "shared-ws", "-p", "shared-proj", "-e", "dev",
+            "secret",
+            "get",
+            "-w",
+            "shared-ws",
+            "-p",
+            "shared-proj",
+            "-e",
+            "dev",
             "SHARED_SECRET",
         ])
         .success()?;
