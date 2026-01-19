@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { test as authenticatedTest, expect as authenticatedExpect } from './fixtures/test-setup';
 
-test.describe('Authentication', () => {
+test.describe('Authentication - Unauthenticated', () => {
   test('should show import page at /import', async ({ page }) => {
     await page.goto('/import');
 
@@ -77,10 +78,17 @@ test.describe('Authentication', () => {
     // Should be redirected to import
     await expect(page).toHaveURL(/\/import/);
   });
+});
 
-  test.skip('should redirect authenticated user away from import page', async ({ page }) => {
-    // TODO: Implement after auth state is properly set up
-    // This test will mock the auth state and verify redirect behavior
+authenticatedTest.describe('Authentication - Authenticated', () => {
+  authenticatedTest('should redirect authenticated user away from import page', async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
+
+    // Navigate to import page while authenticated
+    await page.goto('/import');
+
+    // Should be redirected to workspaces
+    await authenticatedExpect(page).toHaveURL(/\/workspaces/);
   });
 });
 
