@@ -2,9 +2,6 @@ name: Web E2E Tests
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
 
 concurrency:
   group: web-e2e-${{ github.ref }}
