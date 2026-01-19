@@ -61,12 +61,16 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Share source for hot reloading
-      - ../apps/zopp-web/src:/app/apps/zopp-web/src:ro
-      - ../apps/zopp-web/style:/app/apps/zopp-web/style:ro
-      - ../apps/zopp-web/index.html:/app/apps/zopp-web/index.html:ro
-      - ../apps/zopp-web/Trunk.toml:/app/apps/zopp-web/Trunk.toml:ro
-      - ../crates:/app/crates:ro
+      # Share full workspace for wasm-pack and trunk builds
+      - ..:/app
+      # Writable target directory for cargo/wasm builds (overlays /app/target)
+      - web-target:/app/target
+      # Writable pkg directory for wasm-pack output
+      - web-pkg:/app/apps/zopp-web/pkg
+      # Writable node_modules
+      - web-node-modules:/app/apps/zopp-web/node_modules
+      # Writable dist directory for trunk output
+      - web-dist:/app/apps/zopp-web/dist
       # Cargo cache
       - cargo-cache:/cargo
       - rustup-cache:/rustup
@@ -110,3 +114,7 @@ volumes:
   rustup-cache:
   server-target:
   cli-target:
+  web-target:
+  web-pkg:
+  web-node-modules:
+  web-dist:

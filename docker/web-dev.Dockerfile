@@ -18,30 +18,9 @@ RUN rustup target add wasm32-unknown-unknown && \
 # Set up working directory
 WORKDIR /app
 
-# Copy Cargo workspace files first for better layer caching
-COPY Cargo.toml Cargo.lock ./
-COPY crates ./crates
-COPY apps ./apps
-COPY xtask ./xtask
-
-# Install npm dependencies
-RUN cd apps/zopp-web && npm install
-
-# Build the WASM crypto package
-RUN cd crates/zopp-crypto-wasm && \
-    wasm-pack build --target web --dev --out-dir ../../apps/zopp-web/pkg
-
-# Build Tailwind CSS
-RUN cd apps/zopp-web && \
-    npx tailwindcss -i ./style/input.css -o ./style/output.css
-
 # Expose the trunk dev server port
 EXPOSE 3000
 
-# Set working directory to web app
-WORKDIR /app/apps/zopp-web
-
-# Run trunk serve with watch mode
-# --address 0.0.0.0 to allow connections from outside the container
-# --proxy-backend for API calls to envoy
-CMD ["trunk", "serve", "--address", "0.0.0.0", "--port", "3000"]
+# Startup script that builds WASM/CSS then runs trunk
+# Source is mounted at runtime via docker-compose volumes
+CMD ["sh", "-c", "cd apps/zopp-web && npm install && cd ../../crates/zopp-crypto-wasm && wasm-pack build --target web --dev --out-dir ../../apps/zopp-web/pkg && cd ../../apps/zopp-web && npx tailwindcss -i ./style/input.css -o ./style/output.css && trunk serve --address 0.0.0.0 --port 3000"]
