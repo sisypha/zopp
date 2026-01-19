@@ -123,7 +123,7 @@ async fn cmd_invite_create(
 
     // Store hash of token (consistent with workspace invites)
     let mut hasher = Sha256::new();
-    hasher.update(&token_bytes);
+    hasher.update(token_bytes);
     let token_hash = hex::encode(hasher.finalize());
 
     let expires_at = Utc::now() + chrono::Duration::hours(expires_hours);
