@@ -1,22 +1,10 @@
 name: Web E2E Tests
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main, 'feat/**']
-    paths:
-      - 'apps/zopp-web/**'
-      - 'crates/zopp-proto-web/**'
-      - 'crates/zopp-crypto/**'
-      - 'docker/envoy-grpc-web*.yaml'
-      - '.github/workflows/web-e2e.yaml'
+    branches: [main]
   pull_request:
-    paths:
-      - 'apps/zopp-web/**'
-      - 'crates/zopp-proto-web/**'
-      - 'crates/zopp-crypto/**'
-      - 'docker/envoy-grpc-web*.yaml'
-      - '.github/workflows/web-e2e.yaml'
+    branches: [main]
 
 concurrency:
   group: web-e2e-${{ github.ref }}
@@ -54,6 +42,11 @@ jobs:
 
       - name: Install trunk
         run: cargo install --locked trunk
+
+      - name: Build WASM crypto package
+        run: |
+          cd crates/zopp-crypto-wasm
+          wasm-pack build --target web --dev --out-dir ../../apps/zopp-web/pkg
 
       - name: Build Rust binaries
         run: cargo build --bins --locked
