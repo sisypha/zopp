@@ -236,10 +236,7 @@ pub struct ImportResult {
 /// Import principal using the two-phase flow:
 /// 1. Get verification salt from server
 /// 2. Compute token hash, get encrypted data, decrypt
-async fn import_principal(
-    export_code: &str,
-    passphrase: &str,
-) -> Result<ImportResult, String> {
+async fn import_principal(export_code: &str, passphrase: &str) -> Result<ImportResult, String> {
     #[cfg(target_arch = "wasm32")]
     {
         use argon2::Argon2;
