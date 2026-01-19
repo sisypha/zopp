@@ -1,4 +1,4 @@
-use crate::config::{save_config, CliConfig, PrincipalConfig};
+use crate::config::{save_config, store_principal_secrets, CliConfig, PrincipalConfig};
 use crate::grpc::connect;
 use ed25519_dalek::SigningKey;
 use zopp_proto::JoinRequest;
@@ -9,6 +9,7 @@ pub async fn cmd_join(
     invite_code: &str,
     email: &str,
     principal_name: Option<&str>,
+    use_file_storage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use provided principal name or default to hostname
     let principal_name = match principal_name {
@@ -118,6 +119,27 @@ pub async fn cmd_join(
         println!("  - {} ({})", ws.name, ws.id);
     }
 
+    // Store secrets
+    let ed25519_private_hex = hex::encode(signing_key.to_bytes());
+    let x25519_private_hex = hex::encode(x25519_keypair.secret_key_bytes());
+
+    // Determine where to store private keys
+    let (private_key_for_config, x25519_private_for_config) = if use_file_storage {
+        // Store in config file
+        (
+            Some(ed25519_private_hex.clone()),
+            Some(x25519_private_hex.clone()),
+        )
+    } else {
+        // Store in keychain
+        store_principal_secrets(
+            &response.principal_id,
+            &ed25519_private_hex,
+            Some(&x25519_private_hex),
+        )?;
+        (None, None)
+    };
+
     // Save config
     let config = CliConfig {
         principals: vec![PrincipalConfig {
@@ -125,23 +147,36 @@ pub async fn cmd_join(
             name: principal_name.clone(),
             user_id: Some(response.user_id),
             email: Some(email.to_string()),
-            private_key: hex::encode(signing_key.to_bytes()),
+            private_key: private_key_for_config,
             public_key: hex::encode(verifying_key.to_bytes()),
-            x25519_private_key: Some(hex::encode(x25519_keypair.secret_key_bytes())),
+            x25519_private_key: x25519_private_for_config,
             x25519_public_key: Some(hex::encode(x25519_keypair.public_key_bytes())),
         }],
         current_principal: Some(principal_name),
+        use_file_storage,
     };
     save_config(&config)?;
 
-    println!(
-        "\nConfig saved to: {}",
-        dirs::home_dir()
-            .expect("Failed to get home directory")
-            .join(".zopp")
-            .join("config.json")
-            .display()
-    );
+    if use_file_storage {
+        println!(
+            "\nConfig saved to: {}",
+            dirs::home_dir()
+                .expect("Failed to get home directory")
+                .join(".zopp")
+                .join("config.json")
+                .display()
+        );
+    } else {
+        println!("\nCredentials stored in system keychain.");
+        println!(
+            "Metadata saved to: {}",
+            dirs::home_dir()
+                .expect("Failed to get home directory")
+                .join(".zopp")
+                .join("config.json")
+                .display()
+        );
+    }
 
     Ok(())
 }

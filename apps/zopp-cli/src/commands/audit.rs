@@ -10,7 +10,7 @@ pub async fn cmd_audit_list(
     result: Option<&str>,
     limit: Option<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListAuditLogsRequest {
         workspace_name: workspace_name.to_string(),
@@ -25,7 +25,12 @@ pub async fn cmd_audit_list(
         limit,
         offset: None,
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListAuditLogs")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/ListAuditLogs",
+    )?;
 
     let response = client.list_audit_logs(request).await?.into_inner();
 
@@ -59,13 +64,18 @@ pub async fn cmd_audit_get(
     workspace_name: &str,
     audit_log_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetAuditLogRequest {
         workspace_name: workspace_name.to_string(),
         audit_log_id: audit_log_id.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetAuditLog")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/GetAuditLog",
+    )?;
 
     let entry = client.get_audit_log(request).await?.into_inner();
 
@@ -110,7 +120,7 @@ pub async fn cmd_audit_count(
     action: Option<&str>,
     result: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::CountAuditLogsRequest {
         workspace_name: workspace_name.to_string(),
@@ -123,7 +133,12 @@ pub async fn cmd_audit_count(
         from_timestamp: None,
         to_timestamp: None,
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CountAuditLogs")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/CountAuditLogs",
+    )?;
 
     let response = client.count_audit_logs(request).await?.into_inner();
 

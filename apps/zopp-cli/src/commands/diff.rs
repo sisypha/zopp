@@ -16,11 +16,12 @@ pub async fn cmd_diff_k8s(
     kubeconfig_path: Option<&std::path::Path>,
     context: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let zopp_secrets = fetch_and_decrypt_secrets(
         &mut client,
         &principal,
+        &secrets,
         workspace_name,
         project_name,
         environment_name,

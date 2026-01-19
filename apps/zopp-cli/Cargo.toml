@@ -42,6 +42,16 @@ rpassword = { workspace = true }
 argon2 = { workspace = true }
 zeroize = { workspace = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { workspace = true, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Use linux-native which uses zbus (pure Rust D-Bus) instead of sync-secret-service (requires libdbus)
+keyring = { workspace = true, features = ["linux-native"] }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio-native-tls"] }

@@ -13,6 +13,11 @@ pub struct Cli {
     #[arg(long, env = "ZOPP_TLS_CA_CERT")]
     pub tls_ca_cert: Option<PathBuf>,
 
+    /// Store credentials in config file instead of system keychain.
+    /// Use this on systems without keychain support (e.g., headless servers, containers).
+    #[arg(long, env = "ZOPP_USE_FILE_STORAGE")]
+    pub use_file_storage: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

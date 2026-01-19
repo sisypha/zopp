@@ -14,7 +14,7 @@ pub async fn cmd_permission_set(
     principal: &str,
     role: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let role_enum = match role.to_lowercase().as_str() {
         "admin" => Role::Admin as i32,
@@ -31,6 +31,7 @@ pub async fn cmd_permission_set(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/SetWorkspacePermission",
     )?;
 
@@ -49,7 +50,7 @@ pub async fn cmd_permission_get(
     workspace: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(GetWorkspacePermissionRequest {
         workspace_name: workspace.to_string(),
@@ -58,6 +59,7 @@ pub async fn cmd_permission_get(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetWorkspacePermission",
     )?;
 
@@ -83,7 +85,7 @@ pub async fn cmd_permission_list(
     tls_ca_cert: Option<&std::path::Path>,
     workspace: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(ListWorkspacePermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -91,6 +93,7 @@ pub async fn cmd_permission_list(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/ListWorkspacePermissions",
     )?;
 
@@ -124,7 +127,7 @@ pub async fn cmd_permission_remove(
     workspace: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(RemoveWorkspacePermissionRequest {
         workspace_name: workspace.to_string(),
@@ -133,6 +136,7 @@ pub async fn cmd_permission_remove(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/RemoveWorkspacePermission",
     )?;
 
@@ -154,7 +158,7 @@ pub async fn cmd_user_permission_set(
     email: &str,
     role: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let role_enum = match role.to_lowercase().as_str() {
         "admin" => Role::Admin as i32,
@@ -171,6 +175,7 @@ pub async fn cmd_user_permission_set(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/SetUserWorkspacePermission",
     )?;
 
@@ -189,7 +194,7 @@ pub async fn cmd_user_permission_get(
     workspace: &str,
     email: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(GetUserWorkspacePermissionRequest {
         workspace_name: workspace.to_string(),
@@ -198,6 +203,7 @@ pub async fn cmd_user_permission_get(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetUserWorkspacePermission",
     )?;
 
@@ -226,7 +232,7 @@ pub async fn cmd_user_permission_list(
     tls_ca_cert: Option<&std::path::Path>,
     workspace: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(ListUserWorkspacePermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -234,6 +240,7 @@ pub async fn cmd_user_permission_list(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/ListUserWorkspacePermissions",
     )?;
 
@@ -267,7 +274,7 @@ pub async fn cmd_user_permission_remove(
     workspace: &str,
     email: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(RemoveUserWorkspacePermissionRequest {
         workspace_name: workspace.to_string(),
@@ -276,6 +283,7 @@ pub async fn cmd_user_permission_remove(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/RemoveUserWorkspacePermission",
     )?;
 
@@ -298,7 +306,7 @@ pub async fn cmd_user_project_permission_set(
     email: &str,
     role: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let role_enum = match role.to_lowercase().as_str() {
         "admin" => Role::Admin as i32,
@@ -316,6 +324,7 @@ pub async fn cmd_user_project_permission_set(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/SetUserProjectPermission",
     )?;
 
@@ -335,7 +344,7 @@ pub async fn cmd_user_project_permission_remove(
     project: &str,
     email: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RemoveUserProjectPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -345,6 +354,7 @@ pub async fn cmd_user_project_permission_remove(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/RemoveUserProjectPermission",
     )?;
 
@@ -368,7 +378,7 @@ pub async fn cmd_user_environment_permission_set(
     email: &str,
     role: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let role_enum = match role.to_lowercase().as_str() {
         "admin" => Role::Admin as i32,
@@ -387,6 +397,7 @@ pub async fn cmd_user_environment_permission_set(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/SetUserEnvironmentPermission",
     )?;
 
@@ -407,7 +418,7 @@ pub async fn cmd_user_environment_permission_remove(
     environment: &str,
     email: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RemoveUserEnvironmentPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -418,6 +429,7 @@ pub async fn cmd_user_environment_permission_remove(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/RemoveUserEnvironmentPermission",
     )?;
 
@@ -436,7 +448,7 @@ pub async fn cmd_user_project_permission_list(
     workspace: &str,
     project: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListUserProjectPermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -445,6 +457,7 @@ pub async fn cmd_user_project_permission_list(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/ListUserProjectPermissions",
     )?;
 
@@ -482,7 +495,7 @@ pub async fn cmd_user_environment_permission_list(
     project: &str,
     environment: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListUserEnvironmentPermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -492,6 +505,7 @@ pub async fn cmd_user_environment_permission_list(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/ListUserEnvironmentPermissions",
     )?;
 
@@ -532,7 +546,7 @@ pub async fn cmd_user_project_permission_get(
     project: &str,
     email: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetUserProjectPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -542,6 +556,7 @@ pub async fn cmd_user_project_permission_get(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetUserProjectPermission",
     )?;
 
@@ -573,7 +588,7 @@ pub async fn cmd_user_environment_permission_get(
     environment: &str,
     email: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetUserEnvironmentPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -584,6 +599,7 @@ pub async fn cmd_user_environment_permission_get(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetUserEnvironmentPermission",
     )?;
 
@@ -617,7 +633,7 @@ pub async fn cmd_principal_project_permission_set(
     principal: &str,
     role: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let role_enum = match role.to_lowercase().as_str() {
         "admin" => Role::Admin as i32,
@@ -635,6 +651,7 @@ pub async fn cmd_principal_project_permission_set(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/SetProjectPermission",
     )?;
 
@@ -654,7 +671,7 @@ pub async fn cmd_principal_project_permission_get(
     project: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetProjectPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -664,6 +681,7 @@ pub async fn cmd_principal_project_permission_get(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetProjectPermission",
     )?;
 
@@ -690,7 +708,7 @@ pub async fn cmd_principal_project_permission_list(
     workspace: &str,
     project: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListProjectPermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -699,6 +717,7 @@ pub async fn cmd_principal_project_permission_list(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/ListProjectPermissions",
     )?;
 
@@ -736,7 +755,7 @@ pub async fn cmd_principal_project_permission_remove(
     project: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RemoveProjectPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -746,6 +765,7 @@ pub async fn cmd_principal_project_permission_remove(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/RemoveProjectPermission",
     )?;
 
@@ -769,7 +789,7 @@ pub async fn cmd_principal_environment_permission_set(
     principal: &str,
     role: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let role_enum = match role.to_lowercase().as_str() {
         "admin" => Role::Admin as i32,
@@ -788,6 +808,7 @@ pub async fn cmd_principal_environment_permission_set(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/SetEnvironmentPermission",
     )?;
 
@@ -808,7 +829,7 @@ pub async fn cmd_principal_environment_permission_get(
     environment: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -819,6 +840,7 @@ pub async fn cmd_principal_environment_permission_get(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetEnvironmentPermission",
     )?;
 
@@ -849,7 +871,7 @@ pub async fn cmd_principal_environment_permission_list(
     project: &str,
     environment: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListEnvironmentPermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -859,6 +881,7 @@ pub async fn cmd_principal_environment_permission_list(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/ListEnvironmentPermissions",
     )?;
 
@@ -900,7 +923,7 @@ pub async fn cmd_principal_environment_permission_remove(
     environment: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RemoveEnvironmentPermissionRequest {
         workspace_name: workspace.to_string(),
@@ -911,6 +934,7 @@ pub async fn cmd_principal_environment_permission_remove(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/RemoveEnvironmentPermission",
     )?;
 
@@ -931,7 +955,7 @@ pub async fn cmd_permission_effective(
     workspace: &str,
     principal: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, auth_principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, auth_principal, auth_secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(GetEffectivePermissionsRequest {
         workspace_name: workspace.to_string(),
@@ -940,6 +964,7 @@ pub async fn cmd_permission_effective(
     add_auth_metadata(
         &mut request,
         &auth_principal,
+        &auth_secrets,
         "/zopp.ZoppService/GetEffectivePermissions",
     )?;
 

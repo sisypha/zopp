@@ -329,6 +329,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     // Alice joins
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .args([
             "--server",
             &server_url,
@@ -360,6 +361,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
         full_args.extend(args.iter().copied());
         let output = Command::new(&zopp_bin)
             .env("HOME", &alice_home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args(&full_args)
             .output()?;
         if !output.status.success() {
@@ -386,6 +388,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     for (key, value) in &secrets {
         let output = Command::new(&zopp_bin)
             .env("HOME", &alice_home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .current_dir(&test_dir)
             .args(["--server", &server_url, "secret", "set", key, value])
             .output()?;
@@ -402,6 +405,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     let kubeconfig = kubeconfig_path();
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
@@ -431,6 +435,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔄 Testing secret update...");
     let _ = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .current_dir(&test_dir)
         .args([
             "--server",
@@ -444,6 +449,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
 
     let _ = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
@@ -470,6 +476,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 Testing --dry-run...");
     let _ = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .current_dir(&test_dir)
         .args([
             "--server",
@@ -483,6 +490,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
 
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
@@ -518,6 +526,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 Testing diff command...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
@@ -555,6 +564,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     // Try without --force (should fail)
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
@@ -579,6 +589,7 @@ async fn cli_k8s_sync() -> Result<(), Box<dyn std::error::Error>> {
     // Try with --force (should succeed)
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .env("KUBECONFIG", &kubeconfig)
         .current_dir(&test_dir)
         .args([
@@ -698,6 +709,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
 
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .args([
             "--server",
             &server_url,
@@ -729,6 +741,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         full_args.extend(args.iter().copied());
         let output = Command::new(&zopp_bin)
             .env("HOME", &alice_home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args(&full_args)
             .output()?;
         if !output.status.success() {
@@ -754,6 +767,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     for (key, value) in &initial_secrets {
         let output = Command::new(&zopp_bin)
             .env("HOME", &alice_home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .current_dir(&test_dir)
             .args(["--server", &server_url, "secret", "set", key, value])
             .output()?;
@@ -774,6 +788,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔑 Setting up operator service principal...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .args([
             "--server",
             &server_url,
@@ -815,7 +830,8 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         "user_id": "",
         "email": "",
         "principals": [service_principal],
-        "current_principal": "k8s-operator"
+        "current_principal": "k8s-operator",
+        "use_file_storage": true
     });
 
     let operator_config_dir = operator_home.join(".zopp");
@@ -828,6 +844,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     // Grant READ permission
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .current_dir(&test_dir)
         .args([
             "--server",
@@ -916,6 +933,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔄 Testing real-time event streaming...");
     let _ = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .current_dir(&test_dir)
         .args([
             "--server",
@@ -948,6 +966,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("➕ Testing new secret addition...");
     let _ = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .current_dir(&test_dir)
         .args([
             "--server",
@@ -981,6 +1000,7 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
     println!("🗑️  Testing secret deletion...");
     let _ = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .current_dir(&test_dir)
         .args(["--server", &server_url, "secret", "delete", "SMTP_HOST"])
         .output()?;
@@ -1106,6 +1126,7 @@ async fn self_signed_tls() -> Result<(), Box<dyn std::error::Error>> {
     println!("👩 Alice joining via TLS...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .args([
             "--server",
             &server_url,
@@ -1149,6 +1170,7 @@ async fn self_signed_tls() -> Result<(), Box<dyn std::error::Error>> {
         full_args.extend(args.iter().copied());
         let output = Command::new(&zopp_bin)
             .env("HOME", &alice_home)
+            .env("ZOPP_USE_FILE_STORAGE", "true")
             .args(&full_args)
             .output()?;
         if !output.status.success() {
@@ -1163,6 +1185,7 @@ async fn self_signed_tls() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔐 Setting secret via TLS...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .args([
             "--server",
             &server_url,
@@ -1192,6 +1215,7 @@ async fn self_signed_tls() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 Getting secret via TLS...");
     let output = Command::new(&zopp_bin)
         .env("HOME", &alice_home)
+        .env("ZOPP_USE_FILE_STORAGE", "true")
         .args([
             "--server",
             &server_url,

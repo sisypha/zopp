@@ -1,11 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use super::keychain;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CliConfig {
     pub principals: Vec<PrincipalConfig>,
     #[serde(default)]
     pub current_principal: Option<String>, // Name of current principal
+    #[serde(default)]
+    pub use_file_storage: bool, // If true, store private keys in config file instead of keychain
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -16,12 +21,21 @@ pub struct PrincipalConfig {
     pub user_id: Option<String>, // Only for human principals (CLI users)
     #[serde(default)]
     pub email: Option<String>, // Only for human principals (CLI users)
-    pub private_key: String, // Ed25519 private key (hex-encoded)
-    pub public_key: String,  // Ed25519 public key (hex-encoded)
-    #[serde(default)]
-    pub x25519_private_key: Option<String>, // X25519 private key (hex-encoded)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub private_key: Option<String>, // Ed25519 private key (hex-encoded) - only if use_file_storage
+    pub public_key: String, // Ed25519 public key (hex-encoded)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x25519_private_key: Option<String>, // X25519 private key (hex-encoded) - only if use_file_storage
     #[serde(default)]
     pub x25519_public_key: Option<String>, // X25519 public key (hex-encoded)
+}
+
+/// Principal secrets loaded from keychain or file.
+/// These are automatically zeroized when dropped.
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+pub struct PrincipalSecrets {
+    pub ed25519_private_key: String,
+    pub x25519_private_key: Option<String>,
 }
 
 fn config_path() -> PathBuf {
@@ -61,6 +75,53 @@ pub fn get_current_principal(
         .ok_or_else(|| format!("Principal '{}' not found", principal_name).into())
 }
 
+/// Load a principal's secrets from keychain or file.
+pub fn load_principal_with_secrets(
+    principal: &PrincipalConfig,
+    use_file_storage: bool,
+) -> Result<PrincipalSecrets, Box<dyn std::error::Error>> {
+    if use_file_storage {
+        // Load from config file (private_key should be Some)
+        let ed25519_key = principal
+            .private_key
+            .clone()
+            .ok_or("Private key not found in config. Principal may have been created with keychain storage.")?;
+        Ok(PrincipalSecrets {
+            ed25519_private_key: ed25519_key,
+            x25519_private_key: principal.x25519_private_key.clone(),
+        })
+    } else {
+        // Load from keychain
+        let ed25519_key = keychain::get_ed25519_key(&principal.id)?;
+        let x25519_key = keychain::get_x25519_key(&principal.id)?;
+        Ok(PrincipalSecrets {
+            ed25519_private_key: (*ed25519_key).clone(),
+            x25519_private_key: x25519_key.map(|k| (*k).clone()),
+        })
+    }
+}
+
+/// Store a principal's secrets in keychain or file.
+/// If storing in keychain, the private keys in principal should be None.
+/// If storing in file, the private keys should be set in principal before calling save_config.
+pub fn store_principal_secrets(
+    principal_id: &str,
+    ed25519_private_key: &str,
+    x25519_private_key: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    keychain::store_ed25519_key(principal_id, ed25519_private_key)?;
+    if let Some(x25519_key) = x25519_private_key {
+        keychain::store_x25519_key(principal_id, x25519_key)?;
+    }
+    Ok(())
+}
+
+/// Delete a principal's secrets from keychain.
+pub fn delete_principal_secrets(principal_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    keychain::delete_principal_keys(principal_id)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,7 +132,7 @@ mod tests {
             name: name.to_string(),
             user_id: Some("user-123".to_string()),
             email: Some("test@example.com".to_string()),
-            private_key: "a".repeat(64), // 32 bytes hex
+            private_key: Some("a".repeat(64)), // 32 bytes hex
             public_key: "b".repeat(64),
             x25519_private_key: None,
             x25519_public_key: None,
@@ -82,6 +143,7 @@ mod tests {
         CliConfig {
             principals,
             current_principal: current,
+            use_file_storage: false,
         }
     }
 
@@ -219,7 +281,7 @@ mod tests {
             name: "device1".to_string(),
             user_id: Some("user-123".to_string()),
             email: Some("test@example.com".to_string()),
-            private_key: "a".repeat(64),
+            private_key: Some("a".repeat(64)),
             public_key: "b".repeat(64),
             x25519_private_key: Some("c".repeat(64)),
             x25519_public_key: Some("d".repeat(64)),
@@ -228,5 +290,30 @@ mod tests {
         assert!(principal.x25519_private_key.is_some());
         assert!(principal.x25519_public_key.is_some());
         assert_eq!(principal.x25519_private_key.as_ref().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn test_load_principal_with_secrets_from_file() {
+        let principal = make_principal("p1", "device1");
+        let secrets = load_principal_with_secrets(&principal, true).unwrap();
+        assert_eq!(secrets.ed25519_private_key, "a".repeat(64));
+        assert!(secrets.x25519_private_key.is_none());
+    }
+
+    #[test]
+    fn test_load_principal_with_secrets_missing_key() {
+        let principal = PrincipalConfig {
+            id: "p1".to_string(),
+            name: "device1".to_string(),
+            user_id: None,
+            email: None,
+            private_key: None, // No private key in file
+            public_key: "b".repeat(64),
+            x25519_private_key: None,
+            x25519_public_key: None,
+        };
+        // Should fail when use_file_storage=true but no key in file
+        let result = load_principal_with_secrets(&principal, true);
+        assert!(result.is_err());
     }
 }

@@ -8,10 +8,15 @@ pub async fn cmd_workspace_list(
     server: &str,
     tls_ca_cert: Option<&std::path::Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(Empty {});
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListWorkspaces")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/ListWorkspaces",
+    )?;
 
     let response = client.list_workspaces(request).await?.into_inner();
 
@@ -32,7 +37,7 @@ pub async fn cmd_workspace_create(
     tls_ca_cert: Option<&std::path::Path>,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     use uuid::Uuid;
     let workspace_id = Uuid::now_v7();
@@ -43,7 +48,7 @@ pub async fn cmd_workspace_create(
     rand_core::OsRng.fill_bytes(&mut kek);
 
     // Get principal's X25519 keypair for wrapping the KEK
-    let x25519_private_key = principal
+    let x25519_private_key = secrets
         .x25519_private_key
         .as_ref()
         .ok_or("Principal missing X25519 private key")?;
@@ -71,6 +76,7 @@ pub async fn cmd_workspace_create(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/CreateWorkspace",
     )?;
 
@@ -89,13 +95,18 @@ pub async fn cmd_workspace_grant_principal_access(
     workspace: &str,
     principal_id: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, caller) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, caller, caller_secrets) = setup_client(server, tls_ca_cert).await?;
 
     // Step 1: Get target principal's X25519 public key
     let mut request = tonic::Request::new(GetPrincipalRequest {
         principal_id: principal_id.to_string(),
     });
-    add_auth_metadata(&mut request, &caller, "/zopp.ZoppService/GetPrincipal")?;
+    add_auth_metadata(
+        &mut request,
+        &caller,
+        &caller_secrets,
+        "/zopp.ZoppService/GetPrincipal",
+    )?;
     let target_principal = client.get_principal(request).await?.into_inner();
 
     if target_principal.x25519_public_key.is_empty() {
@@ -106,11 +117,16 @@ pub async fn cmd_workspace_grant_principal_access(
     let mut request = tonic::Request::new(GetWorkspaceKeysRequest {
         workspace_name: workspace.to_string(),
     });
-    add_auth_metadata(&mut request, &caller, "/zopp.ZoppService/GetWorkspaceKeys")?;
+    add_auth_metadata(
+        &mut request,
+        &caller,
+        &caller_secrets,
+        "/zopp.ZoppService/GetWorkspaceKeys",
+    )?;
     let keys = client.get_workspace_keys(request).await?.into_inner();
 
     // Step 3: Unwrap KEK using caller's X25519 private key
-    let caller_x25519_private = caller
+    let caller_x25519_private = caller_secrets
         .x25519_private_key
         .as_ref()
         .ok_or("Caller principal missing X25519 private key")?;
@@ -147,6 +163,7 @@ pub async fn cmd_workspace_grant_principal_access(
     add_auth_metadata(
         &mut request,
         &caller,
+        &caller_secrets,
         "/zopp.ZoppService/GrantPrincipalWorkspaceAccess",
     )?;
 

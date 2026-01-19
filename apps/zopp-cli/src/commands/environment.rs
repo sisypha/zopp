@@ -7,7 +7,7 @@ pub async fn cmd_environment_list(
     workspace_name: &str,
     project_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::ListEnvironmentsRequest {
         workspace_name: workspace_name.to_string(),
@@ -16,6 +16,7 @@ pub async fn cmd_environment_list(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/ListEnvironments",
     )?;
 
@@ -40,9 +41,9 @@ pub async fn cmd_environment_create(
     project_name: &str,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
-    let kek = unwrap_workspace_kek(&mut client, &principal, workspace_name).await?;
+    let kek = unwrap_workspace_kek(&mut client, &principal, &secrets, workspace_name).await?;
     let dek = zopp_crypto::generate_dek();
 
     let kek_key = zopp_crypto::Dek::from_bytes(&kek)?;
@@ -59,6 +60,7 @@ pub async fn cmd_environment_create(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/CreateEnvironment",
     )?;
 
@@ -79,14 +81,19 @@ pub async fn cmd_environment_get(
     project_name: &str,
     environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::GetEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
         project_name: project_name.to_string(),
         environment_name: environment_name.to_string(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/GetEnvironment")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/GetEnvironment",
+    )?;
 
     let response = client.get_environment(request).await?.into_inner();
 
@@ -118,7 +125,7 @@ pub async fn cmd_environment_delete(
     project_name: &str,
     environment_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::DeleteEnvironmentRequest {
         workspace_name: workspace_name.to_string(),
@@ -128,6 +135,7 @@ pub async fn cmd_environment_delete(
     add_auth_metadata(
         &mut request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/DeleteEnvironment",
     )?;
 

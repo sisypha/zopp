@@ -50,10 +50,19 @@ jobs:
         with:
           install_only: true
 
+      - name: Install gnome-keyring for keychain tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring dbus-x11 libsecret-tools
+
       - name: Build binaries
         run: cargo build --bins --locked
 
       - name: Run E2E tests
-        run: cargo test --package e2e-tests --locked
+        run: |
+          # Start D-Bus session and unlock gnome-keyring for keychain tests
+          eval $(dbus-launch --sh-syntax)
+          echo "test-password" | gnome-keyring-daemon --unlock --components=secrets
+          cargo test --package e2e-tests --locked
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres

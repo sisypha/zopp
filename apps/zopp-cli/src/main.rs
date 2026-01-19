@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &token,
                 &email,
                 principal.as_deref(),
+                cli.use_file_storage,
             )
             .await?;
         }
@@ -146,6 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     cli.tls_ca_cert.as_deref(),
                     code.as_deref(),
                     passphrase.as_deref(),
+                    cli.use_file_storage,
                 )
                 .await?;
             }

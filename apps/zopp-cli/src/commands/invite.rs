@@ -8,9 +8,9 @@ pub async fn cmd_invite_create(
     expires_hours: i64,
     plain: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
-    let kek = unwrap_workspace_kek(&mut client, &principal, workspace_name).await?;
+    let kek = unwrap_workspace_kek(&mut client, &principal, &secrets, workspace_name).await?;
 
     let mut invite_secret = [0u8; 32];
     use rand_core::RngCore;
@@ -24,6 +24,7 @@ pub async fn cmd_invite_create(
     add_auth_metadata(
         &mut ws_request,
         &principal,
+        &secrets,
         "/zopp.ZoppService/ListWorkspaces",
     )?;
     let workspaces = client.list_workspaces(ws_request).await?.into_inner();
@@ -46,7 +47,12 @@ pub async fn cmd_invite_create(
         kek_encrypted: kek_encrypted.0,
         kek_nonce: kek_nonce.0.to_vec(),
     });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/CreateInvite")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/CreateInvite",
+    )?;
 
     let _response = client.create_invite(request).await?.into_inner();
 
@@ -69,10 +75,15 @@ pub async fn cmd_invite_list(
     server: &str,
     tls_ca_cert: Option<&std::path::Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::Empty {});
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/ListInvites")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/ListInvites",
+    )?;
 
     let response = client.list_invites(request).await?.into_inner();
 
@@ -111,10 +122,15 @@ pub async fn cmd_invite_revoke(
     let secret_hash = zopp_crypto::hash_sha256(&invite_secret);
     let token = hex::encode(secret_hash);
 
-    let (mut client, principal) = setup_client(server, tls_ca_cert).await?;
+    let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
     let mut request = tonic::Request::new(zopp_proto::RevokeInviteRequest { token });
-    add_auth_metadata(&mut request, &principal, "/zopp.ZoppService/RevokeInvite")?;
+    add_auth_metadata(
+        &mut request,
+        &principal,
+        &secrets,
+        "/zopp.ZoppService/RevokeInvite",
+    )?;
 
     client.revoke_invite(request).await?;
 

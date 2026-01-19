@@ -422,7 +422,7 @@ impl TestUser {
     pub fn raw_exec(&self, args: &[&str]) -> Output {
         Command::new(&self.zopp_bin)
             .env("HOME", &self.home_dir)
-            .args(["--server", &self.server_url])
+            .args(["--server", &self.server_url, "--use-file-storage"])
             .args(args)
             .output()
             .expect("Failed to execute command")
@@ -432,7 +432,7 @@ impl TestUser {
     pub fn exec(&self, args: &[&str]) -> CommandResult {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &self.home_dir)
-            .args(["--server", &self.server_url])
+            .args(["--server", &self.server_url, "--use-file-storage"])
             .args(args)
             .output()
             .expect("Failed to execute command");
@@ -445,7 +445,7 @@ impl TestUser {
         let output = Command::new(&self.zopp_bin)
             .env("HOME", &self.home_dir)
             .current_dir(dir)
-            .args(["--server", &self.server_url])
+            .args(["--server", &self.server_url, "--use-file-storage"])
             .args(args)
             .output()
             .expect("Failed to execute command");
@@ -457,7 +457,7 @@ impl TestUser {
     pub fn exec_with_env(&self, args: &[&str], env_vars: &[(&str, &str)]) -> CommandResult {
         let mut cmd = Command::new(&self.zopp_bin);
         cmd.env("HOME", &self.home_dir)
-            .args(["--server", &self.server_url])
+            .args(["--server", &self.server_url, "--use-file-storage"])
             .args(args);
         for (key, value) in env_vars {
             cmd.env(key, value);

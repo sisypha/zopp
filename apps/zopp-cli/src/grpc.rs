@@ -1,4 +1,7 @@
-use crate::config::{get_current_principal, load_config, PrincipalConfig};
+use crate::config::{
+    get_current_principal, load_config, load_principal_with_secrets, PrincipalConfig,
+    PrincipalSecrets,
+};
 use chrono::Utc;
 use ed25519_dalek::{Signer, SigningKey};
 use prost::Message;
@@ -72,15 +75,23 @@ pub fn sign_request_with_body(
     Ok((timestamp, signature.to_bytes().to_vec()))
 }
 
-/// Setup authenticated client: load config, get principal, connect to server
+/// Setup authenticated client: load config, get principal and secrets, connect to server
 pub async fn setup_client(
     server: &str,
     tls_ca_cert: Option<&Path>,
-) -> Result<(ZoppServiceClient<Channel>, PrincipalConfig), Box<dyn std::error::Error>> {
+) -> Result<
+    (
+        ZoppServiceClient<Channel>,
+        PrincipalConfig,
+        PrincipalSecrets,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let config = load_config()?;
     let principal = get_current_principal(&config)?;
+    let secrets = load_principal_with_secrets(principal, config.use_file_storage)?;
     let client = connect(server, tls_ca_cert).await?;
-    Ok((client, principal.clone()))
+    Ok((client, principal.clone(), secrets))
 }
 
 /// Add authentication metadata (principal-id, timestamp, signature, request-hash) to a request.
@@ -88,11 +99,12 @@ pub async fn setup_client(
 pub fn add_auth_metadata<T: Message>(
     request: &mut tonic::Request<T>,
     principal: &PrincipalConfig,
+    secrets: &PrincipalSecrets,
     method: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let request_hash = compute_request_hash(method, request.get_ref());
     let (timestamp, signature) =
-        sign_request_with_body(&principal.private_key, method, &request_hash)?;
+        sign_request_with_body(&secrets.ed25519_private_key, method, &request_hash)?;
 
     request
         .metadata_mut()
