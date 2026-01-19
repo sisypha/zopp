@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT role as \"role: String\" FROM user_project_permissions WHERE project_id = $1 AND user_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "name": "role: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6af6e060d866a9d6a1981a0438db1d02e0cbedf3079e409961d3b4b469f16020"
+}

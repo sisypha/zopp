@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT g.id, g.workspace_id, g.name, g.description, g.created_at, g.updated_at\n             FROM groups g\n             INNER JOIN group_members gm ON g.id = gm.group_id\n             WHERE gm.user_id = $1\n             ORDER BY g.name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "workspace_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "94663ffa81ef73d02fcc917af0fbc3a8b631974f75b4c4df33893230611e1cd2"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM project_permissions WHERE project_id = ? AND principal_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a5eab4dd702c2956f3b31b0135df3dc5493130a7e35b9c515f566ecd7f8946c2"
+}

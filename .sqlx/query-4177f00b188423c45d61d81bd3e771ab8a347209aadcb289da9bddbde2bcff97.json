@@ -1,0 +1,92 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!\", export_code as \"export_code!\", token_hash as \"token_hash!\",\n               verification_salt as \"verification_salt!\", user_id as \"user_id!\", principal_id as \"principal_id!\",\n               encrypted_data as \"encrypted_data!\", salt as \"salt!\", nonce as \"nonce!\",\n               expires_at as \"expires_at!: DateTime<Utc>\",\n               created_at as \"created_at!: DateTime<Utc>\",\n               consumed as \"consumed!\", failed_attempts as \"failed_attempts!\"\n               FROM principal_exports\n               WHERE export_code = ? AND consumed = 0 AND expires_at > CURRENT_TIMESTAMP AND failed_attempts < 3",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "export_code!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "token_hash!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "verification_salt!",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "user_id!",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "principal_id!",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "encrypted_data!",
+        "ordinal": 6,
+        "type_info": "Blob"
+      },
+      {
+        "name": "salt!",
+        "ordinal": 7,
+        "type_info": "Blob"
+      },
+      {
+        "name": "nonce!",
+        "ordinal": 8,
+        "type_info": "Blob"
+      },
+      {
+        "name": "expires_at!: DateTime<Utc>",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "consumed!",
+        "ordinal": 11,
+        "type_info": "Bool"
+      },
+      {
+        "name": "failed_attempts!",
+        "ordinal": 12,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4177f00b188423c45d61d81bd3e771ab8a347209aadcb289da9bddbde2bcff97"
+}

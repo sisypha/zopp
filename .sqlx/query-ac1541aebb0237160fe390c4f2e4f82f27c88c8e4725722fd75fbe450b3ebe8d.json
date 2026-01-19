@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT key_name FROM secrets WHERE env_id = $1 ORDER BY key_name",
+  "describe": {
+    "columns": [
+      {
+        "name": "key_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ac1541aebb0237160fe390c4f2e4f82f27c88c8e4725722fd75fbe450b3ebe8d"
+}

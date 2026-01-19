@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM group_environment_permissions WHERE environment_id = $1 AND group_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9676e2d1204da90f83ecb638ed9850b0c13a7741975292fa12f6d8cfbe7ad585"
+}

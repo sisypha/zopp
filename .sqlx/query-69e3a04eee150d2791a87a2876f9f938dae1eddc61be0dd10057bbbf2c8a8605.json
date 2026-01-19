@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT e.dek_wrapped, e.dek_nonce\n             FROM environments e\n             JOIN projects p ON p.id = e.project_id\n             WHERE e.workspace_id = $1 AND p.workspace_id = $1 AND p.name = $2 AND e.name = $3",
+  "describe": {
+    "columns": [
+      {
+        "name": "dek_wrapped",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "dek_nonce",
+        "ordinal": 1,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "69e3a04eee150d2791a87a2876f9f938dae1eddc61be0dd10057bbbf2c8a8605"
+}

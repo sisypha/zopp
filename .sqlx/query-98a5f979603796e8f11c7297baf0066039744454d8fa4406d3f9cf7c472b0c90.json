@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO project_permissions(project_id, principal_id, role) VALUES(?, ?, ?)\n             ON CONFLICT(project_id, principal_id) DO UPDATE SET role = excluded.role",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "98a5f979603796e8f11c7297baf0066039744454d8fa4406d3f9cf7c472b0c90"
+}

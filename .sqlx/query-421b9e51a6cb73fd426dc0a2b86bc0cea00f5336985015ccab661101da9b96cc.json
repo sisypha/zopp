@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT project_id, principal_id, role as \"role: String\", created_at\n             FROM project_permissions WHERE principal_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "project_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "principal_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "421b9e51a6cb73fd426dc0a2b86bc0cea00f5336985015ccab661101da9b96cc"
+}

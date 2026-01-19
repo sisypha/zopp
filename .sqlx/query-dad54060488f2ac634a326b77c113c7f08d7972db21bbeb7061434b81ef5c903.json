@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM secrets WHERE env_id = $1 AND key_name = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "dad54060488f2ac634a326b77c113c7f08d7972db21bbeb7061434b81ef5c903"
+}

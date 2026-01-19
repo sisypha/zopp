@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT group_id, user_id, created_at FROM group_members WHERE group_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "group_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7cbab7593f408093d8f8d97b3b79b3ee5bf3c7e300d100d5c22ca42bcf88648a"
+}

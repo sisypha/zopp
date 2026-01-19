@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT role FROM user_workspace_permissions WHERE workspace_id = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "role",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "129600c0ce73c8a0eb395de4cd4e284029b9d4d2d78e278f70ef2aab2943d3c9"
+}

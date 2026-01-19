@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT workspace_id, principal_id, ephemeral_pub, kek_wrapped, kek_nonce, created_at\n               FROM workspace_principals WHERE workspace_id = $1 AND principal_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "name": "workspace_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "principal_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "ephemeral_pub",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kek_wrapped",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kek_nonce",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ca980dc9c70e3bc9078415275803b63509b87febea6fef45bb0aee1dd50a7afd"
+}

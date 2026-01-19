@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,\n               w.created_at as \"created_at: DateTime<Utc>\",\n               w.updated_at as \"updated_at: DateTime<Utc>\"\n               FROM workspaces w\n               JOIN workspace_members wm ON w.id = wm.workspace_id\n               WHERE wm.user_id = ?",
+  "query": "SELECT id, name, owner_user_id, kdf_salt, kdf_m_cost_kib, kdf_t_cost, kdf_p_cost,\n               created_at, updated_at\n               FROM workspaces WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -39,12 +39,12 @@
         "type_info": "Integer"
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "created_at",
         "ordinal": 7,
         "type_info": "Text"
       },
       {
-        "name": "updated_at: DateTime<Utc>",
+        "name": "updated_at",
         "ordinal": 8,
         "type_info": "Text"
       }
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "0d78473cb854c77cf33bb0a9e20db48a33a74852f177cc09b9ce7a58ce8c5a3f"
+  "hash": "7d662c2f72e5193c0daf169debcaa7e96fad549b30127796b0db23d7caaa153e"
 }

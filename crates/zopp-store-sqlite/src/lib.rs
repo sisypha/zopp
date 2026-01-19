@@ -740,18 +740,21 @@ impl Store for SqliteStore {
         Ok(params.id.clone())
     }
 
-    async fn list_workspaces(&self, user_id: &UserId) -> Result<Vec<Workspace>, StoreError> {
-        let user_id_str = user_id.0.to_string();
+    async fn list_workspaces(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<Workspace>, StoreError> {
+        let principal_id_str = principal_id.0.to_string();
 
-        // Get all workspaces where user is a member
+        // Get all workspaces where principal has KEK access
         let rows = sqlx::query!(
             r#"SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,
                w.created_at as "created_at: DateTime<Utc>",
                w.updated_at as "updated_at: DateTime<Utc>"
                FROM workspaces w
-               JOIN workspace_members wm ON w.id = wm.workspace_id
-               WHERE wm.user_id = ?"#,
-            user_id_str
+               JOIN workspace_principals wp ON w.id = wp.workspace_id
+               WHERE wp.principal_id = ?"#,
+            principal_id_str
         )
         .fetch_all(&self.pool)
         .await

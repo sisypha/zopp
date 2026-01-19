@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT workspace_id FROM environments WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "workspace_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b799a4b27c1eba6101822a04f4ddccd0dfe392a3fc456efac06b7bf73072f8eb"
+}

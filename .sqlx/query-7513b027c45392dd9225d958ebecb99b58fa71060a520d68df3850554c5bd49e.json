@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT workspace_id FROM invite_workspaces WHERE invite_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "workspace_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7513b027c45392dd9225d958ebecb99b58fa71060a520d68df3850554c5bd49e"
+}

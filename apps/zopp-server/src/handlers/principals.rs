@@ -181,6 +181,11 @@ pub async fn list_workspace_service_principals(
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
 
+    // Check ADMIN permission for listing service principals
+    server
+        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+        .await?;
+
     // Get all principals in the workspace
     let workspace_principals = server
         .store
@@ -492,6 +497,14 @@ pub async fn get_effective_permissions(
             }
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
+
+    // Check permission: allow if querying own permissions, otherwise require Admin
+    let is_self = req.principal_id == principal_id.0.to_string();
+    if !is_self {
+        server
+            .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Admin)
+            .await?;
+    }
 
     // Parse target principal ID
     let target_principal_id = Uuid::parse_str(&req.principal_id)

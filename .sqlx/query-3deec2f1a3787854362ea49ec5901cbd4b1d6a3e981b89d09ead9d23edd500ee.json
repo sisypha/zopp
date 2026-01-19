@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO workspace_permissions(workspace_id, principal_id, role) VALUES(?, ?, ?)\n             ON CONFLICT(workspace_id, principal_id) DO UPDATE SET role = excluded.role",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "3deec2f1a3787854362ea49ec5901cbd4b1d6a3e981b89d09ead9d23edd500ee"
+}

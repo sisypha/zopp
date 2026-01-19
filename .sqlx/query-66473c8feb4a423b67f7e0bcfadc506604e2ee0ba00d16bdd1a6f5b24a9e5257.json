@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT role as \"role: String\" FROM group_environment_permissions WHERE environment_id = $1 AND group_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "name": "role: String",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "66473c8feb4a423b67f7e0bcfadc506604e2ee0ba00d16bdd1a6f5b24a9e5257"
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT workspace_id, user_id, role as \"role: String\", created_at FROM user_workspace_permissions WHERE workspace_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "workspace_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role: String",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3f0a2c112c42422ddcc0a6cbcfcb164cf1c759640540c75c83e2557799bec3ad"
+}

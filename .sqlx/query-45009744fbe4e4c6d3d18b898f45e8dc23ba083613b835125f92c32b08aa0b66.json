@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM environment_permissions\n               WHERE principal_id = $1\n               AND environment_id IN (\n                   SELECT e.id FROM environments e\n                   JOIN projects p ON e.project_id = p.id\n                   WHERE p.workspace_id = $2\n               )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "45009744fbe4e4c6d3d18b898f45e8dc23ba083613b835125f92c32b08aa0b66"
+}
