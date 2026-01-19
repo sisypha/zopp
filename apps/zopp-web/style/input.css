@@ -1,3 +1,71 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Apply Inter font to body */
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Monospace elements */
+  code, kbd, pre, samp {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* Better heading styles */
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.02em;
+  }
+
+  /* Selection color matching theme */
+  ::selection {
+    background: rgba(249, 115, 22, 0.25);
+  }
+}
+
+@layer components {
+  /* Button hover effect like docs */
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
+  }
+
+  /* Card hover effect */
+  .card:hover {
+    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.12);
+  }
+
+  /* Code styling */
+  code:not(pre code) {
+    @apply px-1.5 py-0.5 rounded text-sm;
+    background: rgba(249, 115, 22, 0.08);
+    color: #ea580c;
+  }
+
+  [data-theme="zopp-dark"] code:not(pre code) {
+    background: rgba(251, 146, 60, 0.12);
+    color: #fdba74;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #f97316;
+}
