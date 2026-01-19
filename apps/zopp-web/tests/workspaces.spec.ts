@@ -1,168 +1,245 @@
-import { test, expect } from '@playwright/test';
+/**
+ * E2E tests for workspaces, projects, and environments management.
+ * Uses the authenticated fixture for full integration testing.
+ */
 
-test.describe('Workspaces', () => {
-  // Note: These tests require auth state to be mocked. They are skipped until
-  // we implement proper auth mocking in the test setup. The auth redirect test
-  // in auth.spec.ts verifies that unauthenticated users are redirected to /login.
+import { test, expect } from './fixtures/test-setup';
 
-  test.skip('should show workspaces page', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
+test.describe('Workspaces Page', () => {
+  test('should show workspaces page with existing workspace', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName } = testContext;
+
     await page.goto('/workspaces');
 
-    // Should show the workspaces heading (exact match for main h1)
+    // Should show the workspaces heading
     await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
 
     // Should have create workspace button
     await expect(page.getByRole('button', { name: /Create Workspace/i })).toBeVisible();
+
+    // Should show our test workspace
+    await expect(page.getByText(workspaceName)).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('should show empty state when no workspaces', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces');
+  test('should create a new workspace', async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
+    const newWorkspaceName = `new-ws-${Date.now()}`;
 
-    // Should show empty state message
-    await expect(page.getByText(/No workspaces yet/i)).toBeVisible();
+    await page.goto('/workspaces');
+    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+
+    // Click create workspace button
+    await page.getByRole('button', { name: /Create Workspace/i }).click();
+
+    // Modal should appear
+    await expect(page.getByRole('heading', { name: /Create Workspace/i })).toBeVisible();
+
+    // Fill in workspace name
+    await page.getByPlaceholder(/my-workspace/i).fill(newWorkspaceName);
+
+    // Submit
+    await page.locator('.modal-box button[type="submit"]').click();
+
+    // Modal should close
+    await expect(page.getByRole('heading', { name: /Create Workspace/i })).not.toBeVisible({ timeout: 10000 });
+
+    // New workspace should appear in the list
+    await expect(page.getByText(newWorkspaceName)).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should navigate to projects page when clicking workspace', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName } = testContext;
+
+    await page.goto('/workspaces');
+    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+
+    // Wait for workspace to appear
+    await expect(page.getByText(workspaceName)).toBeVisible({ timeout: 10000 });
+
+    // Click on workspace card/link
+    await page.getByRole('link', { name: workspaceName }).click();
+
+    // Should be on projects page
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${workspaceName}`));
   });
 });
 
-test.describe('Projects', () => {
-  // Note: These tests require auth state to be mocked
+test.describe('Projects Page', () => {
+  test('should show projects page with existing project', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName, projectName } = testContext;
 
-  test.skip('should show projects page for workspace', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces/test-workspace');
+    await page.goto(`/workspaces/${workspaceName}`);
 
-    // Should show the projects heading (exact match for main h1)
+    // Should show the projects heading
     await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
     // Should have create project button
     await expect(page.getByRole('button', { name: /Create Project/i })).toBeVisible();
 
-    // Should show workspace name in breadcrumb
-    await expect(page.getByText(/test-workspace/i)).toBeVisible();
+    // Should show breadcrumb
+    const breadcrumb = page.locator('.breadcrumbs');
+    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    await expect(breadcrumb.getByText(workspaceName)).toBeVisible();
+
+    // Should show our test project
+    await expect(page.getByText(projectName)).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('should show empty state when no projects', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces/test-workspace');
+  test('should create a new project', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName } = testContext;
+    const newProjectName = `new-proj-${Date.now()}`;
 
-    // Should show empty state message
-    await expect(page.getByText(/No projects yet/i)).toBeVisible();
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+
+    // Click create project button
+    await page.getByRole('button', { name: /Create Project/i }).click();
+
+    // Modal should appear
+    await expect(page.getByRole('heading', { name: /Create Project/i })).toBeVisible();
+
+    // Fill in project name
+    await page.getByPlaceholder(/my-project/i).fill(newProjectName);
+
+    // Submit
+    await page.locator('.modal-box button[type="submit"]').click();
+
+    // Modal should close
+    await expect(page.getByRole('heading', { name: /Create Project/i })).not.toBeVisible({ timeout: 10000 });
+
+    // New project should appear in the list
+    await expect(page.getByText(newProjectName)).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should navigate to environments page when clicking project', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName, projectName } = testContext;
+
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+
+    // Wait for project to appear
+    await expect(page.getByText(projectName)).toBeVisible({ timeout: 10000 });
+
+    // Click on project card/link
+    await page.getByRole('link', { name: projectName }).click();
+
+    // Should be on environments page
+    await expect(page.getByRole('heading', { name: 'Environments', exact: true })).toBeVisible();
+  });
+
+  test('should have invite and permissions buttons', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName } = testContext;
+
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+
+    // Should have invite button
+    await expect(page.getByRole('link', { name: /Invite/i })).toBeVisible();
+
+    // Should have permissions button
+    await expect(page.getByRole('link', { name: /Permissions/i })).toBeVisible();
   });
 });
 
-test.describe('Environments', () => {
-  // Note: These tests require auth state to be mocked
+test.describe('Environments Page', () => {
+  test('should show environments page with existing environment', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName, projectName, environmentName } = testContext;
 
-  test.skip('should show environments page for project', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces/test-workspace/projects/test-project');
+    await page.goto(`/workspaces/${workspaceName}/projects/${projectName}`);
 
-    // Should show the environments heading (exact match for main h1)
+    // Should show the environments heading
     await expect(page.getByRole('heading', { name: 'Environments', exact: true })).toBeVisible();
 
     // Should have create environment button
     await expect(page.getByRole('button', { name: /Create Environment/i })).toBeVisible();
 
     // Should show breadcrumb
-    await expect(page.getByText(/test-workspace/i)).toBeVisible();
-    await expect(page.getByText(/test-project/i)).toBeVisible();
+    const breadcrumb = page.locator('.breadcrumbs');
+    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
+    await expect(breadcrumb.getByText(projectName)).toBeVisible();
+
+    // Should show our test environment
+    await expect(page.getByText(environmentName)).toBeVisible({ timeout: 10000 });
   });
 
-  test.skip('should show empty state when no environments', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces/test-workspace/projects/test-project');
+  test('should create a new environment', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName, projectName } = testContext;
+    const newEnvName = `new-env-${Date.now()}`;
 
-    // Should show empty state message
-    await expect(page.getByText(/No environments yet/i)).toBeVisible();
+    await page.goto(`/workspaces/${workspaceName}/projects/${projectName}`);
+    await expect(page.getByRole('heading', { name: 'Environments', exact: true })).toBeVisible();
+
+    // Click create environment button
+    await page.getByRole('button', { name: /Create Environment/i }).click();
+
+    // Modal should appear
+    await expect(page.getByRole('heading', { name: /Create Environment/i })).toBeVisible();
+
+    // Fill in environment name
+    await page.getByPlaceholder(/production/i).fill(newEnvName);
+
+    // Submit
+    await page.locator('.modal-box button[type="submit"]').click();
+
+    // Modal should close
+    await expect(page.getByRole('heading', { name: /Create Environment/i })).not.toBeVisible({ timeout: 10000 });
+
+    // New environment should appear in the list
+    await expect(page.getByText(newEnvName)).toBeVisible({ timeout: 10000 });
   });
-});
 
-test.describe('Secrets', () => {
-  // Note: These tests require auth state to be mocked
+  test('should navigate to secrets page when clicking environment', async ({ authenticatedPage, testContext }) => {
+    const page = authenticatedPage;
+    const { workspaceName, projectName, environmentName } = testContext;
 
-  test.skip('should show secrets page for environment', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces/test-workspace/projects/test-project/environments/test-env');
+    await page.goto(`/workspaces/${workspaceName}/projects/${projectName}`);
+    await expect(page.getByRole('heading', { name: 'Environments', exact: true })).toBeVisible();
 
-    // Should show the secrets heading (exact match for main h1)
+    // Wait for environment to appear
+    await expect(page.getByText(environmentName)).toBeVisible({ timeout: 10000 });
+
+    // Click on environment card/link
+    await page.getByRole('link', { name: environmentName }).click();
+
+    // Should be on secrets page
     await expect(page.getByRole('heading', { name: 'Secrets', exact: true })).toBeVisible();
-
-    // Should have add secret button
-    await expect(page.getByRole('button', { name: /Add Secret/i })).toBeVisible();
-
-    // Should show breadcrumb
-    await expect(page.getByText(/test-workspace/i)).toBeVisible();
-    await expect(page.getByText(/test-project/i)).toBeVisible();
-    await expect(page.getByText(/test-env/i)).toBeVisible();
-  });
-
-  test.skip('should show empty state when no secrets', async ({ page }) => {
-    // TODO: Mock auth state to test authenticated page access
-    await page.goto('/workspaces/test-workspace/projects/test-project/environments/test-env');
-
-    // Should show empty state message
-    await expect(page.getByText(/No secrets yet/i)).toBeVisible();
-  });
-
-  test.skip('should show add secret modal when clicking add button', async ({ page }) => {
-    // TODO: Mock auth state
-    await page.goto('/workspaces/test-workspace/projects/test-project/environments/test-env');
-
-    // Click add secret button
-    await page.getByRole('button', { name: /Add Secret/i }).click();
-
-    // Should show modal
-    await expect(page.getByRole('heading', { name: /Add Secret/i })).toBeVisible();
-    await expect(page.getByPlaceholder(/DATABASE_URL/i)).toBeVisible();
-    await expect(page.getByPlaceholder(/Enter secret value/i)).toBeVisible();
   });
 });
 
-test.describe('Navigation', () => {
-  test.skip('should have invite button on projects page', async ({ page }) => {
-    // TODO: Mock auth state
-    await page.goto('/workspaces/test-workspace');
+test.describe('Dashboard Navigation', () => {
+  test('should have working sidebar navigation', async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
 
-    // Should have invite button
-    await expect(page.getByRole('link', { name: /Invite/i })).toBeVisible();
-  });
-
-  test.skip('should have permissions button on projects page', async ({ page }) => {
-    // TODO: Mock auth state
-    await page.goto('/workspaces/test-workspace');
-
-    // Should have permissions button
-    await expect(page.getByRole('link', { name: /Permissions/i })).toBeVisible();
-  });
-
-  test.skip('should navigate to invites page from projects page', async ({ page }) => {
-    // TODO: Mock auth state
-    await page.goto('/workspaces/test-workspace');
-
-    // Click invite button
-    await page.getByRole('link', { name: /Invite/i }).click();
-
-    // Should be on invites page
-    await expect(page).toHaveURL(/\/workspaces\/test-workspace\/invites/);
-  });
-
-  test.skip('should navigate to permissions page from projects page', async ({ page }) => {
-    // TODO: Mock auth state
-    await page.goto('/workspaces/test-workspace');
-
-    // Click permissions button
-    await page.getByRole('link', { name: /Permissions/i }).click();
-
-    // Should be on permissions page
-    await expect(page).toHaveURL(/\/workspaces\/test-workspace\/permissions/);
-  });
-
-  test.skip('should have settings link in sidebar', async ({ page }) => {
-    // TODO: Mock auth state
     await page.goto('/workspaces');
+    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
 
-    // Should have settings link in sidebar
-    await expect(page.getByRole('link', { name: /Settings/i })).toBeVisible();
+    // Sidebar should have key links
+    const sidebar = page.locator('aside, .drawer-side');
+    await expect(sidebar.getByRole('link', { name: /Workspaces/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /Settings/i })).toBeVisible();
+  });
+
+  test('should navigate to settings from sidebar', async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
+
+    await page.goto('/workspaces');
+    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+
+    // Click settings in sidebar
+    const sidebar = page.locator('aside, .drawer-side');
+    await sidebar.getByRole('link', { name: /Settings/i }).click();
+
+    // Should be on settings page
+    await expect(page.getByRole('heading', { name: /Settings/i })).toBeVisible();
   });
 });
