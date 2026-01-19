@@ -48,6 +48,69 @@ cargo run --bin zopp -- workspace create acme
 cargo run --bin zopp -- secret set FOO bar
 ```
 
+### Web UI
+
+The web UI requires additional tooling and runs alongside the server.
+
+#### Prerequisites
+```bash
+# Install trunk (Rust WASM bundler)
+cargo install trunk
+
+# Install wasm-pack
+cargo install wasm-pack
+
+# Add WASM target
+rustup target add wasm32-unknown-unknown
+
+# Install node dependencies (for Tailwind/DaisyUI)
+cd apps/zopp-web && npm install
+```
+
+#### Option 1: Docker Compose (Easiest)
+```bash
+# Terminal 1: Start server + Envoy proxy
+cd docker
+docker-compose -f docker-compose.web-dev.yaml up
+
+# Terminal 2: Build WASM crypto module (one-time)
+wasm-pack build --target web --out-dir apps/zopp-web/pkg crates/zopp-crypto-wasm
+
+# Terminal 3: Start web UI
+cd apps/zopp-web
+trunk serve
+```
+
+#### Option 2: Run Everything Locally
+```bash
+# Terminal 1: Start zopp-server
+cargo run --bin zopp-server serve
+
+# Terminal 2: Start Envoy (needed for gRPC-web translation)
+docker run -v $(pwd)/docker/envoy-grpc-web.yaml:/etc/envoy/envoy.yaml \
+  --add-host=host.docker.internal:host-gateway \
+  -p 8080:8080 envoyproxy/envoy:v1.28-latest
+
+# Terminal 3: Build WASM crypto (one-time, rebuild after changes to zopp-crypto)
+wasm-pack build --target web --out-dir apps/zopp-web/pkg crates/zopp-crypto-wasm
+
+# Terminal 4: Start web UI with hot reload
+cd apps/zopp-web
+trunk serve
+```
+
+The web UI will be available at http://localhost:3000
+
+#### Testing a User Flow
+
+To test the UI, you need an invite token:
+```bash
+# Create a workspace and invite via CLI
+cargo run --bin zopp -- workspace create my-workspace
+cargo run --bin zopp -- invite create -w my-workspace
+# Copy the inv_xxxx token and use it at http://localhost:3000/register
+```
+
 ## Storage Backends
 
 Each storage backend lives in its own crate and implements the `Store` trait from `zopp-storage`. See individual crate READMEs for backend-specific details:
