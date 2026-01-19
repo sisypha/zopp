@@ -1,7 +1,8 @@
 # CLI Development Dockerfile
 # Provides a Rust environment for running zopp CLI commands
 
-FROM rust:1.83-bookworm
+# Use latest stable Rust to match workspace rust-version requirement
+FROM rust:bookworm
 
 # Install protobuf compiler for proto compilation
 RUN apt-get update && \

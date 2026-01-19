@@ -24,8 +24,10 @@ services:
     ports:
       - "50051:50051"
     volumes:
-      # Share source code for rebuilds
+      # Share source code for rebuilds (read-only to protect host files)
       - ..:/app:ro
+      # Writable target directory for cargo builds
+      - server-target:/app/target
       # Persistent data
       - zopp-data:/data
       # Cargo cache for faster rebuilds
@@ -80,8 +82,10 @@ services:
       context: ..
       dockerfile: docker/cli-dev.Dockerfile
     volumes:
-      # Share source for rebuilds
+      # Share source for rebuilds (read-only to protect host files)
       - ..:/app:ro
+      # Writable target directory for cargo builds
+      - cli-target:/app/target
       # CLI config and data
       - zopp-cli-home:/home/zopp
       - zopp-data:/data:ro
@@ -104,3 +108,5 @@ volumes:
   zopp-cli-home:
   cargo-cache:
   rustup-cache:
+  server-target:
+  cli-target:

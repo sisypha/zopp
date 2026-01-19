@@ -1,7 +1,8 @@
 # Web UI Development Dockerfile
 # Provides a complete environment for running the Leptos web app with hot reloading
 
-FROM rust:1.83-bookworm
+# Use latest stable Rust to match workspace rust-version requirement
+FROM rust:bookworm
 
 # Install Node.js (for tailwindcss) and other dependencies
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \

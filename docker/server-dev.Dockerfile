@@ -1,7 +1,8 @@
 # Server Development Dockerfile
 # Provides a Rust environment with cargo-watch for hot reloading
 
-FROM rust:1.83-bookworm
+# Use latest stable Rust to match workspace rust-version requirement
+FROM rust:bookworm
 
 # Install cargo-watch for hot reloading
 RUN cargo install cargo-watch
