@@ -37,6 +37,7 @@ pub fn LoginPage() -> impl IntoView {
     let (passphrase, set_passphrase) = signal(String::new());
     let (error, set_error) = signal::<Option<String>>(None);
     let (loading, set_loading) = signal(false);
+    let (consume_warning, set_consume_warning) = signal::<Option<String>>(None);
 
     let on_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
@@ -58,7 +59,8 @@ pub fn LoginPage() -> impl IntoView {
 
         spawn_local(async move {
             match import_principal(&code, &pass).await {
-                Ok(principal) => {
+                Ok(result) => {
+                    let principal = result.principal;
                     // Store principal in IndexedDB with encryption
                     #[cfg(target_arch = "wasm32")]
                     {
@@ -116,8 +118,15 @@ pub fn LoginPage() -> impl IntoView {
                         },
                     );
 
-                    // Navigate to workspaces
-                    navigate_clone("/workspaces", Default::default());
+                    // Show consume warning if present, otherwise navigate
+                    if let Some(warning) = result.consume_warning {
+                        set_consume_warning.set(Some(warning));
+                        set_loading.set(false);
+                        // User will see the warning and can click to continue
+                    } else {
+                        // Navigate to workspaces
+                        navigate_clone("/workspaces", Default::default());
+                    }
                 }
                 Err(e) => {
                     set_error.set(Some(format!("Import failed: {}", e)));
@@ -140,63 +149,88 @@ pub fn LoginPage() -> impl IntoView {
                         "Enter your export code and passphrase from the CLI."
                     </p>
 
-                    <form on:submit=on_submit class="space-y-4 mt-4">
-                        <Show when=move || error.get().is_some()>
-                            <div class="alert alert-error">
+                    // Show consume warning with continue button
+                    <Show when=move || consume_warning.get().is_some()>
+                        <div class="space-y-4 mt-4">
+                            <div class="alert alert-warning">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                                <span>{move || error.get().unwrap_or_default()}</span>
+                                <div>
+                                    <h3 class="font-bold">"Import Succeeded with Warning"</h3>
+                                    <p class="text-sm">{move || consume_warning.get().unwrap_or_default()}</p>
+                                </div>
                             </div>
-                        </Show>
-
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">"Export Code"</span>
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="Enter export code"
-                                class="input input-bordered"
-                                prop:value=move || export_code.get()
-                                on:input=move |ev| set_export_code.set(event_target_value(&ev))
-                            />
+                            <a href="/workspaces" class="btn btn-primary w-full">"Continue to Workspaces"</a>
                         </div>
+                    </Show>
 
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">"Passphrase"</span>
-                            </label>
-                            <input
-                                type="password"
-                                placeholder="Enter passphrase"
-                                class="input input-bordered"
-                                prop:value=move || passphrase.get()
-                                on:input=move |ev| set_passphrase.set(event_target_value(&ev))
-                            />
-                        </div>
-
-                        <button
-                            type="submit"
-                            class="btn btn-primary w-full"
-                            disabled=move || loading.get()
-                        >
-                            <Show when=move || loading.get()>
-                                <span class="loading loading-spinner"></span>
+                    // Form (hidden when showing warning)
+                    <div class:hidden=move || consume_warning.get().is_some()>
+                        <form on:submit=on_submit class="space-y-4 mt-4">
+                            <Show when=move || error.get().is_some()>
+                                <div class="alert alert-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>{move || error.get().unwrap_or_default()}</span>
+                                </div>
                             </Show>
-                            "Import"
-                        </button>
-                    </form>
 
-                    <div class="divider">"OR"</div>
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">"Export Code"</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Enter export code"
+                                    class="input input-bordered"
+                                    prop:value=move || export_code.get()
+                                    on:input=move |ev| set_export_code.set(event_target_value(&ev))
+                                />
+                            </div>
 
-                    <a href="/invite" class="btn btn-outline w-full">
-                        "Join with Invite Token"
-                    </a>
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">"Passphrase"</span>
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder="Enter passphrase"
+                                    class="input input-bordered"
+                                    prop:value=move || passphrase.get()
+                                    on:input=move |ev| set_passphrase.set(event_target_value(&ev))
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                class="btn btn-primary w-full"
+                                disabled=move || loading.get()
+                            >
+                                <Show when=move || loading.get()>
+                                    <span class="loading loading-spinner"></span>
+                                </Show>
+                                "Import"
+                            </button>
+                        </form>
+
+                        <div class="divider">"OR"</div>
+
+                        <a href="/invite" class="btn btn-outline w-full">
+                            "Join with Invite Token"
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
     }
+}
+
+/// Result of import including any warnings
+pub struct ImportResult {
+    pub principal: ExportedPrincipal,
+    pub consume_warning: Option<String>,
 }
 
 /// Import principal using the two-phase flow:
@@ -205,7 +239,7 @@ pub fn LoginPage() -> impl IntoView {
 async fn import_principal(
     export_code: &str,
     passphrase: &str,
-) -> Result<ExportedPrincipal, String> {
+) -> Result<ImportResult, String> {
     #[cfg(target_arch = "wasm32")]
     {
         use argon2::Argon2;
@@ -287,19 +321,23 @@ async fn import_principal(
         };
 
         // Try to consume - warn user if it fails as this is a one-time export
-        // The export code may still be valid on the server
-        if let Err(e) = client.consume_principal_export(consume_request).await {
-            web_sys::console::warn_1(
-                &format!(
-                "Warning: Failed to consume export code ({}). The export code may still be usable. \
-                 Consider creating a new export from the CLI for security.",
-                e
-            )
-                .into(),
-            );
-        }
+        let consume_warning = match client.consume_principal_export(consume_request).await {
+            Ok(_) => None,
+            Err(e) => {
+                let warning = format!(
+                    "Failed to invalidate export code: {}. The export code may still be usable by others. \
+                     Consider creating a new export from the CLI for better security.",
+                    e
+                );
+                web_sys::console::warn_1(&warning.clone().into());
+                Some(warning)
+            }
+        };
 
-        Ok(principal)
+        Ok(ImportResult {
+            principal,
+            consume_warning,
+        })
     }
 
     #[cfg(not(target_arch = "wasm32"))]

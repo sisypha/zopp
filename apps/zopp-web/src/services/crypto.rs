@@ -120,14 +120,13 @@ pub fn hex_decode(hex_str: &str) -> Vec<u8> {
 }
 
 // Stubs when neither wasm nor ssr (e.g., default feature check)
+// These should never be called - panic if they are to avoid silent data corruption
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "ssr")))]
 pub fn hex_encode(_bytes: &[u8]) -> String {
-    // Not used in default builds
-    String::new()
+    panic!("hex_encode called in non-WASM/non-SSR build - this is a configuration error")
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "ssr")))]
 pub fn hex_decode(_hex_str: &str) -> Vec<u8> {
-    // Not used in default builds
-    vec![]
+    panic!("hex_decode called in non-WASM/non-SSR build - this is a configuration error")
 }

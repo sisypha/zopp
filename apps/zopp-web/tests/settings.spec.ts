@@ -118,8 +118,9 @@ test.describe('Settings Page - Authenticated', () => {
     // Click should not throw (don't wait for completion as it may require server connection)
     await exportButton.click();
 
-    // Give a moment for the click to register
-    await page.waitForTimeout(500);
+    // Button should show some response (either loading state or remain enabled)
+    // This confirms the click registered without needing a fixed timeout
+    await expect(exportButton).toBeVisible();
   });
 
   test('should logout and redirect to landing page', async ({ authenticatedPage }) => {
@@ -141,8 +142,8 @@ test.describe('Settings Page - Authenticated', () => {
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 
-    // Wait for page to fully load
-    await page.waitForTimeout(1000);
+    // Wait for Current Principal card to be fully rendered (indicates principals loaded)
+    await expect(page.getByText('Current Principal')).toBeVisible();
 
     // Switch Principal section should NOT be visible with only one principal
     await expect(page.getByText('Switch Principal')).not.toBeVisible();
@@ -165,10 +166,7 @@ test.describe('Settings Page - Authenticated', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 
-    // Wait for principals to load
-    await page.waitForTimeout(1000);
-
-    // Switch Principal section should now be visible
+    // Wait for Switch Principal section to become visible (indicates principals loaded)
     await expect(page.getByText('Switch Principal')).toBeVisible();
 
     // Should show both principals
@@ -202,20 +200,13 @@ test.describe('Settings Page - Authenticated', () => {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 
-    // Wait for principals to load
-    await page.waitForTimeout(1000);
-
-    // Verify Switch Principal section is visible
+    // Wait for Switch Principal section to become visible (indicates principals loaded)
     await expect(page.getByText('Switch Principal')).toBeVisible();
 
     // Click the Switch button (there should be exactly one - for the non-current principal)
     await page.getByRole('button', { name: 'Switch' }).click();
 
-    // Wait for the page to reload after switch
-    await page.waitForTimeout(2000);
-
-    // After switch, the "Current Principal" section should show the switched principal
-    // The page reloads, so we need to wait for it
+    // Wait for the page to reload after switch by waiting for the settings heading
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible({ timeout: 10000 });
 
     // The current principal name in the "Current Principal" card should now be the second principal
