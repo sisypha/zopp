@@ -1,8 +1,9 @@
 name: Web E2E Tests
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
     paths:
       - 'apps/zopp-web/**'
       - 'crates/zopp-proto-web/**'
@@ -10,7 +11,6 @@ on:
       - 'docker/envoy-grpc-web*.yaml'
       - '.github/workflows/web-e2e.yaml'
   pull_request:
-    branches: [main]
     paths:
       - 'apps/zopp-web/**'
       - 'crates/zopp-proto-web/**'
