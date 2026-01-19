@@ -88,4 +88,30 @@ test.describe('Settings Page - Authenticated', () => {
     // Should be redirected to landing page
     await expect(page).toHaveURL('/');
   });
+
+  test('should not show switch principal section with only one principal', async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
+
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+
+    // Wait for page to fully load
+    await page.waitForTimeout(1000);
+
+    // Switch Principal section should NOT be visible with only one principal
+    await expect(page.getByText('Switch Principal')).not.toBeVisible();
+  });
+
+  test('should be able to navigate to import page from settings', async ({ authenticatedPage }) => {
+    const page = authenticatedPage;
+
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+
+    // Navigate to import page (can be done even when authenticated)
+    await page.goto('/import');
+
+    // Should show import page (not redirected away)
+    await expect(page.getByRole('heading', { name: /Import Principal/i })).toBeVisible();
+  });
 });
