@@ -178,14 +178,32 @@ pub async fn cmd_principal_create(
             caller_principal.email.clone(),
         )
     };
+
+    // Store secrets based on storage mode
+    let ed25519_private_hex = hex::encode(signing_key.to_bytes());
+    let x25519_private_hex = hex::encode(new_x25519_keypair.secret_key_bytes());
+
+    let (stored_private_key, stored_x25519_private_key) = if config.use_file_storage {
+        // File storage: store keys in config
+        (Some(ed25519_private_hex), Some(x25519_private_hex))
+    } else {
+        // Keychain storage: store keys in keychain, not in config
+        crate::config::store_principal_secrets(
+            &response.principal_id,
+            &ed25519_private_hex,
+            Some(&x25519_private_hex),
+        )?;
+        (None, None)
+    };
+
     config.principals.push(PrincipalConfig {
         id: response.principal_id.clone(),
         name: name.to_string(),
         user_id,
         email,
-        private_key: Some(hex::encode(signing_key.to_bytes())),
+        private_key: stored_private_key,
         public_key: hex::encode(verifying_key.to_bytes()),
-        x25519_private_key: Some(hex::encode(new_x25519_keypair.secret_key_bytes())),
+        x25519_private_key: stored_x25519_private_key,
         x25519_public_key: Some(hex::encode(new_x25519_keypair.public_key_bytes())),
     });
     save_config(&config)?;
