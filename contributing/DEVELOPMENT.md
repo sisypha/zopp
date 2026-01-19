@@ -103,13 +103,25 @@ The web UI will be available at http://localhost:3000
 
 #### Testing a User Flow
 
-To test the UI, you need an invite token:
+To test the UI, you first need to bootstrap a user:
+
 ```bash
-# Create a workspace and invite via CLI
+# Step 1: Create a bootstrap invite from the SERVER (not CLI)
+# If using Docker Compose:
+docker exec docker-zopp-server-1 zopp-server invite create --expires-hours 48
+# Or if running server locally:
+cargo run --bin zopp-server invite create --expires-hours 48
+
+# Step 2: Join using that invite via CLI (creates your principal)
+cargo run --bin zopp -- join <inv_xxxxx> your@email.com
+
+# Step 3: Now you can create workspaces and invite others
 cargo run --bin zopp -- workspace create my-workspace
 cargo run --bin zopp -- invite create -w my-workspace
-# Copy the inv_xxxx token and use it at http://localhost:3000/register
+# Copy the new inv_xxxx token and use it at http://localhost:3000/register
 ```
+
+The first invite must come from the server itself. After that, users with appropriate permissions can create workspace invites via the CLI or web UI.
 
 ## Storage Backends
 
