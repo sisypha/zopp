@@ -82,13 +82,21 @@ pub fn LoginPage() -> impl IntoView {
                         }
                     }
 
-                    // Set auth state
-                    auth_clone.set_principal(Some(crate::state::auth::Principal {
-                        id: principal.principal.id,
-                        name: principal.principal.name,
-                        email: Some(principal.email),
-                        user_id: Some(principal.user_id),
-                    }));
+                    // Set auth state with credentials
+                    auth_clone.set_authenticated(
+                        crate::state::auth::Principal {
+                            id: principal.principal.id.clone(),
+                            name: principal.principal.name.clone(),
+                            email: Some(principal.email.clone()),
+                            user_id: Some(principal.user_id.clone()),
+                        },
+                        crate::state::auth::Credentials {
+                            principal_id: principal.principal.id,
+                            ed25519_private_key: principal.principal.private_key,
+                            x25519_private_key: principal.principal.x25519_private_key,
+                            server_url: principal.server_url,
+                        },
+                    );
 
                     // Navigate to workspaces
                     navigate_clone("/workspaces", Default::default());

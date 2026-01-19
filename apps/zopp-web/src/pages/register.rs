@@ -57,17 +57,27 @@ pub fn RegisterPage() -> impl IntoView {
                                     .set_item("zopp_ed25519_private", &result.ed25519_private_key);
                                 let _ = storage
                                     .set_item("zopp_x25519_private", &result.x25519_private_key);
+                                let _ =
+                                    storage.set_item("zopp_server_url", "http://localhost:8080");
                             }
                         }
                     }
 
-                    // Set auth state
-                    auth_clone.set_principal(Some(crate::state::auth::Principal {
-                        id: result.principal_id,
-                        name: device,
-                        email: Some(mail),
-                        user_id: Some(result.user_id),
-                    }));
+                    // Set auth state with credentials
+                    auth_clone.set_authenticated(
+                        crate::state::auth::Principal {
+                            id: result.principal_id.clone(),
+                            name: device.clone(),
+                            email: Some(mail.clone()),
+                            user_id: Some(result.user_id.clone()),
+                        },
+                        crate::state::auth::Credentials {
+                            principal_id: result.principal_id,
+                            ed25519_private_key: result.ed25519_private_key,
+                            x25519_private_key: result.x25519_private_key,
+                            server_url: "http://localhost:8080".to_string(),
+                        },
+                    );
 
                     // Navigate to workspaces
                     navigate_clone("/workspaces", Default::default());
@@ -212,7 +222,7 @@ async fn join_workspace(
 
         // Compute secret hash for server lookup
         let mut hasher = Sha256::new();
-        hasher.update(&secret_array);
+        hasher.update(secret_array);
         let secret_hash = hasher.finalize();
         let secret_hash_hex = hex::encode(secret_hash);
 

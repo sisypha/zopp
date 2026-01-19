@@ -663,4 +663,33 @@ impl ZoppWebClient {
             .map_err(WebClientError::from)?;
         Ok(response.into_inner())
     }
+
+    // ============ Principal Export RPCs ============
+
+    /// Create a principal export (authenticated)
+    pub async fn create_principal_export(
+        &self,
+        credentials: &PrincipalCredentials,
+        request: CreatePrincipalExportRequest,
+    ) -> Result<CreatePrincipalExportResponse, WebClientError> {
+        let method = "/zopp.ZoppService/CreatePrincipalExport";
+        let metadata = self.create_auth_metadata(credentials, method, &request)?;
+
+        let mut grpc_request = tonic::Request::new(request);
+        for (key, value) in metadata {
+            grpc_request.metadata_mut().insert(
+                key,
+                value.parse().map_err(|e| {
+                    WebClientError::Transport(format!("Invalid metadata value: {}", e))
+                })?,
+            );
+        }
+
+        let mut client = zopp_service_client::ZoppServiceClient::new(self.client());
+        let response = client
+            .create_principal_export(grpc_request)
+            .await
+            .map_err(WebClientError::from)?;
+        Ok(response.into_inner())
+    }
 }

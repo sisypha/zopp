@@ -6,8 +6,9 @@ use leptos_router::{
 };
 
 use crate::pages::{
-    dashboard::DashboardPage, environments::EnvironmentsPage, login::LoginPage,
-    not_found::NotFoundPage, projects::ProjectsPage, register::RegisterPage, secrets::SecretsPage,
+    dashboard::DashboardPage, environments::EnvironmentsPage, invites::InvitesPage,
+    login::LoginPage, not_found::NotFoundPage, permissions::PermissionsPage,
+    projects::ProjectsPage, register::RegisterPage, secrets::SecretsPage, settings::SettingsPage,
     workspaces::WorkspacesPage,
 };
 use crate::state::auth::AuthProvider;
@@ -30,8 +31,11 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/login") view=LoginPage/>
                         <Route path=path!("/register") view=RegisterPage/>
                         <Route path=path!("/") view=DashboardPage/>
+                        <Route path=path!("/settings") view=SettingsPage/>
                         <Route path=path!("/workspaces") view=WorkspacesPage/>
                         <Route path=path!("/workspaces/:workspace") view=ProjectsPage/>
+                        <Route path=path!("/workspaces/:workspace/invites") view=InvitesPage/>
+                        <Route path=path!("/workspaces/:workspace/permissions") view=PermissionsPage/>
                         <Route path=path!("/workspaces/:workspace/projects/:project") view=EnvironmentsPage/>
                         <Route path=path!("/workspaces/:workspace/projects/:project/environments/:environment") view=SecretsPage/>
                     </Routes>
