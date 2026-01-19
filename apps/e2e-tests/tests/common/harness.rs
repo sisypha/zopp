@@ -227,8 +227,8 @@ impl TestHarness {
                 Ok(()) => return Ok(()),
                 Err(e) => {
                     let err_str = e.to_string();
-                    let is_port_conflict = err_str.contains("Address already in use")
-                        || err_str.contains("AddrInUse");
+                    let is_port_conflict =
+                        err_str.contains("Address already in use") || err_str.contains("AddrInUse");
 
                     // Only retry on port conflicts and if we have retries left
                     if is_port_conflict && attempt + 1 < MAX_PORT_RETRIES {
