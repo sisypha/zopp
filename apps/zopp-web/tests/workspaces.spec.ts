@@ -98,7 +98,7 @@ test.describe('Workspaces Page', () => {
     await expect(page.getByRole('heading', { name: 'Secrets', exact: true })).toBeVisible();
     await page.getByRole('button', { name: /Add.*Secret/i }).click();
     await expect(page.getByRole('heading', { name: /Add Secret/i })).toBeVisible();
-    await page.getByPlaceholder(/API_KEY/i).fill(secretKey);
+    await page.getByPlaceholder(/DATABASE_URL/i).fill(secretKey);
     await page.getByPlaceholder(/Enter secret value/i).fill(secretValue);
     await page.locator('.modal-box button[type="submit"]').click();
 
