@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,\n               w.created_at, w.updated_at\n               FROM workspaces w\n               JOIN workspace_members wm ON w.id = wm.workspace_id\n               WHERE wm.user_id = $1",
+  "query": "SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,\n               w.created_at, w.updated_at\n               FROM workspaces w\n               JOIN workspace_principals wp ON w.id = wp.workspace_id\n               WHERE wp.principal_id = $1",
   "describe": {
     "columns": [
       {
@@ -66,5 +66,5 @@
       false
     ]
   },
-  "hash": "94be28b41c89b36858933a70ef72a4c9511cbc393693256f22d5de1653511501"
+  "hash": "e9cdf1e54b34c2035270dd17b9684dfa11dadd6408f94314cdfb3592dd4a7c3b"
 }

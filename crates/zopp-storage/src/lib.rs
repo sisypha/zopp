@@ -508,8 +508,11 @@ pub trait Store: Send + Sync {
         params: &CreateWorkspaceParams,
     ) -> Result<WorkspaceId, StoreError>;
 
-    /// List all workspaces for a user (via their principals).
-    async fn list_workspaces(&self, user_id: &UserId) -> Result<Vec<Workspace>, StoreError>;
+    /// List all workspaces that a principal has KEK access to.
+    async fn list_workspaces(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<Workspace>, StoreError>;
 
     /// Get workspace by ID.
     async fn get_workspace(&self, ws: &WorkspaceId) -> Result<Workspace, StoreError>;
@@ -1112,7 +1115,10 @@ mod tests {
             Ok(WorkspaceId(Uuid::new_v4()))
         }
 
-        async fn list_workspaces(&self, _user_id: &UserId) -> Result<Vec<Workspace>, StoreError> {
+        async fn list_workspaces(
+            &self,
+            _principal_id: &PrincipalId,
+        ) -> Result<Vec<Workspace>, StoreError> {
             Ok(vec![])
         }
 
@@ -1698,7 +1704,8 @@ mod tests {
             .await
             .unwrap();
 
-        let _ = s.list_workspaces(&user_id).await.unwrap();
+        let principal_id = PrincipalId(uuid::Uuid::now_v7());
+        let _ = s.list_workspaces(&principal_id).await.unwrap();
         let _ = s.list_projects(&ws).await.unwrap();
         let _ = s.get_project(&project_id).await;
     }

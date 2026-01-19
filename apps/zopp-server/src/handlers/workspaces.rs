@@ -110,13 +110,16 @@ pub async fn list_workspaces(
             &request_hash,
         )
         .await?;
-    let user_id = principal
-        .user_id
-        .ok_or_else(|| Status::unauthenticated("Service accounts cannot list workspaces"))?;
+    // Reject service accounts
+    if principal.user_id.is_none() {
+        return Err(Status::unauthenticated(
+            "Service accounts cannot list workspaces",
+        ));
+    }
 
     let workspaces = server
         .store
-        .list_workspaces(&user_id)
+        .list_workspaces(&principal_id)
         .await
         .map_err(|e| Status::internal(format!("Failed to list workspaces: {}", e)))?;
 

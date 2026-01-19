@@ -582,14 +582,17 @@ impl Store for PostgresStore {
         Ok(params.id.clone())
     }
 
-    async fn list_workspaces(&self, user_id: &UserId) -> Result<Vec<Workspace>, StoreError> {
+    async fn list_workspaces(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<Workspace>, StoreError> {
         let rows = sqlx::query!(
             r#"SELECT w.id, w.name, w.owner_user_id, w.kdf_salt, w.kdf_m_cost_kib, w.kdf_t_cost, w.kdf_p_cost,
                w.created_at, w.updated_at
                FROM workspaces w
-               JOIN workspace_members wm ON w.id = wm.workspace_id
-               WHERE wm.user_id = $1"#,
-            user_id.0
+               JOIN workspace_principals wp ON w.id = wp.workspace_id
+               WHERE wp.principal_id = $1"#,
+            principal_id.0
         )
         .fetch_all(&self.pool)
         .await

@@ -1570,11 +1570,11 @@ async fn group_environment_permission_operations() {
 // ==================== Additional Edge Cases ====================
 
 #[tokio::test]
-async fn user_workspace_membership() {
+async fn principal_workspace_access() {
     let s = SqliteStore::open_in_memory().await.unwrap();
 
-    // Create users
-    let (user_id1, _) = s
+    // Create user and principal
+    let (user_id, _) = s
         .create_user(&CreateUserParams {
             email: "owner@example.com".to_string(),
             principal: None,
@@ -1583,28 +1583,44 @@ async fn user_workspace_membership() {
         .await
         .unwrap();
 
-    let (user_id2, _) = s
-        .create_user(&CreateUserParams {
-            email: "member@example.com".to_string(),
-            principal: None,
-            workspace_ids: vec![],
+    let principal_id = s
+        .create_principal(&CreatePrincipalParams {
+            user_id: Some(user_id.clone()),
+            name: "device".to_string(),
+            public_key: vec![1; 32],
+            x25519_public_key: Some(vec![2; 32]),
         })
         .await
         .unwrap();
 
     let ws = s
-        .create_workspace(&workspace_params(user_id1.clone(), "test-workspace"))
+        .create_workspace(&workspace_params(user_id.clone(), "test-workspace"))
         .await
         .unwrap();
 
-    // Add user to workspace
-    s.add_user_to_workspace(&ws, &user_id2).await.unwrap();
+    // Principal should not see workspace before KEK access is granted
+    let workspaces = s.list_workspaces(&principal_id).await.unwrap();
+    assert!(
+        workspaces.is_empty(),
+        "Principal should not see workspace without KEK access"
+    );
 
-    // List workspaces for user2 - they should see the workspace after being added
-    let workspaces = s.list_workspaces(&user_id2).await.unwrap();
+    // Grant principal KEK access to workspace
+    s.add_workspace_principal(&AddWorkspacePrincipalParams {
+        workspace_id: ws.clone(),
+        principal_id: principal_id.clone(),
+        ephemeral_pub: vec![3; 32],
+        kek_wrapped: vec![4; 48],
+        kek_nonce: vec![5; 24],
+    })
+    .await
+    .unwrap();
+
+    // Principal should now see the workspace
+    let workspaces = s.list_workspaces(&principal_id).await.unwrap();
     assert!(
         workspaces.iter().any(|w| w.id == ws),
-        "User added to workspace should see it in their workspace list"
+        "Principal with KEK access should see the workspace"
     );
 }
 

@@ -160,10 +160,13 @@ impl Store for StoreBackend {
         }
     }
 
-    async fn list_workspaces(&self, user_id: &UserId) -> Result<Vec<Workspace>, StoreError> {
+    async fn list_workspaces(
+        &self,
+        principal_id: &PrincipalId,
+    ) -> Result<Vec<Workspace>, StoreError> {
         match self {
-            StoreBackend::Sqlite(s) => s.list_workspaces(user_id).await,
-            StoreBackend::Postgres(s) => s.list_workspaces(user_id).await,
+            StoreBackend::Sqlite(s) => s.list_workspaces(principal_id).await,
+            StoreBackend::Postgres(s) => s.list_workspaces(principal_id).await,
         }
     }
 

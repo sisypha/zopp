@@ -114,6 +114,11 @@ pub async fn get_group(
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
 
+    // Check READ permission for getting groups
+    server
+        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Read)
+        .await?;
+
     let group = server
         .store
         .get_group_by_name(&workspace.id, &req.group_name)
@@ -166,6 +171,11 @@ pub async fn list_groups(
             }
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
+
+    // Check READ permission for listing groups
+    server
+        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Read)
+        .await?;
 
     let groups = server
         .store
@@ -507,6 +517,11 @@ pub async fn list_group_members(
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
 
+    // Check READ permission for listing group members
+    server
+        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Read)
+        .await?;
+
     let group = server
         .store
         .get_group_by_name(&workspace.id, &req.group_name)
@@ -576,6 +591,11 @@ pub async fn list_user_groups(
             }
             _ => Status::internal(format!("Failed to get workspace: {}", e)),
         })?;
+
+    // Check READ permission for listing user groups
+    server
+        .check_workspace_permission(&principal_id, &workspace.id, zopp_storage::Role::Read)
+        .await?;
 
     // Look up target user by email
     let target_user = server
