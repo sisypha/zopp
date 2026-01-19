@@ -6,7 +6,8 @@ services:
     image: envoyproxy/envoy:v1.28-latest
     ports:
       - "8080:8080"
-      - "9901:9901"
+      # Bind admin port to localhost only for security
+      - "127.0.0.1:9901:9901"
     volumes:
       - ./envoy-grpc-web.yaml:/etc/envoy/envoy.yaml
     extra_hosts:

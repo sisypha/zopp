@@ -22,20 +22,30 @@ pub enum StorageError {
 }
 
 /// Stored principal credentials (serializable for IndexedDB)
+/// Private keys are encrypted with a device-bound AES-GCM key before storage.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoredPrincipal {
     pub id: String,
     pub name: String,
     pub email: Option<String>,
     pub user_id: Option<String>,
-    /// Ed25519 private key (hex-encoded, encrypted at rest)
+    /// Ed25519 private key (hex-encoded, encrypted at rest with device key)
     pub ed25519_private_key: String,
     /// Ed25519 public key (hex-encoded)
     pub ed25519_public_key: String,
-    /// X25519 private key (hex-encoded, encrypted at rest)
+    /// X25519 private key (hex-encoded, encrypted at rest with device key)
     pub x25519_private_key: Option<String>,
     /// X25519 public key (hex-encoded)
     pub x25519_public_key: Option<String>,
+    /// Nonce for ed25519 private key encryption (base64)
+    #[serde(default)]
+    pub ed25519_nonce: Option<String>,
+    /// Nonce for x25519 private key encryption (base64)
+    #[serde(default)]
+    pub x25519_nonce: Option<String>,
+    /// Whether the keys are encrypted (for backward compatibility)
+    #[serde(default)]
+    pub encrypted: bool,
 }
 
 /// Principal metadata (without sensitive keys)
@@ -99,15 +109,20 @@ pub trait KeyStorage {
 #[cfg(target_arch = "wasm32")]
 mod wasm_impl {
     use super::*;
-    use js_sys::Array;
+    use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
     use serde_wasm_bindgen::{from_value, to_value};
     use wasm_bindgen::prelude::*;
-    use web_sys::{window, IdbDatabase, IdbObjectStore, IdbRequest, IdbTransactionMode};
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::{
+        window, CryptoKey, IdbDatabase, IdbObjectStore, IdbRequest, IdbTransactionMode,
+        SubtleCrypto,
+    };
 
     const DB_NAME: &str = "zopp-credentials";
-    const DB_VERSION: u32 = 1;
+    const DB_VERSION: u32 = 2; // Bumped for encryption support
     const PRINCIPALS_STORE: &str = "principals";
     const META_STORE: &str = "meta";
+    const DEVICE_KEY_NAME: &str = "device_encryption_key";
 
     /// IndexedDB implementation of KeyStorage with Web Crypto encryption
     pub struct IndexedDbStorage {}
@@ -115,6 +130,181 @@ mod wasm_impl {
     impl IndexedDbStorage {
         pub fn new() -> Self {
             Self {}
+        }
+
+        /// Get the SubtleCrypto API
+        fn get_subtle_crypto() -> Result<SubtleCrypto, StorageError> {
+            let window = window().ok_or(StorageError::NotAvailable)?;
+            let crypto = window.crypto().map_err(|_| StorageError::NotAvailable)?;
+            Ok(crypto.subtle())
+        }
+
+        /// Generate a new device-bound AES-GCM key (non-extractable)
+        async fn generate_device_key() -> Result<CryptoKey, StorageError> {
+            let subtle = Self::get_subtle_crypto()?;
+
+            // Create AES-GCM key generation params
+            let algorithm = Object::new();
+            Reflect::set(&algorithm, &"name".into(), &"AES-GCM".into())
+                .map_err(|_| StorageError::Encryption("Failed to set algorithm name".into()))?;
+            Reflect::set(&algorithm, &"length".into(), &256.into())
+                .map_err(|_| StorageError::Encryption("Failed to set key length".into()))?;
+
+            // Key usages
+            let usages = Array::new();
+            usages.push(&"encrypt".into());
+            usages.push(&"decrypt".into());
+
+            // Generate non-extractable key
+            let key_promise = subtle
+                .generate_key_with_object(&algorithm, false, &usages)
+                .map_err(|e| StorageError::Encryption(format!("{:?}", e)))?;
+
+            let key = JsFuture::from(key_promise)
+                .await
+                .map_err(|e| StorageError::Encryption(format!("{:?}", e)))?;
+
+            Ok(key.unchecked_into())
+        }
+
+        /// Get or create the device encryption key (stored in IndexedDB)
+        async fn get_or_create_device_key(&self) -> Result<CryptoKey, StorageError> {
+            let db = self.open_db().await?;
+            let store = Self::get_store(&db, META_STORE, IdbTransactionMode::Readonly)?;
+
+            let request = store
+                .get(&JsValue::from_str(DEVICE_KEY_NAME))
+                .map_err(|e| StorageError::OperationFailed(format!("{:?}", e)))?;
+
+            let result = Self::await_request(&request).await?;
+
+            if !result.is_undefined() && !result.is_null() {
+                // Key already exists
+                Ok(result.unchecked_into())
+            } else {
+                // Generate new key
+                let key = Self::generate_device_key().await?;
+
+                // Store it
+                let store = Self::get_store(&db, META_STORE, IdbTransactionMode::Readwrite)?;
+                let request = store
+                    .put_with_key(&key, &JsValue::from_str(DEVICE_KEY_NAME))
+                    .map_err(|e| StorageError::OperationFailed(format!("{:?}", e)))?;
+                Self::await_request(&request).await?;
+
+                Ok(key)
+            }
+        }
+
+        /// Encrypt data with the device key
+        async fn encrypt_with_device_key(
+            &self,
+            data: &[u8],
+        ) -> Result<(Vec<u8>, Vec<u8>), StorageError> {
+            let key = self.get_or_create_device_key().await?;
+            let subtle = Self::get_subtle_crypto()?;
+
+            // Generate random IV (12 bytes for AES-GCM)
+            let window = window().ok_or(StorageError::NotAvailable)?;
+            let crypto = window.crypto().map_err(|_| StorageError::NotAvailable)?;
+            let mut iv = [0u8; 12];
+            crypto
+                .get_random_values_with_u8_array(&mut iv)
+                .map_err(|_| StorageError::Encryption("Failed to generate IV".into()))?;
+
+            // Create algorithm params
+            let algorithm = Object::new();
+            Reflect::set(&algorithm, &"name".into(), &"AES-GCM".into())
+                .map_err(|_| StorageError::Encryption("Failed to set algorithm".into()))?;
+            let iv_array = Uint8Array::from(&iv[..]);
+            Reflect::set(&algorithm, &"iv".into(), &iv_array)
+                .map_err(|_| StorageError::Encryption("Failed to set IV".into()))?;
+
+            // Convert data to Uint8Array
+            let data_array = Uint8Array::from(data);
+
+            // Encrypt
+            let encrypted_promise = subtle
+                .encrypt_with_object_and_buffer_source(&algorithm, &key, &data_array)
+                .map_err(|e| StorageError::Encryption(format!("{:?}", e)))?;
+
+            let encrypted = JsFuture::from(encrypted_promise)
+                .await
+                .map_err(|e| StorageError::Encryption(format!("{:?}", e)))?;
+
+            let encrypted_buffer: ArrayBuffer = encrypted.unchecked_into();
+            let encrypted_array = Uint8Array::new(&encrypted_buffer);
+            let mut encrypted_bytes = vec![0u8; encrypted_array.length() as usize];
+            encrypted_array.copy_to(&mut encrypted_bytes);
+
+            Ok((encrypted_bytes, iv.to_vec()))
+        }
+
+        /// Decrypt data with the device key
+        async fn decrypt_with_device_key(
+            &self,
+            ciphertext: &[u8],
+            iv: &[u8],
+        ) -> Result<Vec<u8>, StorageError> {
+            let key = self.get_or_create_device_key().await?;
+            let subtle = Self::get_subtle_crypto()?;
+
+            // Create algorithm params
+            let algorithm = Object::new();
+            Reflect::set(&algorithm, &"name".into(), &"AES-GCM".into())
+                .map_err(|_| StorageError::Encryption("Failed to set algorithm".into()))?;
+            let iv_array = Uint8Array::from(iv);
+            Reflect::set(&algorithm, &"iv".into(), &iv_array)
+                .map_err(|_| StorageError::Encryption("Failed to set IV".into()))?;
+
+            let data_array = Uint8Array::from(ciphertext);
+
+            // Decrypt
+            let decrypted_promise = subtle
+                .decrypt_with_object_and_buffer_source(&algorithm, &key, &data_array)
+                .map_err(|e| StorageError::Encryption(format!("{:?}", e)))?;
+
+            let decrypted = JsFuture::from(decrypted_promise)
+                .await
+                .map_err(|e| StorageError::Encryption(format!("{:?}", e)))?;
+
+            let decrypted_buffer: ArrayBuffer = decrypted.unchecked_into();
+            let decrypted_array = Uint8Array::new(&decrypted_buffer);
+            let mut decrypted_bytes = vec![0u8; decrypted_array.length() as usize];
+            decrypted_array.copy_to(&mut decrypted_bytes);
+
+            Ok(decrypted_bytes)
+        }
+
+        /// Encrypt a hex-encoded key and return base64-encoded ciphertext + nonce
+        async fn encrypt_key(&self, hex_key: &str) -> Result<(String, String), StorageError> {
+            let key_bytes = hex::decode(hex_key)
+                .map_err(|e| StorageError::Encryption(format!("Invalid hex: {}", e)))?;
+            let (ciphertext, nonce) = self.encrypt_with_device_key(&key_bytes).await?;
+            Ok((
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &ciphertext),
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &nonce),
+            ))
+        }
+
+        /// Decrypt a base64-encoded ciphertext + nonce back to hex-encoded key
+        async fn decrypt_key(
+            &self,
+            ciphertext_b64: &str,
+            nonce_b64: &str,
+        ) -> Result<String, StorageError> {
+            let ciphertext =
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, ciphertext_b64)
+                    .map_err(|e| {
+                        StorageError::Encryption(format!("Invalid base64 ciphertext: {}", e))
+                    })?;
+            let nonce =
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, nonce_b64)
+                    .map_err(|e| {
+                        StorageError::Encryption(format!("Invalid base64 nonce: {}", e))
+                    })?;
+            let plaintext = self.decrypt_with_device_key(&ciphertext, &nonce).await?;
+            Ok(hex::encode(plaintext))
         }
 
         /// Open or create the IndexedDB database
@@ -224,7 +414,24 @@ mod wasm_impl {
     }
 
     impl KeyStorage for IndexedDbStorage {
-        async fn store_principal(&self, principal: StoredPrincipal) -> Result<(), StorageError> {
+        async fn store_principal(
+            &self,
+            mut principal: StoredPrincipal,
+        ) -> Result<(), StorageError> {
+            // Encrypt private keys before storing
+            let (ed25519_encrypted, ed25519_nonce) =
+                self.encrypt_key(&principal.ed25519_private_key).await?;
+            principal.ed25519_private_key = ed25519_encrypted;
+            principal.ed25519_nonce = Some(ed25519_nonce);
+
+            if let Some(ref x25519_key) = principal.x25519_private_key {
+                let (x25519_encrypted, x25519_nonce) = self.encrypt_key(x25519_key).await?;
+                principal.x25519_private_key = Some(x25519_encrypted);
+                principal.x25519_nonce = Some(x25519_nonce);
+            }
+
+            principal.encrypted = true;
+
             let db = self.open_db().await?;
             let store = Self::get_store(&db, PRINCIPALS_STORE, IdbTransactionMode::Readwrite)?;
 
@@ -253,8 +460,23 @@ mod wasm_impl {
                 return Ok(None);
             }
 
-            let principal: StoredPrincipal =
+            let mut principal: StoredPrincipal =
                 from_value(result).map_err(|e| StorageError::Serialization(format!("{:?}", e)))?;
+
+            // Decrypt private keys if they were encrypted
+            if principal.encrypted {
+                if let Some(ref nonce) = principal.ed25519_nonce {
+                    principal.ed25519_private_key = self
+                        .decrypt_key(&principal.ed25519_private_key, nonce)
+                        .await?;
+                }
+                if let (Some(ref x25519_key), Some(ref nonce)) =
+                    (&principal.x25519_private_key, &principal.x25519_nonce)
+                {
+                    principal.x25519_private_key = Some(self.decrypt_key(x25519_key, nonce).await?);
+                }
+            }
+
             Ok(Some(principal))
         }
 

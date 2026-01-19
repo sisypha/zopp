@@ -2,6 +2,7 @@ use leptos::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
+use std::collections::HashSet;
 
 use crate::components::Layout;
 use crate::state::auth::use_auth;
@@ -22,6 +23,8 @@ pub fn SecretsPage() -> impl IntoView {
     let (error, set_error) = signal::<Option<String>>(None);
     let (show_add_modal, set_show_add_modal) = signal(false);
     let (creating, set_creating) = signal(false);
+    // Track which secrets have their values visible (by key)
+    let (visible_keys, set_visible_keys) = signal::<HashSet<String>>(HashSet::new());
 
     // New secret form state
     let (new_key, set_new_key) = signal(String::new());
@@ -238,12 +241,26 @@ pub fn SecretsPage() -> impl IntoView {
                                         let key = secret.key.clone();
                                         let value = secret.value.clone();
                                         let key_for_delete = key.clone();
-                                        let (show_value, set_show_value) = signal(false);
+                                        let key_for_toggle = key.clone();
+                                        let key_for_check = key.clone();
+                                        let key_for_icon = key.clone();
+                                        // Use the parent signal to track visibility instead of local signal
+                                        let is_visible = move || visible_keys.get().contains(&key_for_check);
+                                        let toggle_visibility = move |_| {
+                                            let k = key_for_toggle.clone();
+                                            set_visible_keys.update(|set| {
+                                                if set.contains(&k) {
+                                                    set.remove(&k);
+                                                } else {
+                                                    set.insert(k);
+                                                }
+                                            });
+                                        };
                                         view! {
                                             <tr>
                                                 <td class="font-mono">{key}</td>
                                                 <td>
-                                                    <Show when=move || show_value.get() fallback=move || view! { <span class="text-base-content/50">"********"</span> }>
+                                                    <Show when=is_visible fallback=move || view! { <span class="text-base-content/50">"********"</span> }>
                                                         <span class="font-mono">{value.clone()}</span>
                                                     </Show>
                                                 </td>
@@ -251,9 +268,9 @@ pub fn SecretsPage() -> impl IntoView {
                                                     <div class="flex gap-2">
                                                         <button
                                                             class="btn btn-ghost btn-sm"
-                                                            on:click=move |_| set_show_value.update(|v| *v = !*v)
+                                                            on:click=toggle_visibility
                                                         >
-                                                            <Show when=move || show_value.get() fallback=move || view! {
+                                                            <Show when=move || visible_keys.get().contains(&key_for_icon) fallback=move || view! {
                                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>

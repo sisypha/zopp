@@ -108,13 +108,13 @@ extern "C" {
     pub fn get_current_timestamp() -> i64;
 }
 
-// Non-WASM stubs for SSR
+// Non-WASM stubs for SSR - use real implementations to avoid silent corruption
 #[cfg(not(target_arch = "wasm32"))]
-pub fn hex_encode(_bytes: &[u8]) -> String {
-    String::new()
+pub fn hex_encode(bytes: &[u8]) -> String {
+    hex::encode(bytes)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn hex_decode(_hex: &str) -> Vec<u8> {
-    vec![]
+pub fn hex_decode(hex_str: &str) -> Vec<u8> {
+    hex::decode(hex_str).unwrap_or_default()
 }

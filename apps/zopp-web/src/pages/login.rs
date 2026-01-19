@@ -3,6 +3,8 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_arch = "wasm32")]
+use crate::services::storage::{IndexedDbStorage, KeyStorage, StoredPrincipal};
 use crate::state::auth::use_auth;
 
 /// Exported principal data format (matches CLI)
@@ -57,27 +59,43 @@ pub fn LoginPage() -> impl IntoView {
         spawn_local(async move {
             match import_principal(&code, &pass).await {
                 Ok(principal) => {
-                    // Store principal in local storage for now
-                    // TODO: Store in IndexedDB with encryption
+                    // Store principal in IndexedDB with encryption
                     #[cfg(target_arch = "wasm32")]
                     {
+                        let storage = IndexedDbStorage::new();
+                        let stored = StoredPrincipal {
+                            id: principal.principal.id.clone(),
+                            name: principal.principal.name.clone(),
+                            email: Some(principal.email.clone()),
+                            user_id: Some(principal.user_id.clone()),
+                            ed25519_private_key: principal.principal.private_key.clone(),
+                            ed25519_public_key: principal.principal.public_key.clone(),
+                            x25519_private_key: Some(
+                                principal.principal.x25519_private_key.clone(),
+                            ),
+                            x25519_public_key: Some(principal.principal.x25519_public_key.clone()),
+                            ed25519_nonce: None,
+                            x25519_nonce: None,
+                            encrypted: false, // Will be encrypted by store_principal
+                        };
+                        if let Err(e) = storage.store_principal(stored).await {
+                            set_error.set(Some(format!("Failed to store principal: {}", e)));
+                            set_loading.set(false);
+                            return;
+                        }
+                        // Set current principal
+                        if let Err(e) = storage
+                            .set_current_principal_id(Some(&principal.principal.id))
+                            .await
+                        {
+                            web_sys::console::warn_1(
+                                &format!("Failed to set current principal: {}", e).into(),
+                            );
+                        }
+                        // Store server URL in localStorage (not sensitive)
                         if let Some(window) = web_sys::window() {
-                            if let Ok(Some(storage)) = window.local_storage() {
-                                let _ =
-                                    storage.set_item("zopp_principal_id", &principal.principal.id);
-                                let _ = storage
-                                    .set_item("zopp_principal_name", &principal.principal.name);
-                                let _ = storage.set_item("zopp_principal_email", &principal.email);
-                                let _ = storage.set_item("zopp_user_id", &principal.user_id);
-                                let _ = storage.set_item(
-                                    "zopp_ed25519_private",
-                                    &principal.principal.private_key,
-                                );
-                                let _ = storage.set_item(
-                                    "zopp_x25519_private",
-                                    &principal.principal.x25519_private_key,
-                                );
-                                let _ = storage.set_item("zopp_server_url", &principal.server_url);
+                            if let Ok(Some(ls)) = window.local_storage() {
+                                let _ = ls.set_item("zopp_server_url", &principal.server_url);
                             }
                         }
                     }
@@ -199,7 +217,12 @@ async fn import_principal(
             ConsumePrincipalExportRequest, GetPrincipalExportRequest, ZoppWebClient,
         };
 
-        let client = ZoppWebClient::new("http://localhost:8080");
+        // Derive server URL from current location or use default
+        let server_url = web_sys::window()
+            .and_then(|w| w.location().origin().ok())
+            .map(|origin| format!("{}/api", origin))
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+        let client = ZoppWebClient::new(&server_url);
 
         // Phase 1: Get verification salt
         let request = GetPrincipalExportRequest {
@@ -269,9 +292,17 @@ async fn import_principal(
             token_hash: token_hash.to_string(),
         };
 
-        // Try to consume, but don't fail if it errors (just log)
+        // Try to consume - warn user if it fails as this is a one-time export
+        // The export code may still be valid on the server
         if let Err(e) = client.consume_principal_export(consume_request).await {
-            web_sys::console::warn_1(&format!("Failed to consume export: {}", e).into());
+            web_sys::console::warn_1(
+                &format!(
+                "Warning: Failed to consume export code ({}). The export code may still be usable. \
+                 Consider creating a new export from the CLI for security.",
+                e
+            )
+                .into(),
+            );
         }
 
         Ok(principal)

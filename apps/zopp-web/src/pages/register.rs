@@ -2,6 +2,8 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
+#[cfg(target_arch = "wasm32")]
+use crate::services::storage::{IndexedDbStorage, KeyStorage, StoredPrincipal};
 use crate::state::auth::use_auth;
 
 #[component]
@@ -44,21 +46,41 @@ pub fn RegisterPage() -> impl IntoView {
         spawn_local(async move {
             match join_workspace(&token, &mail, &device).await {
                 Ok(result) => {
-                    // Store credentials in local storage
+                    // Store credentials in IndexedDB with encryption
                     #[cfg(target_arch = "wasm32")]
                     {
+                        let storage = IndexedDbStorage::new();
+                        let stored = StoredPrincipal {
+                            id: result.principal_id.clone(),
+                            name: device.clone(),
+                            email: Some(mail.clone()),
+                            user_id: Some(result.user_id.clone()),
+                            ed25519_private_key: result.ed25519_private_key.clone(),
+                            ed25519_public_key: result.ed25519_public_key.clone(),
+                            x25519_private_key: Some(result.x25519_private_key.clone()),
+                            x25519_public_key: Some(result.x25519_public_key.clone()),
+                            ed25519_nonce: None,
+                            x25519_nonce: None,
+                            encrypted: false, // Will be encrypted by store_principal
+                        };
+                        if let Err(e) = storage.store_principal(stored).await {
+                            set_error.set(Some(format!("Failed to store principal: {}", e)));
+                            set_loading.set(false);
+                            return;
+                        }
+                        // Set current principal
+                        if let Err(e) = storage
+                            .set_current_principal_id(Some(&result.principal_id))
+                            .await
+                        {
+                            web_sys::console::warn_1(
+                                &format!("Failed to set current principal: {}", e).into(),
+                            );
+                        }
+                        // Store server URL in localStorage (not sensitive)
                         if let Some(window) = web_sys::window() {
-                            if let Ok(Some(storage)) = window.local_storage() {
-                                let _ = storage.set_item("zopp_principal_id", &result.principal_id);
-                                let _ = storage.set_item("zopp_principal_name", &device);
-                                let _ = storage.set_item("zopp_principal_email", &mail);
-                                let _ = storage.set_item("zopp_user_id", &result.user_id);
-                                let _ = storage
-                                    .set_item("zopp_ed25519_private", &result.ed25519_private_key);
-                                let _ = storage
-                                    .set_item("zopp_x25519_private", &result.x25519_private_key);
-                                let _ =
-                                    storage.set_item("zopp_server_url", "http://localhost:8080");
+                            if let Ok(Some(ls)) = window.local_storage() {
+                                let _ = ls.set_item("zopp_server_url", &result.server_url);
                             }
                         }
                     }
@@ -75,7 +97,7 @@ pub fn RegisterPage() -> impl IntoView {
                             principal_id: result.principal_id,
                             ed25519_private_key: result.ed25519_private_key,
                             x25519_private_key: result.x25519_private_key,
-                            server_url: "http://localhost:8080".to_string(),
+                            server_url: result.server_url,
                         },
                     );
 
@@ -184,7 +206,10 @@ struct JoinResult {
     principal_id: String,
     user_id: String,
     ed25519_private_key: String,
+    ed25519_public_key: String,
     x25519_private_key: String,
+    x25519_public_key: String,
+    server_url: String,
 }
 
 /// Join a workspace using an invite token
@@ -226,8 +251,12 @@ async fn join_workspace(
         let secret_hash = hasher.finalize();
         let secret_hash_hex = hex::encode(secret_hash);
 
-        // Connect to server
-        let client = ZoppWebClient::new("http://localhost:8080");
+        // Derive server URL from current location or use default
+        let server_url = web_sys::window()
+            .and_then(|w| w.location().origin().ok())
+            .map(|origin| format!("{}/api", origin))
+            .unwrap_or_else(|| "http://localhost:8080".to_string());
+        let client = ZoppWebClient::new(&server_url);
 
         // Get invite info
         let invite = client
@@ -296,7 +325,10 @@ async fn join_workspace(
             principal_id: response.principal_id,
             user_id: response.user_id,
             ed25519_private_key: hex::encode(signing_key.to_bytes()),
+            ed25519_public_key: hex::encode(verifying_key.to_bytes()),
             x25519_private_key: hex::encode(x25519_keypair.secret_key_bytes()),
+            x25519_public_key: hex::encode(x25519_keypair.public_key_bytes()),
+            server_url,
         })
     }
 

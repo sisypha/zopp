@@ -78,7 +78,7 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('should redirect authenticated user away from login page', async ({ page }) => {
+  test.skip('should redirect authenticated user away from login page', async ({ page }) => {
     // TODO: Implement after auth state is properly set up
     // This test will mock the auth state and verify redirect behavior
   });
