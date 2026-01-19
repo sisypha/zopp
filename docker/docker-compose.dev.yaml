@@ -90,8 +90,8 @@ services:
       - ..:/app:ro
       # Writable target directory for cargo builds
       - cli-target:/app/target
-      # CLI config and data
-      - zopp-cli-home:/home/zopp
+      # CLI config directory
+      - zopp-cli-config:/root/.zopp
       - zopp-data:/data:ro
       # Cargo cache
       - cargo-cache:/cargo
@@ -99,7 +99,6 @@ services:
     environment:
       - CARGO_HOME=/cargo
       - RUSTUP_HOME=/rustup
-      - HOME=/home/zopp
       - ZOPP_SERVER=http://zopp-server:50051
     working_dir: /app
     # Keep container running for docker exec
@@ -109,7 +108,7 @@ services:
 
 volumes:
   zopp-data:
-  zopp-cli-home:
+  zopp-cli-config:
   cargo-cache:
   rustup-cache:
   server-target:

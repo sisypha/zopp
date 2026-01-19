@@ -10,16 +10,8 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for CLI
-RUN useradd -m -s /bin/bash zopp
-
 # Set up working directory
 WORKDIR /app
-
-# Build the CLI binary once (will be rebuilt on source changes)
-# This is done at runtime via the helper script
-
-USER zopp
 
 # Keep container running
 CMD ["tail", "-f", "/dev/null"]
