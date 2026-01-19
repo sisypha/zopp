@@ -22,6 +22,7 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY apps ./apps
+COPY xtask ./xtask
 
 # Install npm dependencies
 RUN cd apps/zopp-web && npm install
