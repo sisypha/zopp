@@ -107,7 +107,7 @@ test.describe('Workspaces Page', () => {
     await expect(page.getByText(secretKey)).toBeVisible({ timeout: 15000 });
 
     // Step 5: Verify we can read the secret back (tests decryption)
-    await page.getByRole('button', { name: /Show/i }).first().click();
+    await page.locator('button[title="Toggle visibility"]').first().click();
     await expect(page.getByText(secretValue)).toBeVisible({ timeout: 5000 });
   });
 
