@@ -1,0 +1,106 @@
+# Development Docker Compose
+#
+# Run the entire zopp stack in development mode with hot reloading.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.dev.yaml up
+#
+# CLI access:
+#   ./docker/zopp-cli.sh workspace list
+#   ./docker/zopp-cli.sh secret set -w myws -p myproj -e dev MY_SECRET value
+#
+# Services:
+#   - zopp-server: gRPC server with SQLite (port 50051)
+#   - envoy: gRPC-web proxy (port 8080)
+#   - web: Leptos web UI with trunk serve (port 3000)
+#   - cli: CLI container for running zopp commands
+
+services:
+  # zopp-server in development mode
+  zopp-server:
+    build:
+      context: ..
+      dockerfile: docker/server-dev.Dockerfile
+    ports:
+      - "50051:50051"
+    volumes:
+      # Share source code for rebuilds
+      - ..:/app:ro
+      # Persistent data
+      - zopp-data:/data
+      # Cargo cache for faster rebuilds
+      - cargo-cache:/cargo
+      - rustup-cache:/rustup
+    environment:
+      - CARGO_HOME=/cargo
+      - RUSTUP_HOME=/rustup
+      - ZOPP_DATA_DIR=/data
+      - RUST_LOG=info
+    working_dir: /app
+    command: >
+      cargo watch -x 'run --bin zopp-server -- serve --db /data/zopp.db'
+
+  # Envoy proxy for gRPC-web
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    ports:
+      - "8080:8080"
+      - "127.0.0.1:9901:9901"
+    volumes:
+      - ./envoy-grpc-web.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - zopp-server
+
+  # Web UI with hot reloading
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web-dev.Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      # Share source for hot reloading
+      - ../apps/zopp-web/src:/app/apps/zopp-web/src:ro
+      - ../apps/zopp-web/style:/app/apps/zopp-web/style:ro
+      - ../apps/zopp-web/index.html:/app/apps/zopp-web/index.html:ro
+      - ../apps/zopp-web/Trunk.toml:/app/apps/zopp-web/Trunk.toml:ro
+      - ../crates:/app/crates:ro
+      # Cargo cache
+      - cargo-cache:/cargo
+      - rustup-cache:/rustup
+    environment:
+      - CARGO_HOME=/cargo
+      - RUSTUP_HOME=/rustup
+    depends_on:
+      - envoy
+
+  # CLI container for running zopp commands
+  cli:
+    build:
+      context: ..
+      dockerfile: docker/cli-dev.Dockerfile
+    volumes:
+      # Share source for rebuilds
+      - ..:/app:ro
+      # CLI config and data
+      - zopp-cli-home:/home/zopp
+      - zopp-data:/data:ro
+      # Cargo cache
+      - cargo-cache:/cargo
+      - rustup-cache:/rustup
+    environment:
+      - CARGO_HOME=/cargo
+      - RUSTUP_HOME=/rustup
+      - HOME=/home/zopp
+      - ZOPP_SERVER=http://zopp-server:50051
+    working_dir: /app
+    # Keep container running for docker exec
+    command: ["tail", "-f", "/dev/null"]
+    depends_on:
+      - zopp-server
+
+volumes:
+  zopp-data:
+  zopp-cli-home:
+  cargo-cache:
+  rustup-cache:

@@ -26,5 +26,26 @@ services:
       - ZOPP_DATA_DIR=/data
     command: ["serve", "--db", "/data/zopp.db"]
 
+  # Web UI (Leptos with trunk serve for hot reloading)
+  web:
+    build:
+      context: ..
+      dockerfile: docker/web-dev.Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount the web app source for hot reloading
+      - ../apps/zopp-web/src:/app/apps/zopp-web/src:ro
+      - ../apps/zopp-web/style:/app/apps/zopp-web/style:ro
+      - ../apps/zopp-web/index.html:/app/apps/zopp-web/index.html:ro
+      - ../apps/zopp-web/Trunk.toml:/app/apps/zopp-web/Trunk.toml:ro
+      # Mount crates for recompilation on changes
+      - ../crates:/app/crates:ro
+    environment:
+      - CARGO_HOME=/cargo
+      - RUSTUP_HOME=/rustup
+    depends_on:
+      - envoy
+
 volumes:
   zopp-data:
