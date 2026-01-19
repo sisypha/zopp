@@ -48,6 +48,69 @@ test.describe('Workspaces Page', () => {
     await expect(page.getByText(newWorkspaceName)).toBeVisible({ timeout: 10000 });
   });
 
+  test('should create workspace, project, environment, and secret from web UI', async ({ authenticatedPage }) => {
+    // This test verifies the full flow using only web UI operations.
+    // It specifically tests that KEK wrapping/unwrapping works correctly
+    // (regression test for AAD mismatch bug where workspace name was used
+    // during wrap but workspace ID was used during unwrap).
+    const page = authenticatedPage;
+    const testId = Date.now();
+    const wsName = `web-ws-${testId}`;
+    const projName = `web-proj-${testId}`;
+    const envName = `web-env-${testId}`;
+    const secretKey = `WEB_SECRET_${testId}`;
+    const secretValue = `secret-value-${testId}`;
+
+    // Step 1: Create workspace from web UI
+    await page.goto('/workspaces');
+    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Create Workspace/i }).click();
+    await expect(page.getByRole('heading', { name: /Create Workspace/i })).toBeVisible();
+    await page.getByPlaceholder(/my-workspace/i).fill(wsName);
+    await page.locator('.modal-box button[type="submit"]').click();
+    await expect(page.getByText(wsName)).toBeVisible({ timeout: 15000 });
+
+    // Step 2: Navigate to workspace and create project
+    await page.getByRole('link', { name: wsName }).click();
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Create Project/i }).click();
+    await expect(page.getByRole('heading', { name: /Create Project/i })).toBeVisible();
+    await page.getByPlaceholder(/my-project/i).fill(projName);
+    await page.locator('.modal-box button[type="submit"]').click();
+    await expect(page.getByText(projName)).toBeVisible({ timeout: 15000 });
+
+    // Step 3: Navigate to project and create environment
+    // This step tests KEK unwrapping - if AAD mismatches, this will fail
+    await page.getByRole('link', { name: projName }).click();
+    await expect(page.getByRole('heading', { name: 'Environments', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Create Environment/i }).click();
+    await expect(page.getByRole('heading', { name: /Create Environment/i })).toBeVisible();
+    await page.getByPlaceholder(/production/i).fill(envName);
+    await page.locator('.modal-box button[type="submit"]').click();
+
+    // Verify no error appears and environment is created
+    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(envName)).toBeVisible({ timeout: 15000 });
+
+    // Step 4: Navigate to environment and create a secret
+    // This tests full DEK encryption/decryption
+    await page.getByRole('link', { name: envName }).click();
+    await expect(page.getByRole('heading', { name: 'Secrets', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: /Add.*Secret/i }).click();
+    await expect(page.getByRole('heading', { name: /Add Secret/i })).toBeVisible();
+    await page.getByPlaceholder(/API_KEY/i).fill(secretKey);
+    await page.getByPlaceholder(/Enter secret value/i).fill(secretValue);
+    await page.locator('.modal-box button[type="submit"]').click();
+
+    // Verify no error and secret appears
+    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(secretKey)).toBeVisible({ timeout: 15000 });
+
+    // Step 5: Verify we can read the secret back (tests decryption)
+    await page.getByRole('button', { name: /Show/i }).first().click();
+    await expect(page.getByText(secretValue)).toBeVisible({ timeout: 5000 });
+  });
+
   test('should navigate to projects page when clicking workspace', async ({ authenticatedPage, testContext }) => {
     const page = authenticatedPage;
     const { workspaceName } = testContext;
