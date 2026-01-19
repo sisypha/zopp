@@ -104,4 +104,65 @@ test.describe('Secrets', () => {
     // Should show empty state message
     await expect(page.getByText(/No secrets yet/i)).toBeVisible();
   });
+
+  test.skip('should show add secret modal when clicking add button', async ({ page }) => {
+    // TODO: Mock auth state
+    await page.goto('/workspaces/test-workspace/projects/test-project/environments/test-env');
+
+    // Click add secret button
+    await page.getByRole('button', { name: /Add Secret/i }).click();
+
+    // Should show modal
+    await expect(page.getByRole('heading', { name: /Add Secret/i })).toBeVisible();
+    await expect(page.getByPlaceholder(/DATABASE_URL/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/Enter secret value/i)).toBeVisible();
+  });
+});
+
+test.describe('Navigation', () => {
+  test.skip('should have invite button on projects page', async ({ page }) => {
+    // TODO: Mock auth state
+    await page.goto('/workspaces/test-workspace');
+
+    // Should have invite button
+    await expect(page.getByRole('link', { name: /Invite/i })).toBeVisible();
+  });
+
+  test.skip('should have permissions button on projects page', async ({ page }) => {
+    // TODO: Mock auth state
+    await page.goto('/workspaces/test-workspace');
+
+    // Should have permissions button
+    await expect(page.getByRole('link', { name: /Permissions/i })).toBeVisible();
+  });
+
+  test.skip('should navigate to invites page from projects page', async ({ page }) => {
+    // TODO: Mock auth state
+    await page.goto('/workspaces/test-workspace');
+
+    // Click invite button
+    await page.getByRole('link', { name: /Invite/i }).click();
+
+    // Should be on invites page
+    await expect(page).toHaveURL(/\/workspaces\/test-workspace\/invites/);
+  });
+
+  test.skip('should navigate to permissions page from projects page', async ({ page }) => {
+    // TODO: Mock auth state
+    await page.goto('/workspaces/test-workspace');
+
+    // Click permissions button
+    await page.getByRole('link', { name: /Permissions/i }).click();
+
+    // Should be on permissions page
+    await expect(page).toHaveURL(/\/workspaces\/test-workspace\/permissions/);
+  });
+
+  test.skip('should have settings link in sidebar', async ({ page }) => {
+    // TODO: Mock auth state
+    await page.goto('/workspaces');
+
+    // Should have settings link in sidebar
+    await expect(page.getByRole('link', { name: /Settings/i })).toBeVisible();
+  });
 });
