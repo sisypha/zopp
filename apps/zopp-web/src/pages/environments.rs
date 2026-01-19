@@ -183,7 +183,11 @@ pub fn EnvironmentsPage() -> impl IntoView {
                                         <div class="card-body">
                                             <h2 class="card-title">{display_name}</h2>
                                             <p class="text-base-content/70">
-                                                {format!("{} secrets", secret_count)}
+                                                {if secret_count == 1 {
+                                                    "1 secret".to_string()
+                                                } else {
+                                                    format!("{} secrets", secret_count)
+                                                }}
                                             </p>
                                         </div>
                                     </a>
@@ -282,7 +286,7 @@ async fn fetch_environments(
                 .map(|e| EnvironmentInfo {
                     id: e.id,
                     name: e.name,
-                    secret_count: 0,
+                    secret_count: e.secret_count as usize,
                 })
                 .collect();
             set_environments.set(items);
@@ -344,7 +348,8 @@ async fn create_environment_api(
     nonce_bytes.copy_from_slice(&keys.kek_nonce);
     let nonce = Nonce(nonce_bytes);
 
-    let aad = format!("workspace:{}", workspace).into_bytes();
+    // AAD must use workspace_id (UUID), not workspace name
+    let aad = format!("workspace:{}", keys.workspace_id).into_bytes();
     let kek_bytes = unwrap_key(&keys.kek_wrapped, &nonce, &shared_secret, &aad)
         .map_err(|_| "Failed to unwrap KEK")?;
 

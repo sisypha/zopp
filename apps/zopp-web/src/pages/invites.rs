@@ -259,7 +259,8 @@ async fn create_invite_api(
     nonce_bytes.copy_from_slice(&keys.kek_nonce);
     let kek_nonce = Nonce(nonce_bytes);
 
-    let kek_aad = format!("workspace:{}", workspace).into_bytes();
+    // AAD must use workspace_id (UUID), not workspace name
+    let kek_aad = format!("workspace:{}", keys.workspace_id).into_bytes();
     let kek_bytes =
         zopp_crypto::unwrap_key(&keys.kek_wrapped, &kek_nonce, &shared_secret, &kek_aad)
             .map_err(|_| "Failed to unwrap KEK")?;
@@ -281,17 +282,17 @@ async fn create_invite_api(
     let secret_hash = hasher.finalize();
     let secret_hash_hex = hex::encode(secret_hash);
 
-    // 5. Encrypt KEK with the invite secret
-    let aad = format!("invite:workspace:{}", workspace).into_bytes();
+    // 5. Encrypt KEK with the invite secret (use workspace_id for AAD)
+    let aad = format!("invite:workspace:{}", keys.workspace_id).into_bytes();
     let (kek_enc_nonce, kek_encrypted) = encrypt(kek.as_bytes(), &invite_secret, &aad)
         .map_err(|e| format!("Encrypt failed: {}", e))?;
 
     // 6. Calculate expiration (24 hours from now)
     let expires_at = chrono::Utc::now().timestamp() + 86400;
 
-    // 7. Create invite on server
+    // 7. Create invite on server (use workspace_id)
     let request = CreateInviteRequest {
-        workspace_ids: vec![workspace.to_string()],
+        workspace_ids: vec![keys.workspace_id.clone()],
         expires_at,
         token: secret_hash_hex,
         kek_encrypted: kek_encrypted.0,

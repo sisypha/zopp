@@ -1,0 +1,125 @@
+name: Web E2E Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/zopp-web/**'
+      - 'crates/zopp-proto-web/**'
+      - 'crates/zopp-crypto/**'
+      - 'docker/envoy-grpc-web*.yaml'
+      - '.github/workflows/web-e2e.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/zopp-web/**'
+      - 'crates/zopp-proto-web/**'
+      - 'crates/zopp-crypto/**'
+      - 'docker/envoy-grpc-web*.yaml'
+      - '.github/workflows/web-e2e.yaml'
+
+concurrency:
+  group: web-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-e2e:
+    name: web-e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/zopp-web/package-lock.json
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install trunk
+        run: cargo install --locked trunk
+
+      - name: Build Rust binaries
+        run: cargo build --bins --locked
+
+      - name: Install npm dependencies
+        run: |
+          cd apps/zopp-web
+          npm ci
+
+      - name: Install Playwright browsers
+        run: |
+          cd apps/zopp-web
+          npx playwright install chromium --with-deps
+
+      - name: Start zopp-server
+        run: |
+          ./target/debug/zopp-server serve --health-addr 0.0.0.0:8081 &
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -sf http://localhost:8081/health > /dev/null 2>&1; then
+              echo "Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 1
+          done
+
+      - name: Create Envoy config for CI
+        run: |
+          # Create a version that uses localhost for Linux CI
+          sed 's/host.docker.internal/127.0.0.1/g' docker/envoy-grpc-web-local.yaml > /tmp/envoy-ci.yaml
+
+      - name: Start Envoy proxy
+        run: |
+          docker run -d \
+            --name envoy \
+            --network host \
+            -v /tmp/envoy-ci.yaml:/etc/envoy/envoy.yaml \
+            envoyproxy/envoy:v1.28-latest
+          # Wait for Envoy to be ready
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080 > /dev/null 2>&1 || curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080 | grep -q "4"; then
+              echo "Envoy is ready"
+              break
+            fi
+            echo "Waiting for Envoy... ($i/30)"
+            sleep 1
+          done
+
+      - name: Run Playwright tests
+        run: |
+          cd apps/zopp-web
+          npx playwright test --reporter=list
+        env:
+          CI: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/zopp-web/test-results/
+          retention-days: 30
+
+      - name: Stop services
+        if: always()
+        run: |
+          docker stop envoy || true
+          pkill -f zopp-server || true

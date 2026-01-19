@@ -59,7 +59,7 @@ impl AuthContext {
         self.credentials
             .get()
             .map(|c| c.server_url)
-            .unwrap_or_else(|| "http://localhost:8080".to_string())
+            .unwrap_or_else(crate::services::config::get_server_url)
     }
 
     pub fn set_principal(&self, principal: Option<Principal>) {
@@ -82,17 +82,24 @@ impl AuthContext {
         self.credentials.set(None);
         #[cfg(target_arch = "wasm32")]
         {
+            use crate::services::storage::{IndexedDbStorage, KeyStorage};
+
+            // Clear current principal in IndexedDB
+            spawn_local(async move {
+                let storage = IndexedDbStorage::new();
+                if let Err(e) = storage.set_current_principal_id(None).await {
+                    web_sys::console::warn_1(
+                        &format!("Failed to clear current principal: {}", e).into(),
+                    );
+                }
+            });
+
+            // Clear server URL from localStorage and redirect
             if let Some(window) = web_sys::window() {
                 if let Ok(Some(storage)) = window.local_storage() {
-                    let _ = storage.remove_item("zopp_principal_id");
-                    let _ = storage.remove_item("zopp_principal_name");
-                    let _ = storage.remove_item("zopp_principal_email");
-                    let _ = storage.remove_item("zopp_user_id");
-                    let _ = storage.remove_item("zopp_ed25519_private");
-                    let _ = storage.remove_item("zopp_x25519_private");
                     let _ = storage.remove_item("zopp_server_url");
                 }
-                let _ = window.location().set_href("/login");
+                let _ = window.location().set_href("/");
             }
         }
     }
@@ -109,13 +116,13 @@ impl Default for AuthContext {
 pub fn AuthProvider(children: Children) -> impl IntoView {
     let auth = AuthContext::new();
 
-    // Try to load existing principal from storage on mount
+    // Try to load existing principal from IndexedDB on mount
     #[cfg(target_arch = "wasm32")]
     {
         let auth_clone = auth;
         Effect::new(move || {
             spawn_local(async move {
-                load_stored_credentials(auth_clone);
+                load_stored_credentials(auth_clone).await;
             });
         });
     }
@@ -130,48 +137,62 @@ pub fn AuthProvider(children: Children) -> impl IntoView {
     children()
 }
 
-/// Load credentials from localStorage
+/// Load credentials from IndexedDB
 #[cfg(target_arch = "wasm32")]
-fn load_stored_credentials(auth: AuthContext) {
-    if let Some(window) = web_sys::window() {
-        if let Ok(Some(storage)) = window.local_storage() {
-            let principal_id = storage.get_item("zopp_principal_id").ok().flatten();
-            let principal_name = storage.get_item("zopp_principal_name").ok().flatten();
-            let email = storage.get_item("zopp_principal_email").ok().flatten();
-            let user_id = storage.get_item("zopp_user_id").ok().flatten();
-            let ed25519_private = storage.get_item("zopp_ed25519_private").ok().flatten();
-            let x25519_private = storage.get_item("zopp_x25519_private").ok().flatten();
-            let server_url = storage
-                .get_item("zopp_server_url")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "http://localhost:8080".to_string());
+async fn load_stored_credentials(auth: AuthContext) {
+    use crate::services::storage::{IndexedDbStorage, KeyStorage};
 
-            if let (Some(id), Some(name), Some(ed25519), Some(x25519)) = (
-                principal_id,
-                principal_name,
-                ed25519_private,
-                x25519_private,
-            ) {
-                auth.set_authenticated(
-                    Principal {
-                        id: id.clone(),
-                        name,
-                        email,
-                        user_id,
-                    },
-                    Credentials {
-                        principal_id: id,
-                        ed25519_private_key: ed25519,
-                        x25519_private_key: x25519,
-                        server_url,
-                    },
-                );
-                return;
-            }
+    let storage = IndexedDbStorage::new();
+
+    // Get current principal ID
+    let current_id = match storage.get_current_principal_id().await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            auth.loading.set(false);
+            return;
+        }
+        Err(e) => {
+            web_sys::console::warn_1(&format!("Failed to get current principal: {}", e).into());
+            auth.loading.set(false);
+            return;
+        }
+    };
+
+    // Load principal from IndexedDB
+    match storage.get_principal(&current_id).await {
+        Ok(Some(stored)) => {
+            // Get server URL from localStorage (non-sensitive)
+            let server_url = web_sys::window()
+                .and_then(|w| w.local_storage().ok().flatten())
+                .and_then(|s| s.get_item("zopp_server_url").ok().flatten())
+                .unwrap_or_else(crate::services::config::get_server_url);
+
+            let x25519_private = stored.x25519_private_key.unwrap_or_default();
+
+            auth.set_authenticated(
+                Principal {
+                    id: stored.id.clone(),
+                    name: stored.name,
+                    email: stored.email,
+                    user_id: stored.user_id,
+                },
+                Credentials {
+                    principal_id: stored.id,
+                    ed25519_private_key: stored.ed25519_private_key,
+                    x25519_private_key: x25519_private,
+                    server_url,
+                },
+            );
+        }
+        Ok(None) => {
+            web_sys::console::log_1(&"No stored principal found".into());
+            auth.loading.set(false);
+        }
+        Err(e) => {
+            web_sys::console::warn_1(&format!("Failed to load principal: {}", e).into());
+            auth.loading.set(false);
         }
     }
-    auth.loading.set(false);
 }
 
 /// Get auth context from anywhere in the component tree

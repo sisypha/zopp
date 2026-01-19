@@ -130,7 +130,7 @@ pub fn LoginPage() -> impl IntoView {
     // Redirect if already authenticated
     Effect::new(move || {
         if auth.is_authenticated() {
-            navigate_for_effect("/", Default::default());
+            navigate_for_effect("/workspaces", Default::default());
         }
     });
 
@@ -193,8 +193,8 @@ pub fn LoginPage() -> impl IntoView {
 
                     <div class="divider">"OR"</div>
 
-                    <a href="/register" class="btn btn-outline w-full">
-                        "Create New Principal"
+                    <a href="/invite" class="btn btn-outline w-full">
+                        "Join with Invite Token"
                     </a>
                 </div>
             </div>
@@ -217,11 +217,8 @@ async fn import_principal(
             ConsumePrincipalExportRequest, GetPrincipalExportRequest, ZoppWebClient,
         };
 
-        // Derive server URL from current location or use default
-        let server_url = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .map(|origin| format!("{}/api", origin))
-            .unwrap_or_else(|| "http://localhost:8080".to_string());
+        // Get server URL (handles dev vs production)
+        let server_url = crate::services::config::get_server_url();
         let client = ZoppWebClient::new(&server_url);
 
         // Phase 1: Get verification salt

@@ -188,7 +188,11 @@ pub fn ProjectsPage() -> impl IntoView {
                                         <div class="card-body">
                                             <h2 class="card-title">{display_name}</h2>
                                             <p class="text-base-content/70">
-                                                {format!("{} environments", env_count)}
+                                                {if env_count == 1 {
+                                                    "1 environment".to_string()
+                                                } else {
+                                                    format!("{} environments", env_count)
+                                                }}
                                             </p>
                                         </div>
                                     </a>
@@ -285,7 +289,7 @@ async fn fetch_projects(
                 .map(|p| ProjectInfo {
                     id: p.id,
                     name: p.name,
-                    environment_count: 0,
+                    environment_count: p.environment_count as usize,
                 })
                 .collect();
             set_projects.set(items);

@@ -7,7 +7,7 @@ use leptos_router::{
 
 use crate::pages::{
     dashboard::DashboardPage, environments::EnvironmentsPage, invites::InvitesPage,
-    login::LoginPage, not_found::NotFoundPage, permissions::PermissionsPage,
+    landing::LandingPage, login::LoginPage, not_found::NotFoundPage, permissions::PermissionsPage,
     projects::ProjectsPage, register::RegisterPage, secrets::SecretsPage, settings::SettingsPage,
     workspaces::WorkspacesPage,
 };
@@ -28,9 +28,12 @@ pub fn App() -> impl IntoView {
             <Router>
                 <main class="min-h-screen bg-base-200">
                     <Routes fallback=|| view! { <NotFoundPage/> }>
+                        <Route path=path!("/") view=LandingPage/>
                         <Route path=path!("/login") view=LoginPage/>
+                        <Route path=path!("/import") view=LoginPage/>
                         <Route path=path!("/register") view=RegisterPage/>
-                        <Route path=path!("/") view=DashboardPage/>
+                        <Route path=path!("/invite") view=RegisterPage/>
+                        <Route path=path!("/dashboard") view=DashboardPage/>
                         <Route path=path!("/settings") view=SettingsPage/>
                         <Route path=path!("/workspaces") view=WorkspacesPage/>
                         <Route path=path!("/workspaces/:workspace") view=ProjectsPage/>

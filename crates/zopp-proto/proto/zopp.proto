@@ -185,6 +185,7 @@ message CreateWorkspaceRequest {
 message Workspace {
   string id = 1;
   string name = 2;
+  int32 project_count = 3;  // Number of projects in this workspace
 }
 
 message WorkspaceList {
@@ -358,6 +359,7 @@ message Project {
   string name = 3;
   int64 created_at = 4;
   int64 updated_at = 5;
+  int32 environment_count = 6;  // Number of environments in this project
 }
 
 message ProjectList {
@@ -398,6 +400,7 @@ message Environment {
   bytes dek_nonce = 5;
   int64 created_at = 6;
   int64 updated_at = 7;
+  int32 secret_count = 8;  // Number of secrets in this environment
 }
 
 message EnvironmentList {

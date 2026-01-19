@@ -30,6 +30,12 @@ pub fn SecretsPage() -> impl IntoView {
     let (new_key, set_new_key) = signal(String::new());
     let (new_value, set_new_value) = signal(String::new());
 
+    // Edit secret modal state
+    let (show_edit_modal, set_show_edit_modal) = signal(false);
+    let (edit_key, set_edit_key) = signal(String::new());
+    let (edit_value, set_edit_value) = signal(String::new());
+    let (saving, set_saving) = signal(false);
+
     // Redirect if not authenticated
     Effect::new(move || {
         if !auth.is_loading() && !auth.is_authenticated() {
@@ -161,6 +167,73 @@ pub fn SecretsPage() -> impl IntoView {
         }
     };
 
+    // Open edit modal with current secret value
+    let open_edit_modal = move |key: String, value: String| {
+        set_edit_key.set(key);
+        set_edit_value.set(value);
+        set_show_edit_modal.set(true);
+    };
+
+    // Save edited secret
+    let on_save_edit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let key = edit_key.get();
+        let value = edit_value.get();
+        let ws = workspace();
+        let proj = project();
+        let env = environment();
+
+        if key.is_empty() || ws.is_empty() || proj.is_empty() || env.is_empty() {
+            return;
+        }
+
+        set_saving.set(true);
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let auth_clone = auth;
+            let key_clone = key.clone();
+            let value_clone = value.clone();
+            let ws_clone = ws.clone();
+            let proj_clone = proj.clone();
+            let env_clone = env.clone();
+            spawn_local(async move {
+                match create_secret_api(
+                    auth_clone,
+                    &ws_clone,
+                    &proj_clone,
+                    &env_clone,
+                    &key_clone,
+                    &value_clone,
+                )
+                .await
+                {
+                    Ok(()) => {
+                        // Update the secret in the list
+                        let key_to_update = key_clone.clone();
+                        let new_value = value_clone.clone();
+                        set_secrets.update(|ss| {
+                            if let Some(s) = ss.iter_mut().find(|s| s.key == key_to_update) {
+                                s.value = new_value;
+                            }
+                        });
+                        set_show_edit_modal.set(false);
+                    }
+                    Err(e) => {
+                        set_error.set(Some(format!("Failed to save secret: {}", e)));
+                    }
+                }
+                set_saving.set(false);
+            });
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (key, value, ws, proj, env);
+            set_saving.set(false);
+        }
+    };
+
     view! {
         <Layout>
             <div class="space-y-6">
@@ -239,11 +312,13 @@ pub fn SecretsPage() -> impl IntoView {
                                     key=|s| s.key.clone()
                                     children=move |secret| {
                                         let key = secret.key.clone();
-                                        let value = secret.value.clone();
                                         let key_for_delete = key.clone();
                                         let key_for_toggle = key.clone();
                                         let key_for_check = key.clone();
                                         let key_for_icon = key.clone();
+                                        let key_for_edit = key.clone();
+                                        let key_for_value = key.clone();
+                                        let key_for_edit_value = key.clone();
                                         // Use the parent signal to track visibility instead of local signal
                                         let is_visible = move || visible_keys.get().contains(&key_for_check);
                                         let toggle_visibility = move |_| {
@@ -256,12 +331,21 @@ pub fn SecretsPage() -> impl IntoView {
                                                 }
                                             });
                                         };
+                                        // Get value reactively from the secrets signal by creating a derived signal
+                                        let key_for_display = key_for_value.clone();
+                                        let displayed_value = Memo::new(move |_| {
+                                            secrets.get()
+                                                .iter()
+                                                .find(|s| s.key == key_for_display)
+                                                .map(|s| s.value.clone())
+                                                .unwrap_or_default()
+                                        });
                                         view! {
                                             <tr>
                                                 <td class="font-mono">{key}</td>
                                                 <td>
                                                     <Show when=is_visible fallback=move || view! { <span class="text-base-content/50">"********"</span> }>
-                                                        <span class="font-mono">{value.clone()}</span>
+                                                        <span class="font-mono">{move || displayed_value.get()}</span>
                                                     </Show>
                                                 </td>
                                                 <td>
@@ -269,6 +353,7 @@ pub fn SecretsPage() -> impl IntoView {
                                                         <button
                                                             class="btn btn-ghost btn-sm"
                                                             on:click=toggle_visibility
+                                                            title="Toggle visibility"
                                                         >
                                                             <Show when=move || visible_keys.get().contains(&key_for_icon) fallback=move || view! {
                                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -282,7 +367,28 @@ pub fn SecretsPage() -> impl IntoView {
                                                             </Show>
                                                         </button>
                                                         <button
+                                                            class="btn btn-ghost btn-sm"
+                                                            title="Edit secret"
+                                                            on:click={
+                                                                let k = key_for_edit.clone();
+                                                                let k2 = key_for_edit_value.clone();
+                                                                move |_| {
+                                                                    let v = secrets.get()
+                                                                        .iter()
+                                                                        .find(|s| s.key == k2)
+                                                                        .map(|s| s.value.clone())
+                                                                        .unwrap_or_default();
+                                                                    open_edit_modal(k.clone(), v)
+                                                                }
+                                                            }
+                                                        >
+                                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                                            </svg>
+                                                        </button>
+                                                        <button
                                                             class="btn btn-ghost btn-sm btn-error"
+                                                            title="Delete secret"
                                                             on:click={
                                                                 let key = key_for_delete.clone();
                                                                 move |_| delete_secret(key.clone())
@@ -357,6 +463,60 @@ pub fn SecretsPage() -> impl IntoView {
                         <div class="modal-backdrop" on:click=move |_| set_show_add_modal.set(false)></div>
                     </div>
                 </Show>
+
+                // Edit Secret Modal
+                <Show when=move || show_edit_modal.get()>
+                    <div class="modal modal-open">
+                        <div class="modal-box">
+                            <h3 class="font-bold text-lg">"Edit Secret"</h3>
+                            <form on:submit=on_save_edit class="space-y-4 mt-4">
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">"Key"</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        class="input input-bordered font-mono"
+                                        prop:value=move || edit_key.get()
+                                        disabled=true
+                                    />
+                                </div>
+                                <div class="form-control">
+                                    <label class="label">
+                                        <span class="label-text">"Value"</span>
+                                    </label>
+                                    <textarea
+                                        placeholder="Enter secret value"
+                                        class="textarea textarea-bordered font-mono"
+                                        rows="3"
+                                        prop:value=move || edit_value.get()
+                                        on:input=move |ev| set_edit_value.set(event_target_value(&ev))
+                                    ></textarea>
+                                </div>
+                                <div class="modal-action">
+                                    <button
+                                        type="button"
+                                        class="btn"
+                                        on:click=move |_| set_show_edit_modal.set(false)
+                                    >
+                                        "Cancel"
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary"
+                                        disabled=move || saving.get()
+                                    >
+                                        <Show when=move || saving.get()>
+                                            <span class="loading loading-spinner loading-sm"></span>
+                                        </Show>
+                                        "Save"
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-backdrop" on:click=move |_| set_show_edit_modal.set(false)></div>
+                    </div>
+                </Show>
             </div>
         </Layout>
     }
@@ -419,7 +579,8 @@ async fn get_environment_dek(
     nonce_bytes.copy_from_slice(&keys.kek_nonce);
     let kek_nonce = Nonce(nonce_bytes);
 
-    let kek_aad = format!("workspace:{}", workspace).into_bytes();
+    // AAD must use workspace_id (UUID), not workspace name
+    let kek_aad = format!("workspace:{}", keys.workspace_id).into_bytes();
     let kek_bytes = unwrap_key(&keys.kek_wrapped, &kek_nonce, &shared_secret, &kek_aad)
         .map_err(|_| "Failed to unwrap KEK")?;
 

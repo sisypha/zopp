@@ -56,3 +56,11 @@ path = "tests/user_permissions.rs"
 [[test]]
 name = "principals"
 path = "tests/principals.rs"
+
+[[test]]
+name = "counts"
+path = "tests/counts.rs"
+
+[[test]]
+name = "secrets"
+path = "tests/secrets.rs"

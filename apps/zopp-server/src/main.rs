@@ -116,15 +116,21 @@ async fn cmd_invite_create(
 
     // Generate random token for server invite (32 bytes = 256 bits)
     use rand_core::RngCore;
+    use sha2::{Digest, Sha256};
     let mut token_bytes = [0u8; 32];
     OsRng.fill_bytes(&mut token_bytes);
-    let token = hex::encode(token_bytes);
+    let token_hex = hex::encode(token_bytes);
+
+    // Store hash of token (consistent with workspace invites)
+    let mut hasher = Sha256::new();
+    hasher.update(&token_bytes);
+    let token_hash = hex::encode(hasher.finalize());
 
     let expires_at = Utc::now() + chrono::Duration::hours(expires_hours);
     let invite = backend
         .create_invite(&CreateInviteParams {
             workspace_ids: vec![],
-            token,
+            token: token_hash,
             kek_encrypted: None,
             kek_nonce: None,
             expires_at,
@@ -132,13 +138,15 @@ async fn cmd_invite_create(
         })
         .await?;
 
+    // Output with inv_ prefix for consistency with workspace invites
+    let display_token = format!("inv_{}", token_hex);
     if plain {
-        println!("{}", invite.token);
+        println!("{}", display_token);
     } else {
         println!("✓ Server invite created!\n");
-        println!("Token:   {}", invite.token);
+        println!("Token:   {}", display_token);
         println!("Expires: {}", invite.expires_at);
-        println!("\nUse this token to join this server using zopp join");
+        println!("\nUse this token to join via CLI (zopp join) or web UI (/invite)");
     }
 
     Ok(())

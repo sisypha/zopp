@@ -115,7 +115,7 @@ pub fn RegisterPage() -> impl IntoView {
     // Redirect if already authenticated
     Effect::new(move || {
         if auth.is_authenticated() {
-            navigate_for_effect("/", Default::default());
+            navigate_for_effect("/workspaces", Default::default());
         }
     });
 
@@ -191,7 +191,7 @@ pub fn RegisterPage() -> impl IntoView {
 
                     <div class="divider">"OR"</div>
 
-                    <a href="/login" class="btn btn-outline w-full">
+                    <a href="/import" class="btn btn-outline w-full">
                         "Import Existing Principal"
                     </a>
                 </div>
@@ -251,11 +251,8 @@ async fn join_workspace(
         let secret_hash = hasher.finalize();
         let secret_hash_hex = hex::encode(secret_hash);
 
-        // Derive server URL from current location or use default
-        let server_url = web_sys::window()
-            .and_then(|w| w.location().origin().ok())
-            .map(|origin| format!("{}/api", origin))
-            .unwrap_or_else(|| "http://localhost:8080".to_string());
+        // Get server URL (handles dev vs production)
+        let server_url = crate::services::config::get_server_url();
         let client = ZoppWebClient::new(&server_url);
 
         // Get invite info

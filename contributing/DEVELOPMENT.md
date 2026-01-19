@@ -87,7 +87,8 @@ trunk serve
 cargo run --bin zopp-server serve
 
 # Terminal 2: Start Envoy (needed for gRPC-web translation)
-docker run -v $(pwd)/docker/envoy-grpc-web.yaml:/etc/envoy/envoy.yaml \
+# Note: Uses envoy-grpc-web-local.yaml which connects to host.docker.internal
+docker run -v $(pwd)/docker/envoy-grpc-web-local.yaml:/etc/envoy/envoy.yaml \
   --add-host=host.docker.internal:host-gateway \
   -p 8080:8080 envoyproxy/envoy:v1.28-latest
 
@@ -108,20 +109,23 @@ To test the UI, you first need to bootstrap a user:
 ```bash
 # Step 1: Create a bootstrap invite from the SERVER (not CLI)
 # If using Docker Compose:
-docker exec docker-zopp-server-1 zopp-server invite create --expires-hours 48
+docker exec docker-zopp-server-1 zopp-server invite create --db /data/zopp.db --expires-hours 48
 # Or if running server locally:
 cargo run --bin zopp-server invite create --expires-hours 48
 
-# Step 2: Join using that invite via CLI (creates your principal)
-cargo run --bin zopp -- join <inv_xxxxx> your@email.com
+# Step 2: Use the invite token to join
+# Option A: Via Web UI - go to http://localhost:3000/invite and paste the inv_xxx token
+# Option B: Via CLI - cargo run --bin zopp -- join <inv_xxxxx> your@email.com
 
-# Step 3: Now you can create workspaces and invite others
+# Step 3: Once joined, you can create workspaces
 cargo run --bin zopp -- workspace create my-workspace
+
+# Step 4: Create workspace invites for others
 cargo run --bin zopp -- invite create -w my-workspace
-# Copy the new inv_xxxx token and use it at http://localhost:3000/register
+# Share the inv_xxxx token - others can use it at http://localhost:3000/invite
 ```
 
-The first invite must come from the server itself. After that, users with appropriate permissions can create workspace invites via the CLI or web UI.
+The first invite must come from the server itself (bootstrap invite). After that, users with appropriate permissions can create workspace invites via the CLI or web UI.
 
 ## Storage Backends
 

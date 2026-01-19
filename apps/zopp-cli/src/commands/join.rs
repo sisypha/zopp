@@ -26,9 +26,12 @@ pub async fn cmd_join(
 
     let mut client = connect(server, tls_ca_cert).await?;
 
-    let is_workspace_invite = invite_code.starts_with("inv_");
+    // All invites now use inv_ prefix and hash-based lookup
+    // The difference is whether the invite has KEK data (workspace invite) or not (bootstrap invite)
+    let has_inv_prefix = invite_code.starts_with("inv_");
 
-    let (ephemeral_pub, kek_wrapped, kek_nonce) = if is_workspace_invite {
+    // Compute the server token (hash for inv_ prefixed tokens, raw otherwise for legacy)
+    let (server_token, invite_secret) = if has_inv_prefix {
         let secret_hex = invite_code
             .strip_prefix("inv_")
             .ok_or("Invalid invite code format")?;
@@ -38,20 +41,26 @@ pub async fn cmd_join(
         }
         let mut secret_array = [0u8; 32];
         secret_array.copy_from_slice(&invite_secret);
-
         let secret_hash = zopp_crypto::hash_sha256(&secret_array);
-        let secret_hash_hex = hex::encode(secret_hash);
+        (hex::encode(secret_hash), Some(secret_array))
+    } else {
+        // Legacy: use token directly (no hashing)
+        (invite_code.to_string(), None)
+    };
 
-        let invite = client
-            .get_invite(zopp_proto::GetInviteRequest {
-                token: secret_hash_hex,
-            })
-            .await?
-            .into_inner();
+    // Fetch the invite to check if it has KEK data
+    let invite = client
+        .get_invite(zopp_proto::GetInviteRequest {
+            token: server_token.clone(),
+        })
+        .await?
+        .into_inner();
 
-        if invite.kek_encrypted.is_empty() {
-            return Err("Invalid workspace invite (no encrypted KEK)".into());
-        }
+    // Determine if this is a workspace invite (has KEK) or bootstrap invite (no KEK)
+    let (ephemeral_pub, kek_wrapped, kek_nonce) = if !invite.kek_encrypted.is_empty() {
+        // Workspace invite: decrypt KEK and re-wrap for our principal
+        let secret_array = invite_secret
+            .ok_or("Workspace invite requires inv_ prefix with secret")?;
 
         let dek_for_decryption = zopp_crypto::Dek::from_bytes(&secret_array)?;
 
@@ -82,18 +91,8 @@ pub async fn cmd_join(
             wrap_nonce.0.to_vec(),
         )
     } else {
+        // Bootstrap invite: no KEK to process
         (vec![], vec![], vec![])
-    };
-
-    let server_token = if is_workspace_invite {
-        let secret_hex = invite_code.strip_prefix("inv_").unwrap();
-        let invite_secret = hex::decode(secret_hex)?;
-        let mut secret_array = [0u8; 32];
-        secret_array.copy_from_slice(&invite_secret);
-        let secret_hash = zopp_crypto::hash_sha256(&secret_array);
-        hex::encode(secret_hash)
-    } else {
-        invite_code.to_string()
     };
 
     let response = client

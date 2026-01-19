@@ -94,7 +94,7 @@ pub fn SettingsPage() -> impl IntoView {
 
     let on_logout = move |_| {
         auth.logout();
-        navigate_for_logout("/login", Default::default());
+        navigate_for_logout("/", Default::default());
     };
 
     view! {

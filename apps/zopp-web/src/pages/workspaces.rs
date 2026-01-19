@@ -153,7 +153,11 @@ pub fn WorkspacesPage() -> impl IntoView {
                                         <div class="card-body">
                                             <h2 class="card-title">{display_name}</h2>
                                             <p class="text-base-content/70">
-                                                {format!("{} projects", project_count)}
+                                                {if project_count == 1 {
+                                                    "1 project".to_string()
+                                                } else {
+                                                    format!("{} projects", project_count)
+                                                }}
                                             </p>
                                         </div>
                                     </a>
@@ -245,7 +249,7 @@ async fn fetch_workspaces(
                 .map(|w| WorkspaceInfo {
                     id: w.id,
                     name: w.name,
-                    project_count: 0, // TODO: Get actual count
+                    project_count: w.project_count as usize,
                 })
                 .collect();
             set_workspaces.set(items);

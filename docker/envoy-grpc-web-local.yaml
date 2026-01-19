@@ -49,6 +49,7 @@ static_resources:
     - name: grpc_service
       connect_timeout: 0.25s
       type: logical_dns
+      dns_lookup_family: V4_ONLY
       http2_protocol_options: {}
       lb_policy: round_robin
       load_assignment:
@@ -58,6 +59,6 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      # Use 'zopp-server' for Docker Compose, or 'host.docker.internal' for local server
-                      address: zopp-server
+                      # For local development: connects to server running on host machine
+                      address: host.docker.internal
                       port_value: 50051

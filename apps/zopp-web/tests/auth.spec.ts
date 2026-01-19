@@ -14,8 +14,8 @@ test.describe('Authentication', () => {
     // Should have import button
     await expect(page.getByRole('button', { name: /Import/i })).toBeVisible();
 
-    // Should have link to register page
-    await expect(page.getByRole('link', { name: /Create New Principal/i })).toBeVisible();
+    // Should have link to register page (join with invite token)
+    await expect(page.getByRole('link', { name: /Join with Invite Token/i })).toBeVisible();
   });
 
   test('should show register page at /register', async ({ page }) => {
@@ -41,8 +41,8 @@ test.describe('Authentication', () => {
     await page.goto('/login');
     await expect(page.getByRole('heading', { name: /Import Principal/i })).toBeVisible();
 
-    // Click link to register
-    await page.getByRole('link', { name: /Create New Principal/i }).click();
+    // Click link to register (join with invite token)
+    await page.getByRole('link', { name: /Join with Invite Token/i }).click();
     await expect(page.getByRole('heading', { name: /Join Workspace/i })).toBeVisible();
 
     // Click link back to login

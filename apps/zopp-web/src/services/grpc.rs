@@ -23,8 +23,7 @@ pub struct GrpcConfig {
 impl Default for GrpcConfig {
     fn default() -> Self {
         Self {
-            // Default to Envoy proxy in development
-            server_url: "http://localhost:8080".to_string(),
+            server_url: super::config::get_server_url(),
         }
     }
 }

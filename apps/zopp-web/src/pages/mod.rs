@@ -1,6 +1,7 @@
 pub mod dashboard;
 pub mod environments;
 pub mod invites;
+pub mod landing;
 pub mod login;
 pub mod not_found;
 pub mod permissions;
