@@ -28,8 +28,10 @@ fn is_keychain_available() -> bool {
             .spawn()
             .and_then(|mut child| {
                 use std::io::Write;
-                if let Some(ref mut stdin) = child.stdin {
+                // Take stdin to get ownership, write, then drop to send EOF
+                if let Some(mut stdin) = child.stdin.take() {
                     stdin.write_all(b"test-secret")?;
+                    // stdin is dropped here, sending EOF to secret-tool
                 }
                 child.wait()
             });
