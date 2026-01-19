@@ -109,12 +109,25 @@ extern "C" {
 }
 
 // Non-WASM stubs for SSR - use real implementations to avoid silent corruption
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "ssr"))]
 pub fn hex_encode(bytes: &[u8]) -> String {
     hex::encode(bytes)
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "ssr"))]
 pub fn hex_decode(hex_str: &str) -> Vec<u8> {
     hex::decode(hex_str).unwrap_or_default()
+}
+
+// Stubs when neither wasm nor ssr (e.g., default feature check)
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "ssr")))]
+pub fn hex_encode(_bytes: &[u8]) -> String {
+    // Not used in default builds
+    String::new()
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "ssr")))]
+pub fn hex_decode(_hex_str: &str) -> Vec<u8> {
+    // Not used in default builds
+    vec![]
 }
