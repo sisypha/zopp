@@ -112,12 +112,9 @@ pub fn RegisterPage() -> impl IntoView {
         });
     };
 
-    // Redirect if already authenticated
-    Effect::new(move || {
-        if auth.is_authenticated() {
-            navigate_for_effect("/workspaces", Default::default());
-        }
-    });
+    // Allow joining with invite even when authenticated
+    // This enables adding another principal
+    let _ = navigate_for_effect; // Suppress unused warning
 
     view! {
         <div class="min-h-screen flex items-center justify-center bg-base-200">

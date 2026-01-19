@@ -81,14 +81,17 @@ test.describe('Authentication - Unauthenticated', () => {
 });
 
 authenticatedTest.describe('Authentication - Authenticated', () => {
-  authenticatedTest('should redirect authenticated user away from import page', async ({ authenticatedPage }) => {
+  authenticatedTest('should allow authenticated user to access import page for switching principals', async ({ authenticatedPage }) => {
     const page = authenticatedPage;
 
     // Navigate to import page while authenticated
     await page.goto('/import');
 
-    // Should be redirected to workspaces
-    await authenticatedExpect(page).toHaveURL(/\/workspaces/);
+    // Should stay on import page (allows switching principals)
+    await authenticatedExpect(page).toHaveURL(/\/import/);
+
+    // Should show the import form
+    await authenticatedExpect(page.getByRole('heading', { name: /Import Principal/i })).toBeVisible();
   });
 });
 

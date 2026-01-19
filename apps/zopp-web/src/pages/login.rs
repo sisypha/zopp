@@ -127,12 +127,9 @@ pub fn LoginPage() -> impl IntoView {
         });
     };
 
-    // Redirect if already authenticated
-    Effect::new(move || {
-        if auth.is_authenticated() {
-            navigate_for_effect("/workspaces", Default::default());
-        }
-    });
+    // Allow importing another principal even when authenticated
+    // This enables switching between principals
+    let _ = navigate_for_effect; // Suppress unused warning
 
     view! {
         <div class="min-h-screen flex items-center justify-center bg-base-200">

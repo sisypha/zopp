@@ -4,6 +4,9 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
 use crate::components::Layout;
+use crate::services::storage::PrincipalMetadata;
+#[cfg(target_arch = "wasm32")]
+use crate::services::storage::{IndexedDbStorage, KeyStorage};
 use crate::state::auth::use_auth;
 
 #[component]
@@ -20,12 +23,74 @@ pub fn SettingsPage() -> impl IntoView {
     let (copied_code, set_copied_code) = signal(false);
     let (copied_passphrase, set_copied_passphrase) = signal(false);
 
+    // Principal switcher state
+    #[cfg(target_arch = "wasm32")]
+    let (principals, set_principals) = signal::<Vec<PrincipalMetadata>>(vec![]);
+    #[cfg(not(target_arch = "wasm32"))]
+    let principals = signal::<Vec<PrincipalMetadata>>(vec![]).0;
+    let (switching, set_switching) = signal(false);
+
     // Redirect if not authenticated
     Effect::new(move || {
         if !auth.is_loading() && !auth.is_authenticated() {
             navigate_for_redirect("/import", Default::default());
         }
     });
+
+    // Load principals list
+    #[cfg(target_arch = "wasm32")]
+    {
+        let auth_for_load = auth;
+        Effect::new(move || {
+            if auth_for_load.is_authenticated() {
+                spawn_local(async move {
+                    let storage = IndexedDbStorage::new();
+                    match storage.list_principals().await {
+                        Ok(list) => set_principals.set(list),
+                        Err(e) => {
+                            web_sys::console::warn_1(
+                                &format!("Failed to load principals: {}", e).into(),
+                            );
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    // Switch principal handler
+    let switch_principal = move |principal_id: String| {
+        set_switching.set(true);
+        set_error.set(None);
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let auth_clone = auth;
+            let navigate_clone = navigate.clone();
+            spawn_local(async move {
+                match do_switch_principal(&principal_id, auth_clone).await {
+                    Ok(()) => {
+                        // Reload the page to refresh auth state
+                        navigate_clone("/settings", Default::default());
+                        // Force a full reload to ensure auth state is refreshed
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.location().reload();
+                        }
+                    }
+                    Err(e) => {
+                        set_error.set(Some(e));
+                        set_switching.set(false);
+                    }
+                }
+            });
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = principal_id;
+            set_switching.set(false);
+        }
+    };
 
     let on_export = move |_| {
         set_exporting.set(true);
@@ -138,6 +203,90 @@ pub fn SettingsPage() -> impl IntoView {
                         </div>
                     </div>
                 </div>
+
+                // Switch Principal (only show if more than one principal)
+                <Show when=move || { principals.get().len() > 1 }>
+                    <div class="card bg-base-100 shadow">
+                        <div class="card-body">
+                            <h2 class="card-title">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                </svg>
+                                "Switch Principal"
+                            </h2>
+                            <p class="text-base-content/70">
+                                "You have multiple principals stored. Select one to switch to."
+                            </p>
+
+                            <div class="space-y-2 mt-4">
+                                <For
+                                    each=move || principals.get()
+                                    key=|p| p.id.clone()
+                                    children=move |principal| {
+                                        let principal_id = principal.id.clone();
+                                        let principal_id_for_class = principal_id.clone();
+                                        let principal_id_for_show = principal_id.clone();
+                                        let principal_id_for_click = principal_id.clone();
+                                        let switch_principal_clone = switch_principal;
+
+                                        view! {
+                                            <div class=move || {
+                                                let is_current = auth.principal().map(|p| p.id == principal_id_for_class).unwrap_or(false);
+                                                if is_current {
+                                                    "flex items-center justify-between p-3 bg-primary/10 border border-primary rounded-lg"
+                                                } else {
+                                                    "flex items-center justify-between p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors"
+                                                }
+                                            }>
+                                                <div class="flex items-center gap-3">
+                                                    <div class="avatar placeholder">
+                                                        <div class="bg-neutral text-neutral-content rounded-full w-10">
+                                                            <span class="text-sm">{principal.name.chars().next().unwrap_or('?').to_uppercase().to_string()}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p class="font-medium">{principal.name.clone()}</p>
+                                                        <p class="text-sm text-base-content/70">{principal.email.clone().unwrap_or_else(|| "-".to_string())}</p>
+                                                    </div>
+                                                </div>
+                                                <Show
+                                                    when=move || auth.principal().map(|p| p.id == principal_id_for_show).unwrap_or(false)
+                                                    fallback=move || {
+                                                        let id = principal_id_for_click.clone();
+                                                        let handler = switch_principal_clone;
+                                                        view! {
+                                                            <button
+                                                                class="btn btn-sm btn-ghost"
+                                                                on:click=move |_| handler(id.clone())
+                                                                disabled=move || switching.get()
+                                                            >
+                                                                <Show when=move || switching.get()>
+                                                                    <span class="loading loading-spinner loading-xs"></span>
+                                                                </Show>
+                                                                "Switch"
+                                                            </button>
+                                                        }
+                                                    }
+                                                >
+                                                    <span class="badge badge-primary">"Current"</span>
+                                                </Show>
+                                            </div>
+                                        }
+                                    }
+                                />
+                            </div>
+
+                            <div class="mt-4">
+                                <a href="/import" class="btn btn-outline btn-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    "Import Another Principal"
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </Show>
 
                 // Export Principal
                 <div class="card bg-base-100 shadow">
@@ -370,4 +519,51 @@ async fn create_principal_export(
         .map_err(|e| format!("Failed to create export: {}", e))?;
 
     Ok((response.export_code, passphrase))
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn do_switch_principal(
+    principal_id: &str,
+    auth: crate::state::auth::AuthContext,
+) -> Result<(), String> {
+    use crate::services::storage::{IndexedDbStorage, KeyStorage};
+
+    let storage = IndexedDbStorage::new();
+
+    // Get the principal from storage
+    let principal = storage
+        .get_principal(principal_id)
+        .await
+        .map_err(|e| format!("Failed to get principal: {}", e))?
+        .ok_or_else(|| "Principal not found".to_string())?;
+
+    // Set as current principal
+    storage
+        .set_current_principal_id(Some(principal_id))
+        .await
+        .map_err(|e| format!("Failed to set current principal: {}", e))?;
+
+    // Get server URL from localStorage
+    let server_url = web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|ls| ls.get_item("zopp_server_url").ok().flatten())
+        .unwrap_or_else(|| crate::services::config::get_server_url());
+
+    // Update auth state
+    auth.set_authenticated(
+        crate::state::auth::Principal {
+            id: principal.id.clone(),
+            name: principal.name.clone(),
+            email: principal.email.clone(),
+            user_id: principal.user_id.clone(),
+        },
+        crate::state::auth::Credentials {
+            principal_id: principal.id,
+            ed25519_private_key: principal.ed25519_private_key,
+            x25519_private_key: principal.x25519_private_key.unwrap_or_default(),
+            server_url,
+        },
+    );
+
+    Ok(())
 }
