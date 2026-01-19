@@ -12,7 +12,7 @@ pub fn DashboardPage() -> impl IntoView {
     // Redirect if not authenticated
     Effect::new(move || {
         if !auth.is_authenticated() {
-            navigate("/login", Default::default());
+            navigate("/import", Default::default());
         }
     });
 

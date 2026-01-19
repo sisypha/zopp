@@ -26,7 +26,7 @@ pub fn EnvironmentsPage() -> impl IntoView {
     // Redirect if not authenticated
     Effect::new(move || {
         if !auth.is_loading() && !auth.is_authenticated() {
-            navigate_for_redirect("/login", Default::default());
+            navigate_for_redirect("/import", Default::default());
         }
     });
 

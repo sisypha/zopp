@@ -6,11 +6,11 @@
 import { test, expect } from './fixtures/test-setup';
 
 test.describe('Invites Page - Unauthenticated', () => {
-  test('should redirect to login when not authenticated', async ({ page }) => {
+  test('should redirect to import when not authenticated', async ({ page }) => {
     await page.goto('/workspaces/test-workspace/invites');
 
-    // Should be redirected to login
-    await expect(page).toHaveURL(/\/login/);
+    // Should be redirected to import
+    await expect(page).toHaveURL(/\/import/);
   });
 });
 

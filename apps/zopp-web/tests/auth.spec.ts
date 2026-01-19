@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Authentication', () => {
-  test('should show login page at /login', async ({ page }) => {
-    await page.goto('/login');
+  test('should show import page at /import', async ({ page }) => {
+    await page.goto('/import');
 
     // Should show the import principal form
     await expect(page.getByRole('heading', { name: /Import Principal/i })).toBeVisible();
@@ -14,12 +14,12 @@ test.describe('Authentication', () => {
     // Should have import button
     await expect(page.getByRole('button', { name: /Import/i })).toBeVisible();
 
-    // Should have link to register page (join with invite token)
+    // Should have link to invite page (join with invite token)
     await expect(page.getByRole('link', { name: /Join with Invite Token/i })).toBeVisible();
   });
 
-  test('should show register page at /register', async ({ page }) => {
-    await page.goto('/register');
+  test('should show invite page at /invite', async ({ page }) => {
+    await page.goto('/invite');
 
     // Should show the join workspace form
     await expect(page.getByRole('heading', { name: /Join Workspace/i })).toBeVisible();
@@ -32,26 +32,26 @@ test.describe('Authentication', () => {
     // Should have create principal button
     await expect(page.getByRole('button', { name: /Create Principal/i })).toBeVisible();
 
-    // Should have link to login page
+    // Should have link to import page
     await expect(page.getByRole('link', { name: /Import Existing Principal/i })).toBeVisible();
   });
 
-  test('should navigate between login and register pages', async ({ page }) => {
-    // Start at login
-    await page.goto('/login');
+  test('should navigate between import and invite pages', async ({ page }) => {
+    // Start at import
+    await page.goto('/import');
     await expect(page.getByRole('heading', { name: /Import Principal/i })).toBeVisible();
 
-    // Click link to register (join with invite token)
+    // Click link to invite (join with invite token)
     await page.getByRole('link', { name: /Join with Invite Token/i }).click();
     await expect(page.getByRole('heading', { name: /Join Workspace/i })).toBeVisible();
 
-    // Click link back to login
+    // Click link back to import
     await page.getByRole('link', { name: /Import Existing Principal/i }).click();
     await expect(page.getByRole('heading', { name: /Import Principal/i })).toBeVisible();
   });
 
-  test('should show validation error when submitting empty login form', async ({ page }) => {
-    await page.goto('/login');
+  test('should show validation error when submitting empty import form', async ({ page }) => {
+    await page.goto('/import');
 
     // Click import without filling in fields
     await page.getByRole('button', { name: /Import/i }).click();
@@ -60,8 +60,8 @@ test.describe('Authentication', () => {
     await expect(page.getByText(/Please enter both/i)).toBeVisible();
   });
 
-  test('should show validation error when submitting empty register form', async ({ page }) => {
-    await page.goto('/register');
+  test('should show validation error when submitting empty invite form', async ({ page }) => {
+    await page.goto('/invite');
 
     // Click create without filling in fields
     await page.getByRole('button', { name: /Create Principal/i }).click();
@@ -71,14 +71,14 @@ test.describe('Authentication', () => {
   });
 
   test('should redirect unauthenticated user from protected routes', async ({ page }) => {
-    // Try to access workspaces page without being logged in
+    // Try to access workspaces page without being authenticated
     await page.goto('/workspaces');
 
-    // Should be redirected to login
-    await expect(page).toHaveURL(/\/login/);
+    // Should be redirected to import
+    await expect(page).toHaveURL(/\/import/);
   });
 
-  test.skip('should redirect authenticated user away from login page', async ({ page }) => {
+  test.skip('should redirect authenticated user away from import page', async ({ page }) => {
     // TODO: Implement after auth state is properly set up
     // This test will mock the auth state and verify redirect behavior
   });
