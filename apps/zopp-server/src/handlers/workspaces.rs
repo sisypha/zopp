@@ -90,6 +90,7 @@ pub async fn create_workspace(
     Ok(Response::new(zopp_proto::Workspace {
         id: workspace_id.0.to_string(),
         name: req.name,
+        project_count: 0, // New workspace has no projects
     }))
 }
 
@@ -117,15 +118,26 @@ pub async fn list_workspaces(
         .store
         .list_workspaces(&user_id)
         .await
-        .map_err(|e| Status::internal(format!("Failed to list workspaces: {}", e)))?
-        .into_iter()
-        .map(|w| zopp_proto::Workspace {
+        .map_err(|e| Status::internal(format!("Failed to list workspaces: {}", e)))?;
+
+    // Build response with project counts
+    let mut result = Vec::with_capacity(workspaces.len());
+    for w in workspaces {
+        let project_count = server
+            .store
+            .list_projects(&w.id)
+            .await
+            .map(|p| p.len() as i32)
+            .unwrap_or(0);
+
+        result.push(zopp_proto::Workspace {
             id: w.id.0.to_string(),
             name: w.name,
-        })
-        .collect();
+            project_count,
+        });
+    }
 
-    Ok(Response::new(WorkspaceList { workspaces }))
+    Ok(Response::new(WorkspaceList { workspaces: result }))
 }
 
 pub async fn get_workspace_keys(

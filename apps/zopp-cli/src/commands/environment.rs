@@ -27,7 +27,12 @@ pub async fn cmd_environment_list(
     } else {
         println!("Environments:");
         for env in response.environments {
-            println!("  {}", env.name);
+            let secret_text = if env.secret_count == 1 {
+                "1 secret".to_string()
+            } else {
+                format!("{} secrets", env.secret_count)
+            };
+            println!("  {} ({})", env.name, secret_text);
         }
     }
 

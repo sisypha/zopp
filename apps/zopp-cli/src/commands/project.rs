@@ -24,7 +24,12 @@ pub async fn cmd_project_list(
     } else {
         println!("Projects:");
         for project in response.projects {
-            println!("  {}", project.name);
+            let env_text = if project.environment_count == 1 {
+                "1 environment".to_string()
+            } else {
+                format!("{} environments", project.environment_count)
+            };
+            println!("  {} ({})", project.name, env_text);
         }
     }
 

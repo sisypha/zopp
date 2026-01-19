@@ -1,0 +1,81 @@
+[package]
+name = "zopp-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Web UI for zopp secrets manager"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+leptos = { workspace = true }
+leptos_router = { workspace = true }
+leptos_meta = { workspace = true }
+leptos_axum = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+tower = { workspace = true, optional = true }
+tower-http = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wasm-bindgen = { workspace = true, optional = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true }
+gloo-utils = { workspace = true, optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde-wasm-bindgen = { workspace = true, optional = true }
+futures = { version = "0.3", optional = true }
+zopp-crypto = { path = "../../crates/zopp-crypto", features = ["wasm"], optional = true }
+zopp-proto-web = { path = "../../crates/zopp-proto-web", optional = true }
+argon2 = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
+ed25519-dalek = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+rand_core = { workspace = true, optional = true }
+bip39 = { version = "2", optional = true }
+rand = { version = "0.8", optional = true }
+chrono = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
+
+[features]
+default = []
+hydrate = [
+    "leptos/hydrate",
+    "wasm-bindgen",
+    "wasm-bindgen-futures",
+    "js-sys",
+    "web-sys",
+    "gloo-utils",
+    "console_error_panic_hook",
+    "serde-wasm-bindgen",
+    "futures",
+    "dep:zopp-crypto",
+    "dep:zopp-proto-web",
+    "dep:argon2",
+    "dep:hex",
+    "dep:ed25519-dalek",
+    "dep:sha2",
+    "dep:rand_core",
+    "dep:bip39",
+    "dep:rand",
+    "dep:chrono",
+    "dep:base64",
+]
+ssr = [
+    "dep:axum",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:tokio",
+    "dep:leptos_axum",
+    "dep:hex",
+    "leptos/ssr",
+    "leptos_router/ssr",
+    "leptos_meta/ssr",
+]

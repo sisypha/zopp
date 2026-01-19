@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="zopp">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zopp - Secrets Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link data-trunk rel="css" href="style/output.css" />
+    <link data-trunk rel="copy-dir" href="pkg" />
+    <script>
+        // Register listener BEFORE module scripts run
+        window.addEventListener('TrunkApplicationStarted', () => {
+            if (window.wasmBindings && window.wasmBindings.hydrate) {
+                window.wasmBindings.hydrate();
+            }
+        });
+    </script>
+</head>
+<body class="min-h-screen bg-base-200">
+    <link data-trunk rel="rust" data-wasm-opt="z" data-cargo-features="hydrate" data-cargo-no-default-features />
+</body>
+</html>

@@ -5,6 +5,14 @@
 .env
 .env.local
 
+# Web UI build artifacts
+apps/zopp-web/node_modules/
+apps/zopp-web/dist/
+apps/zopp-web/pkg/
+apps/zopp-web/style/output.css
+apps/zopp-web/playwright-report/
+apps/zopp-web/test-results/
+
 # Local development databases
 *.db
 *.db-*

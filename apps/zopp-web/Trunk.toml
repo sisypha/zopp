@@ -1,0 +1,15 @@
+[build]
+target = "index.html"
+dist = "dist"
+
+[watch]
+watch = ["src", "style", "index.html"]
+ignore = ["dist"]
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 3000
+open = false
+
+# The WASM crypto module should be pre-built with:
+# wasm-pack build --target web --out-dir apps/zopp-web/pkg crates/zopp-crypto-wasm

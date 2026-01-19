@@ -93,6 +93,7 @@ pub async fn create_environment(
         dek_nonce: env.dek_nonce,
         created_at: env.created_at.timestamp(),
         updated_at: env.updated_at.timestamp(),
+        secret_count: 0, // New environment has no secrets
     }))
 }
 
@@ -154,9 +155,19 @@ pub async fn list_environments(
         .store
         .list_environments(&project.id)
         .await
-        .map_err(|e| Status::internal(format!("Failed to list environments: {}", e)))?
-        .into_iter()
-        .map(|e| Environment {
+        .map_err(|e| Status::internal(format!("Failed to list environments: {}", e)))?;
+
+    // Build response with secret counts
+    let mut result = Vec::with_capacity(environments.len());
+    for e in environments {
+        let secret_count = server
+            .store
+            .list_secret_keys(&e.id)
+            .await
+            .map(|s| s.len() as i32)
+            .unwrap_or(0);
+
+        result.push(Environment {
             id: e.id.0.to_string(),
             project_id: e.project_id.0.to_string(),
             name: e.name,
@@ -164,10 +175,13 @@ pub async fn list_environments(
             dek_nonce: e.dek_nonce,
             created_at: e.created_at.timestamp(),
             updated_at: e.updated_at.timestamp(),
-        })
-        .collect();
+            secret_count,
+        });
+    }
 
-    Ok(Response::new(EnvironmentList { environments }))
+    Ok(Response::new(EnvironmentList {
+        environments: result,
+    }))
 }
 
 pub async fn get_environment(
@@ -245,6 +259,14 @@ pub async fn get_environment(
         )
         .await?;
 
+    // Get secret count for this environment
+    let secret_count = server
+        .store
+        .list_secret_keys(&env.id)
+        .await
+        .map(|s| s.len() as i32)
+        .unwrap_or(0);
+
     Ok(Response::new(Environment {
         id: env.id.0.to_string(),
         project_id: env.project_id.0.to_string(),
@@ -253,6 +275,7 @@ pub async fn get_environment(
         dek_nonce: env.dek_nonce,
         created_at: env.created_at.timestamp(),
         updated_at: env.updated_at.timestamp(),
+        secret_count,
     }))
 }
 

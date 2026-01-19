@@ -1,0 +1,345 @@
+use leptos::prelude::*;
+use leptos::task::spawn_local;
+use leptos_router::hooks::use_navigate;
+use serde::{Deserialize, Serialize};
+
+#[cfg(target_arch = "wasm32")]
+use crate::services::storage::{IndexedDbStorage, KeyStorage, StoredPrincipal};
+use crate::state::auth::use_auth;
+
+/// Exported principal data format (matches CLI)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportedPrincipal {
+    pub version: u32,
+    pub server_url: String,
+    pub email: String,
+    pub user_id: String,
+    pub principal: ExportedPrincipalData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportedPrincipalData {
+    pub id: String,
+    pub name: String,
+    pub private_key: String,
+    pub public_key: String,
+    pub x25519_private_key: String,
+    pub x25519_public_key: String,
+}
+
+#[component]
+pub fn LoginPage() -> impl IntoView {
+    let auth = use_auth();
+    let navigate = use_navigate();
+    let navigate_for_effect = navigate.clone();
+
+    let (export_code, set_export_code) = signal(String::new());
+    let (passphrase, set_passphrase) = signal(String::new());
+    let (error, set_error) = signal::<Option<String>>(None);
+    let (loading, set_loading) = signal(false);
+    let (consume_warning, set_consume_warning) = signal::<Option<String>>(None);
+
+    let on_submit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let code = export_code.get();
+        let pass = passphrase.get();
+
+        if code.is_empty() || pass.is_empty() {
+            set_error.set(Some(
+                "Please enter both export code and passphrase".to_string(),
+            ));
+            return;
+        }
+
+        set_loading.set(true);
+        set_error.set(None);
+
+        let auth_clone = auth;
+        let navigate_clone = navigate.clone();
+
+        spawn_local(async move {
+            match import_principal(&code, &pass).await {
+                Ok(result) => {
+                    let principal = result.principal;
+                    // Store principal in IndexedDB with encryption
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let storage = IndexedDbStorage::new();
+                        let stored = StoredPrincipal {
+                            id: principal.principal.id.clone(),
+                            name: principal.principal.name.clone(),
+                            email: Some(principal.email.clone()),
+                            user_id: Some(principal.user_id.clone()),
+                            ed25519_private_key: principal.principal.private_key.clone(),
+                            ed25519_public_key: principal.principal.public_key.clone(),
+                            x25519_private_key: Some(
+                                principal.principal.x25519_private_key.clone(),
+                            ),
+                            x25519_public_key: Some(principal.principal.x25519_public_key.clone()),
+                            ed25519_nonce: None,
+                            x25519_nonce: None,
+                            encrypted: false, // Will be encrypted by store_principal
+                        };
+                        if let Err(e) = storage.store_principal(stored).await {
+                            set_error.set(Some(format!("Failed to store principal: {}", e)));
+                            set_loading.set(false);
+                            return;
+                        }
+                        // Set current principal
+                        if let Err(e) = storage
+                            .set_current_principal_id(Some(&principal.principal.id))
+                            .await
+                        {
+                            web_sys::console::warn_1(
+                                &format!("Failed to set current principal: {}", e).into(),
+                            );
+                        }
+                        // Store server URL in localStorage (not sensitive)
+                        if let Some(window) = web_sys::window() {
+                            if let Ok(Some(ls)) = window.local_storage() {
+                                let _ = ls.set_item("zopp_server_url", &principal.server_url);
+                            }
+                        }
+                    }
+
+                    // Set auth state with credentials
+                    auth_clone.set_authenticated(
+                        crate::state::auth::Principal {
+                            id: principal.principal.id.clone(),
+                            name: principal.principal.name.clone(),
+                            email: Some(principal.email.clone()),
+                            user_id: Some(principal.user_id.clone()),
+                        },
+                        crate::state::auth::Credentials {
+                            principal_id: principal.principal.id,
+                            ed25519_private_key: principal.principal.private_key,
+                            x25519_private_key: principal.principal.x25519_private_key,
+                            server_url: principal.server_url,
+                        },
+                    );
+
+                    // Show consume warning if present, otherwise navigate
+                    if let Some(warning) = result.consume_warning {
+                        set_consume_warning.set(Some(warning));
+                        set_loading.set(false);
+                        // User will see the warning and can click to continue
+                    } else {
+                        // Navigate to workspaces
+                        navigate_clone("/workspaces", Default::default());
+                    }
+                }
+                Err(e) => {
+                    set_error.set(Some(format!("Import failed: {}", e)));
+                    set_loading.set(false);
+                }
+            }
+        });
+    };
+
+    // Allow importing another principal even when authenticated
+    // This enables switching between principals
+    let _ = navigate_for_effect; // Suppress unused warning
+
+    view! {
+        <div class="min-h-screen flex items-center justify-center bg-base-200">
+            <div class="card w-96 bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <h2 class="card-title text-2xl font-bold text-center">"Import Principal"</h2>
+                    <p class="text-base-content/70 text-sm">
+                        "Enter your export code and passphrase from the CLI."
+                    </p>
+
+                    // Show consume warning with continue button
+                    <Show when=move || consume_warning.get().is_some()>
+                        <div class="space-y-4 mt-4">
+                            <div class="alert alert-warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div>
+                                    <h3 class="font-bold">"Import Succeeded with Warning"</h3>
+                                    <p class="text-sm">{move || consume_warning.get().unwrap_or_default()}</p>
+                                </div>
+                            </div>
+                            <a href="/workspaces" class="btn btn-primary w-full">"Continue to Workspaces"</a>
+                        </div>
+                    </Show>
+
+                    // Form (hidden when showing warning)
+                    <div class:hidden=move || consume_warning.get().is_some()>
+                        <form on:submit=on_submit class="space-y-4 mt-4">
+                            <Show when=move || error.get().is_some()>
+                                <div class="alert alert-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>{move || error.get().unwrap_or_default()}</span>
+                                </div>
+                            </Show>
+
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">"Export Code"</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Enter export code"
+                                    class="input input-bordered"
+                                    prop:value=move || export_code.get()
+                                    on:input=move |ev| set_export_code.set(event_target_value(&ev))
+                                />
+                            </div>
+
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">"Passphrase"</span>
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder="Enter passphrase"
+                                    class="input input-bordered"
+                                    prop:value=move || passphrase.get()
+                                    on:input=move |ev| set_passphrase.set(event_target_value(&ev))
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                class="btn btn-primary w-full"
+                                disabled=move || loading.get()
+                            >
+                                <Show when=move || loading.get()>
+                                    <span class="loading loading-spinner"></span>
+                                </Show>
+                                "Import"
+                            </button>
+                        </form>
+
+                        <div class="divider">"OR"</div>
+
+                        <a href="/invite" class="btn btn-outline w-full">
+                            "Join with Invite Token"
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+/// Result of import including any warnings
+pub struct ImportResult {
+    pub principal: ExportedPrincipal,
+    pub consume_warning: Option<String>,
+}
+
+/// Import principal using the two-phase flow:
+/// 1. Get verification salt from server
+/// 2. Compute token hash, get encrypted data, decrypt
+async fn import_principal(export_code: &str, passphrase: &str) -> Result<ImportResult, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use argon2::Argon2;
+        use zopp_crypto::{decrypt, Dek, Nonce};
+        use zopp_proto_web::{
+            ConsumePrincipalExportRequest, GetPrincipalExportRequest, ZoppWebClient,
+        };
+
+        // Get server URL (handles dev vs production)
+        let server_url = crate::services::config::get_server_url();
+        let client = ZoppWebClient::new(&server_url);
+
+        // Phase 1: Get verification salt
+        let request = GetPrincipalExportRequest {
+            export_code: export_code.to_string(),
+            token_hash: String::new(), // Empty for phase 1
+        };
+
+        let response = client
+            .get_principal_export(request)
+            .await
+            .map_err(|e| format!("Failed to get export: {}", e))?;
+
+        let verification_salt = response.verification_salt;
+
+        // Compute token hash using Argon2id (CLI compatible)
+        let params = argon2::Params::new(64 * 1024, 3, 1, Some(32))
+            .map_err(|e| format!("Invalid Argon2 params: {}", e))?;
+        let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+
+        let mut hash = [0u8; 32];
+        argon2
+            .hash_password_into(passphrase.as_bytes(), &verification_salt, &mut hash)
+            .map_err(|e| format!("Hash computation failed: {}", e))?;
+        let token_hash = hex::encode(hash);
+
+        // Phase 2: Get encrypted data with token_hash
+        let request = GetPrincipalExportRequest {
+            export_code: export_code.to_string(),
+            token_hash: token_hash.clone(),
+        };
+
+        let response = client
+            .get_principal_export(request)
+            .await
+            .map_err(|e| format!("Verification failed: {}", e))?;
+
+        // Derive decryption key
+        let mut key = [0u8; 32];
+        argon2
+            .hash_password_into(passphrase.as_bytes(), &response.salt, &mut key)
+            .map_err(|e| format!("Key derivation failed: {}", e))?;
+
+        let dek = Dek::from_bytes(&key).map_err(|e| format!("Invalid DEK: {}", e))?;
+
+        let mut nonce_array = [0u8; 24];
+        if response.nonce.len() != 24 {
+            return Err("Invalid nonce length".to_string());
+        }
+        nonce_array.copy_from_slice(&response.nonce);
+        let nonce = Nonce(nonce_array);
+
+        // AAD used by CLI for principal export v2
+        let aad = b"zopp-principal-export-v2";
+
+        let plaintext = decrypt(&response.encrypted_data, &nonce, &dek, aad)
+            .map_err(|_| "Decryption failed - wrong passphrase?")?;
+
+        let json_str =
+            String::from_utf8(plaintext.to_vec()).map_err(|e| format!("Invalid UTF-8: {}", e))?;
+
+        let principal: ExportedPrincipal = serde_json::from_str(&json_str)
+            .map_err(|e| format!("Failed to parse principal data: {}", e))?;
+
+        // Mark export as consumed (one-time use)
+        let consume_request = ConsumePrincipalExportRequest {
+            export_code: export_code.to_string(),
+            token_hash: token_hash.to_string(),
+        };
+
+        // Try to consume - warn user if it fails as this is a one-time export
+        let consume_warning = match client.consume_principal_export(consume_request).await {
+            Ok(_) => None,
+            Err(e) => {
+                let warning = format!(
+                    "Failed to invalidate export code: {}. The export code may still be usable by others. \
+                     Consider creating a new export from the CLI for better security.",
+                    e
+                );
+                web_sys::console::warn_1(&warning.clone().into());
+                Some(warning)
+            }
+        };
+
+        Ok(ImportResult {
+            principal,
+            consume_warning,
+        })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (export_code, passphrase);
+        Err("Not available on server".to_string())
+    }
+}

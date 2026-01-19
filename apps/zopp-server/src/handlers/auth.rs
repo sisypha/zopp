@@ -137,6 +137,7 @@ pub async fn join(
         workspaces.push(zopp_proto::Workspace {
             id: workspace.id.0.to_string(),
             name: workspace.name,
+            project_count: 0, // Not needed for join response
         });
     }
 

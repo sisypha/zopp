@@ -74,6 +74,7 @@ pub async fn create_project(
         name: project.name,
         created_at: project.created_at.timestamp(),
         updated_at: project.updated_at.timestamp(),
+        environment_count: 0, // New project has no environments
     }))
 }
 
@@ -120,18 +121,29 @@ pub async fn list_projects(
         .store
         .list_projects(&workspace.id)
         .await
-        .map_err(|e| Status::internal(format!("Failed to list projects: {}", e)))?
-        .into_iter()
-        .map(|p| Project {
+        .map_err(|e| Status::internal(format!("Failed to list projects: {}", e)))?;
+
+    // Build response with environment counts
+    let mut result = Vec::with_capacity(projects.len());
+    for p in projects {
+        let environment_count = server
+            .store
+            .list_environments(&p.id)
+            .await
+            .map(|e| e.len() as i32)
+            .unwrap_or(0);
+
+        result.push(Project {
             id: p.id.0.to_string(),
             workspace_id: p.workspace_id.0.to_string(),
             name: p.name,
             created_at: p.created_at.timestamp(),
             updated_at: p.updated_at.timestamp(),
-        })
-        .collect();
+            environment_count,
+        });
+    }
 
-    Ok(Response::new(ProjectList { projects }))
+    Ok(Response::new(ProjectList { projects: result }))
 }
 
 pub async fn get_project(
@@ -188,12 +200,21 @@ pub async fn get_project(
         )
         .await?;
 
+    // Get environment count for this project
+    let environment_count = server
+        .store
+        .list_environments(&project.id)
+        .await
+        .map(|e| e.len() as i32)
+        .unwrap_or(0);
+
     Ok(Response::new(Project {
         id: project.id.0.to_string(),
         workspace_id: project.workspace_id.0.to_string(),
         name: project.name,
         created_at: project.created_at.timestamp(),
         updated_at: project.updated_at.timestamp(),
+        environment_count,
     }))
 }
 

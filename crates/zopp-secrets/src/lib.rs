@@ -310,6 +310,7 @@ mod tests {
             dek_nonce: nonce.0.to_vec(),
             created_at: 0,
             updated_at: 0,
+            secret_count: 0,
         }
     }
 

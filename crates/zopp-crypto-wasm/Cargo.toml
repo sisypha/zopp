@@ -1,0 +1,29 @@
+[package]
+name = "zopp-crypto-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebAssembly bindings for zopp-crypto"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+zopp-crypto = { path = "../zopp-crypto", features = ["wasm"] }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+serde = { workspace = true }
+serde-wasm-bindgen = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+zeroize = { workspace = true }
+rand_core = { workspace = true }
+chacha20poly1305 = { workspace = true }
+argon2 = { workspace = true }
+x25519-dalek = { workspace = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

@@ -25,7 +25,12 @@ pub async fn cmd_workspace_list(
     } else {
         println!("Workspaces:");
         for ws in response.workspaces {
-            println!("  {}", ws.name);
+            let project_text = if ws.project_count == 1 {
+                "1 project".to_string()
+            } else {
+                format!("{} projects", ws.project_count)
+            };
+            println!("  {} ({})", ws.name, project_text);
         }
     }
 

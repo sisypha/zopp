@@ -1,0 +1,19 @@
+{
+  "name": "zopp-web",
+  "version": "0.1.1",
+  "private": true,
+  "scripts": {
+    "css:build": "npx tailwindcss -i ./style/input.css -o ./style/output.css",
+    "css:watch": "npx tailwindcss -i ./style/input.css -o ./style/output.css --watch",
+    "dev": "npm run css:build && trunk serve",
+    "build": "npm run css:build && trunk build --release",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "daisyui": "^4.0.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "@playwright/test": "^1.40.0"
+  }
+}

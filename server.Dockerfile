@@ -35,10 +35,15 @@ RUN useradd -u 1000 -s /bin/false zopp
 # Copy binary from builder
 COPY --from=builder /build/target/release/zopp-server /usr/local/bin/zopp-server
 
+# Create data directory for SQLite
+RUN mkdir -p /data && chown zopp:zopp /data
+
 # Set ownership
 RUN chown zopp:zopp /usr/local/bin/zopp-server
 
 USER zopp
+
+VOLUME /data
 
 EXPOSE 50051
 
