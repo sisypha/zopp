@@ -27,5 +27,6 @@ fi
 
 # Run the CLI command in the container
 # First build the CLI if not already built, then run the command
+# Use -- to separate docker args from the command, and pass args as separate strings
 docker compose -f "$SCRIPT_DIR/docker-compose.dev.yaml" exec cli \
-    bash -c "cargo build --bin zopp --release 2>/dev/null && ./target/release/zopp --server http://zopp-server:50051 --use-file-storage $*"
+    bash -c 'cargo build --bin zopp --release 2>/dev/null && ./target/release/zopp --server http://zopp-server:50051 --use-file-storage "$@"' -- "$@"
