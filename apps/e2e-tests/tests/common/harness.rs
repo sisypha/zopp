@@ -218,8 +218,38 @@ impl TestHarness {
         Ok(harness)
     }
 
-    /// Start the server process
+    /// Start the server process with retry on port conflicts
     async fn start_server(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        const MAX_PORT_RETRIES: u32 = 5;
+
+        for attempt in 0..MAX_PORT_RETRIES {
+            match self.try_start_server().await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    let err_str = e.to_string();
+                    let is_port_conflict =
+                        err_str.contains("Address already in use") || err_str.contains("AddrInUse");
+
+                    // Only retry on port conflicts and if we have retries left
+                    if is_port_conflict && attempt + 1 < MAX_PORT_RETRIES {
+                        // Pick new ports and retry
+                        self.port = find_available_port()?;
+                        self.health_port = find_available_port()?;
+                        self.server_url = format!("http://127.0.0.1:{}", self.port);
+                        continue;
+                    }
+
+                    // Not a port conflict or max retries exceeded - propagate error
+                    return Err(e);
+                }
+            }
+        }
+
+        Err("Failed to start server after max retries".into())
+    }
+
+    /// Attempt to start the server once
+    async fn try_start_server(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let server_addr = format!("0.0.0.0:{}", self.port);
         let health_addr = format!("0.0.0.0:{}", self.health_port);
 
@@ -273,6 +303,24 @@ impl TestHarness {
 
         loop {
             sleep(Duration::from_millis(delay_ms)).await;
+
+            // Check if server process exited early (e.g., port conflict)
+            if let Some(ref mut server) = self.server_process {
+                if let Ok(Some(_status)) = server.try_wait() {
+                    // Server exited - read stderr to determine cause
+                    let stderr = self.read_server_log(&self.server_stderr_path.clone());
+                    let stdout = self.read_server_log(&self.server_stdout_path.clone());
+
+                    return Err(format!(
+                        "Server exited unexpectedly\n\
+                         Server stdout:\n{}\n\
+                         Server stderr:\n{}",
+                        stdout.unwrap_or_else(|e| format!("<failed to read: {}>", e)),
+                        stderr.unwrap_or_else(|e| format!("<failed to read: {}>", e))
+                    )
+                    .into());
+                }
+            }
 
             if let Ok(resp) = client.get(&readiness_url).send().await {
                 if resp.status().is_success() {
