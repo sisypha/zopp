@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, email, code, invite_token, attempts,\n               created_at as \"created_at: DateTime<Utc>\",\n               expires_at as \"expires_at: DateTime<Utc>\"\n               FROM email_verifications\n               WHERE email = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "email",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "code",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "invite_token",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "attempts",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "expires_at: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3a0db47f07176db3474f0e28b914d0301e3f7e2726683b008c668eafc7b0c8e"
+}

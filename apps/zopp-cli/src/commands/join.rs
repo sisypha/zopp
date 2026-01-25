@@ -1,7 +1,20 @@
 use crate::config::{save_config, store_principal_secrets, CliConfig, PrincipalConfig};
 use crate::grpc::connect;
 use ed25519_dalek::SigningKey;
-use zopp_proto::JoinRequest;
+use std::io::{self, Write};
+use zopp_proto::{JoinRequest, ResendVerificationRequest, VerifyEmailRequest};
+
+/// Principal key material generated during join, kept in memory until verification
+struct PrincipalKeys {
+    principal_name: String,
+    signing_key: SigningKey,
+    x25519_keypair: zopp_crypto::Keypair,
+    public_key: Vec<u8>,
+    x25519_public_key: Vec<u8>,
+    ephemeral_pub: Vec<u8>,
+    kek_wrapped: Vec<u8>,
+    kek_nonce: Vec<u8>,
+}
 
 pub async fn cmd_join(
     server: &str,
@@ -10,6 +23,7 @@ pub async fn cmd_join(
     email: &str,
     principal_name: Option<&str>,
     use_file_storage: bool,
+    verification_code: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Use provided principal name or default to hostname
     let principal_name = match principal_name {
@@ -95,6 +109,18 @@ pub async fn cmd_join(
         (vec![], vec![], vec![])
     };
 
+    // Store principal key material for use during verification
+    let keys = PrincipalKeys {
+        principal_name: principal_name.clone(),
+        signing_key,
+        x25519_keypair,
+        public_key: public_key.clone(),
+        x25519_public_key: x25519_public_bytes.clone(),
+        ephemeral_pub: ephemeral_pub.clone(),
+        kek_wrapped: kek_wrapped.clone(),
+        kek_nonce: kek_nonce.clone(),
+    };
+
     let response = client
         .join(JoinRequest {
             invite_token: server_token,
@@ -109,18 +135,72 @@ pub async fn cmd_join(
         .await?
         .into_inner();
 
-    println!("✓ Joined successfully!\n");
-    println!("User ID:      {}", response.user_id);
-    println!("Principal ID: {}", response.principal_id);
+    // Determine final principal_id and workspaces based on verification flow
+    let (final_principal_id, final_workspaces, final_user_id) = if response.verification_required {
+        if let Some(code) = verification_code {
+            // Non-interactive: use provided verification code
+            let verify_response = client
+                .verify_email(VerifyEmailRequest {
+                    email: email.to_string(),
+                    code: code.to_string(),
+                    principal_name: keys.principal_name.clone(),
+                    public_key: keys.public_key.clone(),
+                    x25519_public_key: keys.x25519_public_key.clone(),
+                    ephemeral_pub: keys.ephemeral_pub.clone(),
+                    kek_wrapped: keys.kek_wrapped.clone(),
+                    kek_nonce: keys.kek_nonce.clone(),
+                })
+                .await?
+                .into_inner();
+
+            if !verify_response.success {
+                return Err(
+                    format!("Email verification failed: {}", verify_response.message).into(),
+                );
+            }
+            println!("✓ Email verified successfully!\n");
+            (
+                verify_response.principal_id,
+                verify_response.workspaces,
+                verify_response.user_id,
+            )
+        } else {
+            // Interactive: prompt for code
+            println!("📧 Email verification required.\n");
+            println!("A verification code has been sent to: {}", email);
+            println!("The code is valid for 15 minutes.\n");
+
+            let verify_response = verify_email_flow(&mut client, email, &keys).await?;
+            match verify_response {
+                Some(resp) => {
+                    println!("✓ Email verified successfully!\n");
+                    (resp.principal_id, resp.workspaces, resp.user_id)
+                }
+                None => {
+                    return Err("Email verification failed. Please try joining again.".into());
+                }
+            }
+        }
+    } else {
+        println!("✓ Joined successfully!\n");
+        // No verification needed, principal_id is in the join response
+        let principal_id = response
+            .principal_id
+            .ok_or("Missing principal_id in response")?;
+        (principal_id, response.workspaces, response.user_id)
+    };
+
+    println!("User ID:      {}", final_user_id);
+    println!("Principal ID: {}", final_principal_id);
     println!("Principal:    {}", principal_name);
     println!("\nWorkspaces:");
-    for ws in &response.workspaces {
+    for ws in &final_workspaces {
         println!("  - {} ({})", ws.name, ws.id);
     }
 
     // Store secrets
-    let ed25519_private_hex = hex::encode(signing_key.to_bytes());
-    let x25519_private_hex = hex::encode(x25519_keypair.secret_key_bytes());
+    let ed25519_private_hex = hex::encode(keys.signing_key.to_bytes());
+    let x25519_private_hex = hex::encode(keys.x25519_keypair.secret_key_bytes());
 
     // Determine where to store private keys
     let (private_key_for_config, x25519_private_for_config) = if use_file_storage {
@@ -132,7 +212,7 @@ pub async fn cmd_join(
     } else {
         // Store in keychain
         store_principal_secrets(
-            &response.principal_id,
+            &final_principal_id,
             &ed25519_private_hex,
             Some(&x25519_private_hex),
         )?;
@@ -142,14 +222,14 @@ pub async fn cmd_join(
     // Save config
     let config = CliConfig {
         principals: vec![PrincipalConfig {
-            id: response.principal_id,
+            id: final_principal_id,
             name: principal_name.clone(),
-            user_id: Some(response.user_id),
+            user_id: Some(final_user_id),
             email: Some(email.to_string()),
             private_key: private_key_for_config,
-            public_key: hex::encode(verifying_key.to_bytes()),
+            public_key: hex::encode(keys.signing_key.verifying_key().to_bytes()),
             x25519_private_key: x25519_private_for_config,
-            x25519_public_key: Some(hex::encode(x25519_keypair.public_key_bytes())),
+            x25519_public_key: Some(hex::encode(keys.x25519_keypair.public_key_bytes())),
         }],
         current_principal: Some(principal_name),
         use_file_storage,
@@ -178,4 +258,95 @@ pub async fn cmd_join(
     }
 
     Ok(())
+}
+
+/// Successful verification result
+struct VerifySuccess {
+    principal_id: String,
+    user_id: String,
+    workspaces: Vec<zopp_proto::Workspace>,
+}
+
+/// Handle email verification flow with user input.
+/// Returns Some(VerifySuccess) if verification succeeded, None otherwise.
+async fn verify_email_flow(
+    client: &mut zopp_proto::zopp_service_client::ZoppServiceClient<tonic::transport::Channel>,
+    email: &str,
+    keys: &PrincipalKeys,
+) -> Result<Option<VerifySuccess>, Box<dyn std::error::Error>> {
+    const MAX_ATTEMPTS: u32 = 3;
+    let mut attempt = 0;
+
+    loop {
+        attempt += 1;
+
+        // Prompt for verification code
+        print!("Enter verification code (or 'r' to resend, 'q' to quit): ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let input = input.trim();
+
+        // Handle special commands
+        if input.eq_ignore_ascii_case("q") || input.eq_ignore_ascii_case("quit") {
+            return Ok(None);
+        }
+
+        if input.eq_ignore_ascii_case("r") || input.eq_ignore_ascii_case("resend") {
+            // Request new code
+            let resend_response = client
+                .resend_verification(ResendVerificationRequest {
+                    email: email.to_string(),
+                })
+                .await?
+                .into_inner();
+
+            if resend_response.success {
+                println!("✓ New verification code sent to {}\n", email);
+                attempt = 0; // Reset attempts after successful resend
+                continue;
+            } else {
+                println!("⚠ {}\n", resend_response.message);
+                continue;
+            }
+        }
+
+        // Validate code format (6 digits)
+        if input.len() != 6 || !input.chars().all(|c| c.is_ascii_digit()) {
+            println!("⚠ Invalid code format. Please enter the 6-digit code from your email.\n");
+            continue;
+        }
+
+        // Verify the code, sending principal data to create the principal on success
+        let verify_response = client
+            .verify_email(VerifyEmailRequest {
+                email: email.to_string(),
+                code: input.to_string(),
+                principal_name: keys.principal_name.clone(),
+                public_key: keys.public_key.clone(),
+                x25519_public_key: keys.x25519_public_key.clone(),
+                ephemeral_pub: keys.ephemeral_pub.clone(),
+                kek_wrapped: keys.kek_wrapped.clone(),
+                kek_nonce: keys.kek_nonce.clone(),
+            })
+            .await?
+            .into_inner();
+
+        if verify_response.success {
+            return Ok(Some(VerifySuccess {
+                principal_id: verify_response.principal_id,
+                user_id: verify_response.user_id,
+                workspaces: verify_response.workspaces,
+            }));
+        }
+
+        println!("⚠ {}\n", verify_response.message);
+
+        // Check if we've exceeded max attempts
+        if attempt >= MAX_ATTEMPTS {
+            println!("Too many failed attempts. You can request a new code with 'r'.\n");
+            attempt = 0; // Reset to allow more attempts after message
+        }
+    }
 }

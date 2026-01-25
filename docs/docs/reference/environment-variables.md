@@ -23,6 +23,35 @@ zopp can be configured using environment variables as an alternative to command-
 | `ZOPP_PROJECT` | Default project name | None |
 | `ZOPP_ENVIRONMENT` | Default environment name | None |
 
+## Server Configuration (zopp-server)
+
+These variables configure the zopp server process.
+
+### Email Verification
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ZOPP_EMAIL_VERIFICATION_REQUIRED` | Require email verification for new users | `true` (when provider configured) |
+| `ZOPP_EMAIL_PROVIDER` | Email provider: `resend` or `smtp` | None |
+| `ZOPP_EMAIL_FROM` | Sender email address | Required when provider set |
+| `ZOPP_EMAIL_FROM_NAME` | Sender display name | None |
+
+### Resend Provider
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RESEND_API_KEY` | Resend API key | Required for Resend |
+
+### SMTP Provider
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SMTP_HOST` | SMTP server hostname | Required for SMTP |
+| `SMTP_PORT` | SMTP server port | `587` |
+| `SMTP_USERNAME` | SMTP authentication username | None |
+| `SMTP_PASSWORD` | SMTP authentication password | None |
+| `SMTP_USE_TLS` | Enable TLS/STARTTLS | `true` |
+
 ## Precedence
 
 Configuration is resolved in this order (highest to lowest priority):

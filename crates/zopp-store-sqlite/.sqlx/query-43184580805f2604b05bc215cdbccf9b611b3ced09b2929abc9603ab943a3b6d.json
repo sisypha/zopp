@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, email,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM users WHERE id = ?",
+  "query": "SELECT id, email, verified,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\"\n               FROM users WHERE email = ?",
   "describe": {
     "columns": [
       {
@@ -14,13 +14,18 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at: DateTime<Utc>",
+        "name": "verified",
         "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at: DateTime<Utc>",
+        "ordinal": 3,
         "type_info": "Text"
       },
       {
         "name": "updated_at: DateTime<Utc>",
-        "ordinal": 3,
+        "ordinal": 4,
         "type_info": "Text"
       }
     ],
@@ -31,8 +36,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "02e252cbe927d2b3b350c28286f81f72faee8cb0c7d10c28d31880d2290daa43"
+  "hash": "43184580805f2604b05bc215cdbccf9b611b3ced09b2929abc9603ab943a3b6d"
 }

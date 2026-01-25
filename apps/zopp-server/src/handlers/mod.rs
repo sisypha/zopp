@@ -2,6 +2,7 @@
 //!
 //! This module contains handler functions organized by domain:
 //! - auth: join, register, login
+//! - verification: email verification for new principals
 //! - workspaces: create, list, get_keys
 //! - invites: create, get, list, revoke
 //! - principals: get, rename, list, service principals, remove, revoke, effective permissions
@@ -25,6 +26,7 @@ pub mod principals;
 pub mod projects;
 pub mod secrets;
 pub mod user_permissions;
+pub mod verification;
 pub mod workspaces;
 
 use tokio_stream::wrappers::ReceiverStream;
@@ -54,6 +56,22 @@ impl ZoppService for ZoppServer {
         request: Request<LoginRequest>,
     ) -> Result<Response<LoginResponse>, Status> {
         auth::login(self, request).await
+    }
+
+    // ───────────────────────────────────── Email Verification ─────────────────────────────────────
+
+    async fn verify_email(
+        &self,
+        request: Request<VerifyEmailRequest>,
+    ) -> Result<Response<VerifyEmailResponse>, Status> {
+        verification::verify_email(self, request).await
+    }
+
+    async fn resend_verification(
+        &self,
+        request: Request<ResendVerificationRequest>,
+    ) -> Result<Response<ResendVerificationResponse>, Status> {
+        verification::resend_verification(self, request).await
     }
 
     // ───────────────────────────────────── Workspaces ─────────────────────────────────────

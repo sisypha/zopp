@@ -6,17 +6,38 @@ use leptos_router::hooks::use_navigate;
 use crate::services::storage::{IndexedDbStorage, KeyStorage, StoredPrincipal};
 use crate::state::auth::use_auth;
 
+/// State for pending verification
+#[derive(Clone)]
+struct PendingVerification {
+    result: JoinResult,
+    email: String,
+    device_name: String,
+}
+
 #[component]
 pub fn RegisterPage() -> impl IntoView {
     let auth = use_auth();
     let navigate = use_navigate();
-    let navigate_for_effect = navigate.clone();
 
+    // Join form state
     let (invite_token, set_invite_token) = signal(String::new());
     let (email, set_email) = signal(String::new());
     let (device_name, set_device_name) = signal(String::new());
     let (error, set_error) = signal::<Option<String>>(None);
     let (loading, set_loading) = signal(false);
+
+    // Verification state
+    let (pending_verification, set_pending_verification) =
+        signal::<Option<PendingVerification>>(None);
+    let (verification_code, set_verification_code) = signal(String::new());
+    let (verification_error, set_verification_error) = signal::<Option<String>>(None);
+    let (verification_success, set_verification_success) = signal::<Option<String>>(None);
+    let (verifying, set_verifying) = signal(false);
+    let (resending, set_resending) = signal(false);
+
+    // Store auth for use in completion
+    let auth_for_complete = auth;
+    let _ = navigate; // Navigation handled via window.location
 
     let on_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
@@ -29,7 +50,6 @@ pub fn RegisterPage() -> impl IntoView {
             return;
         }
 
-        // Validate invite token format
         if !token.starts_with("inv_") {
             set_error.set(Some(
                 "Invalid invite token format (must start with 'inv_')".to_string(),
@@ -40,69 +60,38 @@ pub fn RegisterPage() -> impl IntoView {
         set_loading.set(true);
         set_error.set(None);
 
-        let auth_clone = auth;
-        let navigate_clone = navigate.clone();
+        let auth_clone = auth_for_complete;
 
         spawn_local(async move {
             match join_workspace(&token, &mail, &device).await {
                 Ok(result) => {
-                    // Store credentials in IndexedDB with encryption
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        let storage = IndexedDbStorage::new();
-                        let stored = StoredPrincipal {
-                            id: result.principal_id.clone(),
-                            name: device.clone(),
-                            email: Some(mail.clone()),
-                            user_id: Some(result.user_id.clone()),
-                            ed25519_private_key: result.ed25519_private_key.clone(),
-                            ed25519_public_key: result.ed25519_public_key.clone(),
-                            x25519_private_key: Some(result.x25519_private_key.clone()),
-                            x25519_public_key: Some(result.x25519_public_key.clone()),
-                            ed25519_nonce: None,
-                            x25519_nonce: None,
-                            encrypted: false, // Will be encrypted by store_principal
-                        };
-                        if let Err(e) = storage.store_principal(stored).await {
-                            set_error.set(Some(format!("Failed to store principal: {}", e)));
-                            set_loading.set(false);
-                            return;
-                        }
-                        // Set current principal
-                        if let Err(e) = storage
-                            .set_current_principal_id(Some(&result.principal_id))
-                            .await
+                    if result.verification_required {
+                        // Need email verification - store result and show verification UI
+                        set_pending_verification.set(Some(PendingVerification {
+                            result,
+                            email: mail,
+                            device_name: device,
+                        }));
+                        set_loading.set(false);
+                    } else {
+                        // No verification needed - complete registration
+                        if complete_registration_impl(
+                            result,
+                            mail,
+                            device,
+                            auth_clone,
+                            set_error,
+                            set_loading,
+                        )
+                        .await
                         {
-                            web_sys::console::warn_1(
-                                &format!("Failed to set current principal: {}", e).into(),
-                            );
-                        }
-                        // Store server URL in localStorage (not sensitive)
-                        if let Some(window) = web_sys::window() {
-                            if let Ok(Some(ls)) = window.local_storage() {
-                                let _ = ls.set_item("zopp_server_url", &result.server_url);
+                            // Navigate on success - use window.location for simplicity
+                            #[cfg(target_arch = "wasm32")]
+                            if let Some(window) = web_sys::window() {
+                                let _ = window.location().set_href("/workspaces");
                             }
                         }
                     }
-
-                    // Set auth state with credentials
-                    auth_clone.set_authenticated(
-                        crate::state::auth::Principal {
-                            id: result.principal_id.clone(),
-                            name: device.clone(),
-                            email: Some(mail.clone()),
-                            user_id: Some(result.user_id.clone()),
-                        },
-                        crate::state::auth::Credentials {
-                            principal_id: result.principal_id,
-                            ed25519_private_key: result.ed25519_private_key,
-                            x25519_private_key: result.x25519_private_key,
-                            server_url: result.server_url,
-                        },
-                    );
-
-                    // Navigate to workspaces
-                    navigate_clone("/workspaces", Default::default());
                 }
                 Err(e) => {
                     set_error.set(Some(format!("Join failed: {}", e)));
@@ -112,85 +101,281 @@ pub fn RegisterPage() -> impl IntoView {
         });
     };
 
-    // Allow joining with invite even when authenticated
-    // This enables adding another principal
-    let _ = navigate_for_effect; // Suppress unused warning
+    let on_verify = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let code = verification_code.get();
+
+        if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
+            set_verification_error.set(Some("Please enter a 6-digit code".to_string()));
+            return;
+        }
+
+        let pending = match pending_verification.get() {
+            Some(p) => p,
+            None => return,
+        };
+
+        set_verifying.set(true);
+        set_verification_error.set(None);
+        set_verification_success.set(None);
+
+        let auth_clone = auth_for_complete;
+
+        spawn_local(async move {
+            #[cfg(target_arch = "wasm32")]
+            {
+                match verify_email_code(&pending.email, &code, &pending.result).await {
+                    Ok(verify_result) => {
+                        if verify_result.success {
+                            // Verification successful - update result with principal_id from verify response
+                            let mut updated_result = pending.result.clone();
+                            updated_result.principal_id = verify_result.principal_id;
+                            if let Some(user_id) = verify_result.user_id {
+                                updated_result.user_id = user_id;
+                            }
+
+                            // Complete registration with updated result
+                            if complete_registration_impl(
+                                updated_result,
+                                pending.email,
+                                pending.device_name,
+                                auth_clone,
+                                set_error,
+                                set_loading,
+                            )
+                            .await
+                            {
+                                // Navigate on success
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window.location().set_href("/workspaces");
+                                }
+                            }
+                        } else {
+                            let err_msg =
+                                match (verify_result.message, verify_result.attempts_remaining) {
+                                    (Some(msg), Some(attempts)) => {
+                                        format!("{} ({} attempts remaining)", msg, attempts)
+                                    }
+                                    (Some(msg), None) => msg,
+                                    (None, Some(attempts)) => {
+                                        format!("Invalid code. {} attempts remaining.", attempts)
+                                    }
+                                    (None, None) => "Invalid verification code".to_string(),
+                                };
+                            set_verification_error.set(Some(err_msg));
+                            set_verifying.set(false);
+                        }
+                    }
+                    Err(e) => {
+                        set_verification_error.set(Some(e));
+                        set_verifying.set(false);
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = auth_clone;
+                set_verification_error.set(Some("Not available on server".to_string()));
+                set_verifying.set(false);
+            }
+        });
+    };
+
+    let on_resend = move |_| {
+        let pending = match pending_verification.get() {
+            Some(p) => p,
+            None => return,
+        };
+
+        set_resending.set(true);
+        set_verification_error.set(None);
+        set_verification_success.set(None);
+
+        spawn_local(async move {
+            #[cfg(target_arch = "wasm32")]
+            {
+                match resend_verification_email(&pending.email, &pending.result.server_url).await {
+                    Ok(msg) => {
+                        set_verification_success.set(Some(msg));
+                        set_resending.set(false);
+                    }
+                    Err(e) => {
+                        set_verification_error.set(Some(e));
+                        set_resending.set(false);
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                set_verification_error.set(Some("Not available on server".to_string()));
+                set_resending.set(false);
+            }
+        });
+    };
 
     view! {
         <div class="min-h-screen flex items-center justify-center bg-base-200">
             <div class="card w-96 bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <h2 class="card-title text-2xl font-bold">"Join Workspace"</h2>
-                    <p class="text-base-content/70 text-sm">
-                        "Create a new principal using an invite token."
-                    </p>
+                    <Show
+                        when=move || pending_verification.get().is_some()
+                        fallback=move || {
+                            view! {
+                                <h2 class="card-title text-2xl font-bold">"Join Workspace"</h2>
+                                <p class="text-base-content/70 text-sm">
+                                    "Create a new principal using an invite token."
+                                </p>
 
-                    <form on:submit=on_submit class="space-y-4 mt-4">
-                        <Show when=move || error.get().is_some()>
-                            <div class="alert alert-error">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span>{move || error.get().unwrap_or_default()}</span>
+                                <form on:submit=on_submit class="space-y-4 mt-4">
+                                    <Show when=move || error.get().is_some()>
+                                        <div class="alert alert-error">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>{move || error.get().unwrap_or_default()}</span>
+                                        </div>
+                                    </Show>
+
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">"Invite Token"</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="inv_xxxx..."
+                                            class="input input-bordered"
+                                            prop:value=move || invite_token.get()
+                                            on:input=move |ev| set_invite_token.set(event_target_value(&ev))
+                                        />
+                                    </div>
+
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">"Email"</span>
+                                        </label>
+                                        <input
+                                            type="email"
+                                            placeholder="you@example.com"
+                                            class="input input-bordered"
+                                            prop:value=move || email.get()
+                                            on:input=move |ev| set_email.set(event_target_value(&ev))
+                                        />
+                                    </div>
+
+                                    <div class="form-control">
+                                        <label class="label">
+                                            <span class="label-text">"Device Name"</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="My Laptop"
+                                            class="input input-bordered"
+                                            prop:value=move || device_name.get()
+                                            on:input=move |ev| set_device_name.set(event_target_value(&ev))
+                                        />
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-primary w-full"
+                                        disabled=move || loading.get()
+                                    >
+                                        <Show when=move || loading.get()>
+                                            <span class="loading loading-spinner"></span>
+                                        </Show>
+                                        "Create Principal"
+                                    </button>
+                                </form>
+
+                                <div class="divider">"OR"</div>
+
+                                <a href="/import" class="btn btn-outline w-full">
+                                    "Import Existing Principal"
+                                </a>
+                            }
+                        }
+                    >
+                        // Email verification UI
+                        <h2 class="card-title text-2xl font-bold">"Verify Your Email"</h2>
+                        <p class="text-base-content/70 text-sm">
+                            "We sent a verification code to "
+                            <span class="font-medium">
+                                {move || pending_verification.get().map(|p| p.email).unwrap_or_default()}
+                            </span>
+                        </p>
+
+                        <form on:submit=on_verify class="space-y-4 mt-4">
+                            <Show when=move || verification_error.get().is_some()>
+                                <div class="alert alert-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>{move || verification_error.get().unwrap_or_default()}</span>
+                                </div>
+                            </Show>
+
+                            <Show when=move || verification_success.get().is_some()>
+                                <div class="alert alert-success">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>{move || verification_success.get().unwrap_or_default()}</span>
+                                </div>
+                            </Show>
+
+                            <div class="form-control">
+                                <label class="label">
+                                    <span class="label-text">"Verification Code"</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="123456"
+                                    maxlength="6"
+                                    class="input input-bordered text-center text-2xl tracking-widest"
+                                    prop:value=move || verification_code.get()
+                                    on:input=move |ev| set_verification_code.set(event_target_value(&ev))
+                                />
                             </div>
-                        </Show>
 
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">"Invite Token"</span>
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="zopp-invite-xxxx"
-                                class="input input-bordered"
-                                prop:value=move || invite_token.get()
-                                on:input=move |ev| set_invite_token.set(event_target_value(&ev))
-                            />
-                        </div>
+                            <button
+                                type="submit"
+                                class="btn btn-primary w-full"
+                                disabled=move || verifying.get()
+                            >
+                                <Show when=move || verifying.get()>
+                                    <span class="loading loading-spinner"></span>
+                                </Show>
+                                "Verify Email"
+                            </button>
+                        </form>
 
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">"Email"</span>
-                            </label>
-                            <input
-                                type="email"
-                                placeholder="you@example.com"
-                                class="input input-bordered"
-                                prop:value=move || email.get()
-                                on:input=move |ev| set_email.set(event_target_value(&ev))
-                            />
-                        </div>
-
-                        <div class="form-control">
-                            <label class="label">
-                                <span class="label-text">"Device Name"</span>
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="My Laptop"
-                                class="input input-bordered"
-                                prop:value=move || device_name.get()
-                                on:input=move |ev| set_device_name.set(event_target_value(&ev))
-                            />
-                        </div>
+                        <div class="divider">"Didn't receive the code?"</div>
 
                         <button
-                            type="submit"
-                            class="btn btn-primary w-full"
-                            disabled=move || loading.get()
+                            type="button"
+                            class="btn btn-outline w-full"
+                            disabled=move || resending.get()
+                            on:click=on_resend
                         >
-                            <Show when=move || loading.get()>
+                            <Show when=move || resending.get()>
                                 <span class="loading loading-spinner"></span>
                             </Show>
-                            "Create Principal"
+                            "Resend Code"
                         </button>
-                    </form>
 
-                    <div class="divider">"OR"</div>
-
-                    <a href="/import" class="btn btn-outline w-full">
-                        "Import Existing Principal"
-                    </a>
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-sm w-full mt-2"
+                            on:click=move |_| {
+                                set_pending_verification.set(None);
+                                set_verification_code.set(String::new());
+                                set_verification_error.set(None);
+                                set_verification_success.set(None);
+                            }
+                        >
+                            "Start Over"
+                        </button>
+                    </Show>
                 </div>
             </div>
         </div>
@@ -198,15 +383,99 @@ pub fn RegisterPage() -> impl IntoView {
 }
 
 /// Result of joining a workspace
+#[derive(Clone)]
 #[allow(dead_code)]
 struct JoinResult {
-    principal_id: String,
+    principal_id: Option<String>, // None when verification_required=true
     user_id: String,
+    principal_name: String,
     ed25519_private_key: String,
     ed25519_public_key: String,
     x25519_private_key: String,
     x25519_public_key: String,
+    // KEK wrapping data for workspace invites
+    ephemeral_pub: Vec<u8>,
+    kek_wrapped: Vec<u8>,
+    kek_nonce: Vec<u8>,
     server_url: String,
+    verification_required: bool,
+}
+
+/// Complete registration by storing credentials and setting auth state.
+/// Returns true on success, false on failure (error will be set).
+#[allow(clippy::too_many_arguments)]
+async fn complete_registration_impl(
+    result: JoinResult,
+    mail: String,
+    device: String,
+    auth: crate::state::auth::AuthContext,
+    set_error: WriteSignal<Option<String>>,
+    set_loading: WriteSignal<bool>,
+) -> bool {
+    // Extract principal_id - must be present at this point
+    let principal_id = match &result.principal_id {
+        Some(id) => id.clone(),
+        None => {
+            set_error.set(Some(
+                "Missing principal_id in registration result".to_string(),
+            ));
+            set_loading.set(false);
+            return false;
+        }
+    };
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let storage = IndexedDbStorage::new();
+        let stored = StoredPrincipal {
+            id: principal_id.clone(),
+            name: device.clone(),
+            email: Some(mail.clone()),
+            user_id: Some(result.user_id.clone()),
+            ed25519_private_key: result.ed25519_private_key.clone(),
+            ed25519_public_key: result.ed25519_public_key.clone(),
+            x25519_private_key: Some(result.x25519_private_key.clone()),
+            x25519_public_key: Some(result.x25519_public_key.clone()),
+            ed25519_nonce: None,
+            x25519_nonce: None,
+            encrypted: false,
+        };
+        if let Err(e) = storage.store_principal(stored).await {
+            set_error.set(Some(format!("Failed to store principal: {}", e)));
+            set_loading.set(false);
+            return false;
+        }
+        if let Err(e) = storage.set_current_principal_id(Some(&principal_id)).await {
+            web_sys::console::warn_1(&format!("Failed to set current principal: {}", e).into());
+        }
+        if let Some(window) = web_sys::window() {
+            if let Ok(Some(ls)) = window.local_storage() {
+                let _ = ls.set_item("zopp_server_url", &result.server_url);
+            }
+        }
+    }
+
+    auth.set_authenticated(
+        crate::state::auth::Principal {
+            id: principal_id.clone(),
+            name: device.clone(),
+            email: Some(mail.clone()),
+            user_id: Some(result.user_id.clone()),
+        },
+        crate::state::auth::Credentials {
+            principal_id,
+            ed25519_private_key: result.ed25519_private_key,
+            x25519_private_key: result.x25519_private_key,
+            server_url: result.server_url,
+        },
+    );
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (set_error, set_loading);
+    }
+
+    true
 }
 
 /// Join a workspace using an invite token
@@ -318,11 +587,16 @@ async fn join_workspace(
         Ok(JoinResult {
             principal_id: response.principal_id,
             user_id: response.user_id,
+            principal_name: principal_name.to_string(),
             ed25519_private_key: hex::encode(signing_key.to_bytes()),
             ed25519_public_key: hex::encode(verifying_key.to_bytes()),
             x25519_private_key: hex::encode(x25519_keypair.secret_key_bytes()),
             x25519_public_key: hex::encode(x25519_keypair.public_key_bytes()),
+            ephemeral_pub,
+            kek_wrapped,
+            kek_nonce,
             server_url,
+            verification_required: response.verification_required,
         })
     }
 
@@ -330,5 +604,91 @@ async fn join_workspace(
     {
         let _ = (invite_code, email, principal_name);
         Err("Not available on server".to_string())
+    }
+}
+
+/// Result of email verification
+#[cfg(target_arch = "wasm32")]
+struct VerifyResult {
+    success: bool,
+    message: Option<String>,
+    attempts_remaining: Option<u32>,
+    principal_id: Option<String>,
+    user_id: Option<String>,
+}
+
+/// Verify email with a code - creates principal on success
+#[cfg(target_arch = "wasm32")]
+async fn verify_email_code(
+    email: &str,
+    code: &str,
+    join_result: &JoinResult,
+) -> Result<VerifyResult, String> {
+    use zopp_proto_web::{VerifyEmailRequest, ZoppWebClient};
+
+    let client = ZoppWebClient::new(&join_result.server_url);
+
+    // Decode keys from hex for the request
+    let public_key = hex::decode(&join_result.ed25519_public_key)
+        .map_err(|e| format!("Invalid public key hex: {}", e))?;
+    let x25519_public_key = hex::decode(&join_result.x25519_public_key)
+        .map_err(|e| format!("Invalid x25519 public key hex: {}", e))?;
+
+    let response = client
+        .verify_email(VerifyEmailRequest {
+            email: email.to_string(),
+            code: code.to_string(),
+            principal_name: join_result.principal_name.clone(),
+            public_key,
+            x25519_public_key,
+            ephemeral_pub: join_result.ephemeral_pub.clone(),
+            kek_wrapped: join_result.kek_wrapped.clone(),
+            kek_nonce: join_result.kek_nonce.clone(),
+        })
+        .await
+        .map_err(|e| format!("Verification failed: {}", e))?;
+
+    Ok(VerifyResult {
+        success: response.success,
+        message: if response.message.is_empty() {
+            None
+        } else {
+            Some(response.message)
+        },
+        attempts_remaining: if response.attempts_remaining > 0 {
+            Some(response.attempts_remaining)
+        } else {
+            None
+        },
+        principal_id: if response.principal_id.is_empty() {
+            None
+        } else {
+            Some(response.principal_id)
+        },
+        user_id: if response.user_id.is_empty() {
+            None
+        } else {
+            Some(response.user_id)
+        },
+    })
+}
+
+/// Resend verification email
+#[cfg(target_arch = "wasm32")]
+async fn resend_verification_email(email: &str, server_url: &str) -> Result<String, String> {
+    use zopp_proto_web::{ResendVerificationRequest, ZoppWebClient};
+
+    let client = ZoppWebClient::new(server_url);
+    let response = client
+        .resend_verification(ResendVerificationRequest {
+            email: email.to_string(),
+        })
+        .await
+        .map_err(|e| format!("Resend failed: {}", e))?;
+
+    if response.success {
+        Ok(response.message)
+    } else {
+        Err(response.message)
     }
 }

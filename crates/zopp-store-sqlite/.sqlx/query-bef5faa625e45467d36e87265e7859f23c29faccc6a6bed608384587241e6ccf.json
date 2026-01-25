@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, token,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\",\n               expires_at as \"expires_at: DateTime<Utc>\",\n               created_by_user_id, revoked, kek_encrypted, kek_nonce\n               FROM invites WHERE token = ?",
+  "query": "SELECT id, token,\n               created_at as \"created_at: DateTime<Utc>\",\n               updated_at as \"updated_at: DateTime<Utc>\",\n               expires_at as \"expires_at: DateTime<Utc>\",\n               created_by_user_id, revoked, consumed, kek_encrypted, kek_nonce\n               FROM invites\n               WHERE revoked = 0 AND (\n                   (? IS NOT NULL AND created_by_user_id = ?) OR\n                   (? IS NULL AND created_by_user_id IS NULL)\n               )",
   "describe": {
     "columns": [
       {
@@ -39,18 +39,23 @@
         "type_info": "Integer"
       },
       {
-        "name": "kek_encrypted",
+        "name": "consumed",
         "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kek_encrypted",
+        "ordinal": 8,
         "type_info": "Blob"
       },
       {
         "name": "kek_nonce",
-        "ordinal": 8,
+        "ordinal": 9,
         "type_info": "Blob"
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 3
     },
     "nullable": [
       false,
@@ -60,9 +65,10 @@
       false,
       true,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "bbc63cffac81e98d1f1933634b23cffc0b89062d4e6cdc8388285278dd63de50"
+  "hash": "bef5faa625e45467d36e87265e7859f23c29faccc6a6bed608384587241e6ccf"
 }

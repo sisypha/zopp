@@ -39,6 +39,15 @@ hex = { workspace = true }
 sha2 = { workspace = true }
 subtle = { workspace = true }
 
+# Email providers (optional)
+resend-rs = { workspace = true, optional = true }
+lettre = { workspace = true, optional = true }
+
+[features]
+default = ["email-smtp"]
+email-resend = ["resend-rs"]
+email-smtp = ["lettre"]
+
 [dev-dependencies]
 tempfile = { workspace = true }
 reqwest = { workspace = true }

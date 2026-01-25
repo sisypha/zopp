@@ -100,6 +100,83 @@ DATABASE_URL=postgres://user:pass@localhost/zopp ./zopp-server invite create --e
 docker exec zopp-server zopp-server invite create --expires-hours 48
 ```
 
+## Email Verification
+
+The server supports email verification for new users joining the system. When enabled, users must verify their email address before their principal is fully activated.
+
+### Configuration
+
+Email verification is configured via environment variables:
+
+```bash
+# Enable/disable verification (default: true when email is configured)
+ZOPP_EMAIL_VERIFICATION_REQUIRED=true
+
+# Sender configuration
+ZOPP_EMAIL_FROM=noreply@yourdomain.com
+ZOPP_EMAIL_FROM_NAME="Zopp Security"
+```
+
+### Email Providers
+
+Choose one of the supported email providers:
+
+#### Resend (recommended for production)
+
+```bash
+ZOPP_EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ZOPP_EMAIL_FROM=noreply@yourdomain.com
+```
+
+#### SMTP
+
+```bash
+ZOPP_EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=user@example.com
+SMTP_PASSWORD=your_password
+SMTP_USE_TLS=true
+ZOPP_EMAIL_FROM=noreply@yourdomain.com
+```
+
+### Docker Example
+
+```bash
+docker run -d \
+  --name zopp-server \
+  -p 50051:50051 \
+  -e DATABASE_URL=postgres://user:pass@host:5432/zopp \
+  -e ZOPP_EMAIL_PROVIDER=resend \
+  -e RESEND_API_KEY=re_xxxxxxxxxxxxx \
+  -e ZOPP_EMAIL_FROM=noreply@yourdomain.com \
+  -e ZOPP_EMAIL_FROM_NAME="Zopp Security" \
+  ghcr.io/faiscadev/zopp-server:latest
+```
+
+### Verification Flow
+
+1. User runs `zopp join <invite> <email>`
+2. Server sends a 6-digit verification code to the email
+3. User enters the code in the CLI
+4. Upon successful verification, the principal is activated
+
+The verification code:
+- Expires after 15 minutes
+- Allows 5 attempts per code
+- Rate limited to 3 codes per hour per email
+
+### Disabling Verification
+
+To disable email verification (not recommended for production):
+
+```bash
+ZOPP_EMAIL_VERIFICATION_REQUIRED=false
+```
+
+Without email verification configured, users can join immediately without verification.
+
 ## Health Checks
 
 The server exposes health endpoints on port 8080:

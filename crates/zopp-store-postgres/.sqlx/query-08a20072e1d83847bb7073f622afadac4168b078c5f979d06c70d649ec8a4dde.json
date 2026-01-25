@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, email, created_at, updated_at FROM users WHERE id = $1",
+  "query": "SELECT id, email, verified, created_at, updated_at FROM users WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -15,11 +15,16 @@
       },
       {
         "ordinal": 2,
+        "name": "verified",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -33,8 +38,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "5e235e795e8ae96f88596fdf40839d73534e2aa607cdf78638bc797f8aa9f6bd"
+  "hash": "08a20072e1d83847bb7073f622afadac4168b078c5f979d06c70d649ec8a4dde"
 }

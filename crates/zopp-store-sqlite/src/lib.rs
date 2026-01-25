@@ -6,8 +6,9 @@ use zopp_audit::{
     AuditAction, AuditEvent, AuditLog, AuditLogError, AuditLogFilter, AuditLogId, AuditResult,
 };
 use zopp_storage::{
-    AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalExportParams,
-    CreatePrincipalParams, CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName,
+    AddWorkspacePrincipalParams, CreateEmailVerificationParams, CreateEnvParams,
+    CreateInviteParams, CreatePrincipalExportParams, CreatePrincipalParams, CreateProjectParams,
+    CreateUserParams, CreateWorkspaceParams, EmailVerification, EmailVerificationId, EnvName,
     Environment, EnvironmentId, EnvironmentPermission, Invite, InviteId, Principal,
     PrincipalExport, PrincipalExportId, PrincipalId, ProjectName, ProjectPermission, Role,
     SecretRow, Store, StoreError, User, UserEnvironmentPermission, UserId, UserProjectPermission,
@@ -122,7 +123,14 @@ impl Store for SqliteStore {
                 )
                 .execute(&mut *tx)
                 .await
-                .map_err(|e| StoreError::Backend(e.to_string()))?;
+                .map_err(|e| {
+                    let s = e.to_string();
+                    if s.contains("UNIQUE") {
+                        StoreError::AlreadyExists
+                    } else {
+                        StoreError::Backend(s)
+                    }
+                })?;
 
                 Some(PrincipalId(principal_id))
             } else {
@@ -179,7 +187,7 @@ impl Store for SqliteStore {
 
     async fn get_user_by_email(&self, email: &str) -> Result<User, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, email,
+            r#"SELECT id, email, verified,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM users WHERE email = ?"#,
@@ -197,6 +205,7 @@ impl Store for SqliteStore {
                 Ok(User {
                     id: UserId(id),
                     email: row.email,
+                    verified: row.verified != 0,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                 })
@@ -207,7 +216,7 @@ impl Store for SqliteStore {
     async fn get_user_by_id(&self, user_id: &UserId) -> Result<User, StoreError> {
         let user_id_str = user_id.0.to_string();
         let row = sqlx::query!(
-            r#"SELECT id, email,
+            r#"SELECT id, email, verified,
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>"
                FROM users WHERE id = ?"#,
@@ -225,6 +234,7 @@ impl Store for SqliteStore {
                 Ok(User {
                     id: UserId(id),
                     email: row.email,
+                    verified: row.verified != 0,
                     created_at: row.created_at,
                     updated_at: row.updated_at,
                 })
@@ -415,6 +425,7 @@ impl Store for SqliteStore {
             updated_at: row.updated_at,
             expires_at: params.expires_at,
             created_by_user_id: params.created_by_user_id.clone(),
+            consumed: false,
         })
     }
 
@@ -424,7 +435,7 @@ impl Store for SqliteStore {
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>",
-               created_by_user_id, revoked, kek_encrypted, kek_nonce
+               created_by_user_id, revoked, consumed, kek_encrypted, kek_nonce
                FROM invites WHERE token = ?"#,
             token
         )
@@ -475,6 +486,7 @@ impl Store for SqliteStore {
                     updated_at: row.updated_at,
                     expires_at: row.expires_at,
                     created_by_user_id,
+                    consumed: row.consumed != 0,
                 })
             }
         }
@@ -489,7 +501,7 @@ impl Store for SqliteStore {
                created_at as "created_at: DateTime<Utc>",
                updated_at as "updated_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>",
-               created_by_user_id, revoked, kek_encrypted, kek_nonce
+               created_by_user_id, revoked, consumed, kek_encrypted, kek_nonce
                FROM invites
                WHERE revoked = 0 AND (
                    (? IS NOT NULL AND created_by_user_id = ?) OR
@@ -539,6 +551,7 @@ impl Store for SqliteStore {
                 updated_at: row.updated_at,
                 expires_at: row.expires_at,
                 created_by_user_id,
+                consumed: row.consumed != 0,
             });
         }
         Ok(invites)
@@ -547,6 +560,19 @@ impl Store for SqliteStore {
     async fn revoke_invite(&self, invite_id: &InviteId) -> Result<(), StoreError> {
         let invite_id_str = invite_id.0.to_string();
         let result = sqlx::query!("UPDATE invites SET revoked = 1 WHERE id = ?", invite_id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn consume_invite(&self, token: &str) -> Result<(), StoreError> {
+        let result = sqlx::query!("UPDATE invites SET consumed = 1 WHERE token = ?", token)
             .execute(&self.pool)
             .await
             .map_err(|e| StoreError::Backend(e.to_string()))?;
@@ -700,6 +726,139 @@ impl Store for SqliteStore {
     ) -> Result<(), StoreError> {
         let export_id_str = export_id.0.to_string();
         let result = sqlx::query!("DELETE FROM principal_exports WHERE id = ?", export_id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    // ───────────────────────────── Email Verification ─────────────────────────────
+
+    async fn create_email_verification(
+        &self,
+        params: &CreateEmailVerificationParams,
+    ) -> Result<EmailVerification, StoreError> {
+        let id = Uuid::now_v7();
+        let id_str = id.to_string();
+        let email = params.email.to_lowercase();
+
+        // Upsert: email is unique, so this replaces any existing verification for this email
+        sqlx::query!(
+            "INSERT OR REPLACE INTO email_verifications(id, email, code, invite_token, expires_at) VALUES(?, ?, ?, ?, ?)",
+            id_str,
+            email,
+            params.code,
+            params.invite_token,
+            params.expires_at
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(EmailVerification {
+            id: EmailVerificationId(id),
+            email,
+            code: params.code.clone(),
+            invite_token: params.invite_token.clone(),
+            attempts: 0,
+            created_at: Utc::now(),
+            expires_at: params.expires_at,
+        })
+    }
+
+    async fn get_email_verification(&self, email: &str) -> Result<EmailVerification, StoreError> {
+        let email_lower = email.to_lowercase();
+        // Email is unique, so no need for ORDER BY/LIMIT
+        let row = sqlx::query!(
+            r#"SELECT id, email, code, invite_token, attempts,
+               created_at as "created_at: DateTime<Utc>",
+               expires_at as "expires_at: DateTime<Utc>"
+               FROM email_verifications
+               WHERE email = ?"#,
+            email_lower
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => {
+                let id =
+                    Uuid::try_parse(&row.id).map_err(|e| StoreError::Backend(e.to_string()))?;
+                Ok(EmailVerification {
+                    id: EmailVerificationId(id),
+                    email: row.email,
+                    code: row.code,
+                    invite_token: row.invite_token,
+                    attempts: row.attempts as i32,
+                    created_at: row.created_at,
+                    expires_at: row.expires_at,
+                })
+            }
+        }
+    }
+
+    async fn increment_email_verification_attempts(
+        &self,
+        id: &EmailVerificationId,
+    ) -> Result<i32, StoreError> {
+        let id_str = id.0.to_string();
+        sqlx::query!(
+            "UPDATE email_verifications SET attempts = attempts + 1 WHERE id = ?",
+            id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        // Fetch the updated count
+        let row = sqlx::query!(
+            "SELECT attempts FROM email_verifications WHERE id = ?",
+            id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        match row {
+            None => Err(StoreError::NotFound),
+            Some(row) => Ok(row.attempts as i32),
+        }
+    }
+
+    async fn delete_email_verification(&self, id: &EmailVerificationId) -> Result<(), StoreError> {
+        let id_str = id.0.to_string();
+        let result = sqlx::query!("DELETE FROM email_verifications WHERE id = ?", id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn cleanup_expired_email_verifications(&self) -> Result<u64, StoreError> {
+        let now = Utc::now();
+        let result = sqlx::query!("DELETE FROM email_verifications WHERE expires_at < ?", now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn mark_user_verified(&self, user_id: &UserId) -> Result<(), StoreError> {
+        let user_id_str = user_id.0.to_string();
+        let result = sqlx::query!("UPDATE users SET verified = 1 WHERE id = ?", user_id_str)
             .execute(&self.pool)
             .await
             .map_err(|e| StoreError::Backend(e.to_string()))?;
@@ -4111,5 +4270,217 @@ mod tests {
             .await
             .unwrap_err();
         matches!(err, StoreError::NotFound);
+    }
+
+    // ─────────────────────────── Email Verification Tests ───────────────────────────
+
+    #[tokio::test]
+    async fn create_and_get_email_verification() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        let params = zopp_storage::CreateEmailVerificationParams {
+            email: "Test@Example.com".to_string(),
+            code: "123456".to_string(),
+            invite_token: "test-token".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
+        };
+
+        let verification = s.create_email_verification(&params).await.unwrap();
+        assert_eq!(verification.email, "test@example.com"); // Should be lowercased
+        assert_eq!(verification.code, "123456");
+        assert_eq!(verification.invite_token, "test-token");
+        assert_eq!(verification.attempts, 0);
+
+        // Get by email (case insensitive)
+        let got = s.get_email_verification("TEST@EXAMPLE.COM").await.unwrap();
+        assert_eq!(got.id, verification.id);
+        assert_eq!(got.email, "test@example.com");
+        assert_eq!(got.invite_token, "test-token");
+    }
+
+    #[tokio::test]
+    async fn get_email_verification_not_found() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        let err = s
+            .get_email_verification("nonexistent@example.com")
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn increment_email_verification_attempts() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        let params = zopp_storage::CreateEmailVerificationParams {
+            email: "test@example.com".to_string(),
+            code: "123456".to_string(),
+            invite_token: "test-token".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
+        };
+
+        let verification = s.create_email_verification(&params).await.unwrap();
+        assert_eq!(verification.attempts, 0);
+
+        // Increment attempts
+        let attempts = s
+            .increment_email_verification_attempts(&verification.id)
+            .await
+            .unwrap();
+        assert_eq!(attempts, 1);
+
+        let attempts = s
+            .increment_email_verification_attempts(&verification.id)
+            .await
+            .unwrap();
+        assert_eq!(attempts, 2);
+
+        // Verify by fetching
+        let got = s.get_email_verification("test@example.com").await.unwrap();
+        assert_eq!(got.attempts, 2);
+    }
+
+    #[tokio::test]
+    async fn delete_email_verification() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        let params = zopp_storage::CreateEmailVerificationParams {
+            email: "test@example.com".to_string(),
+            code: "123456".to_string(),
+            invite_token: "test-token".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
+        };
+
+        let verification = s.create_email_verification(&params).await.unwrap();
+
+        // Delete
+        s.delete_email_verification(&verification.id).await.unwrap();
+
+        // Should not be found
+        let err = s
+            .get_email_verification("test@example.com")
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn delete_nonexistent_email_verification() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        let fake_id = zopp_storage::EmailVerificationId(uuid::Uuid::now_v7());
+        let err = s.delete_email_verification(&fake_id).await.unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_email_verifications() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        // Create an expired verification
+        let expired_params = zopp_storage::CreateEmailVerificationParams {
+            email: "expired@example.com".to_string(),
+            code: "111111".to_string(),
+            invite_token: "expired-token".to_string(),
+            expires_at: chrono::Utc::now() - chrono::Duration::minutes(1), // Already expired
+        };
+        s.create_email_verification(&expired_params).await.unwrap();
+
+        // Create a valid verification
+        let valid_params = zopp_storage::CreateEmailVerificationParams {
+            email: "valid@example.com".to_string(),
+            code: "222222".to_string(),
+            invite_token: "valid-token".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
+        };
+        s.create_email_verification(&valid_params).await.unwrap();
+
+        // Cleanup should remove 1 expired record
+        let deleted = s.cleanup_expired_email_verifications().await.unwrap();
+        assert_eq!(deleted, 1);
+
+        // Expired one should be gone
+        let err = s
+            .get_email_verification("expired@example.com")
+            .await
+            .unwrap_err();
+        matches!(err, StoreError::NotFound);
+
+        // Valid one should still exist
+        s.get_email_verification("valid@example.com").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn mark_user_verified() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        // Create user with principal
+        let (user_id, _) = s
+            .create_user(&CreateUserParams {
+                email: "test@example.com".to_string(),
+                principal: Some(CreatePrincipalData {
+                    name: "laptop".to_string(),
+                    public_key: vec![1, 2, 3, 4],
+                    x25519_public_key: Some(vec![5, 6, 7, 8]),
+                    is_service: false,
+                }),
+                workspace_ids: vec![],
+            })
+            .await
+            .unwrap();
+
+        // New users should be unverified by default
+        let user = s.get_user_by_id(&user_id).await.unwrap();
+        assert!(!user.verified);
+
+        // Mark as verified
+        s.mark_user_verified(&user_id).await.unwrap();
+
+        let user = s.get_user_by_id(&user_id).await.unwrap();
+        assert!(user.verified);
+
+        // Marking verified again should be idempotent
+        s.mark_user_verified(&user_id).await.unwrap();
+        let user = s.get_user_by_id(&user_id).await.unwrap();
+        assert!(user.verified);
+    }
+
+    #[tokio::test]
+    async fn mark_nonexistent_user_verified() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        let fake_id = zopp_storage::UserId(uuid::Uuid::now_v7());
+        let err = s.mark_user_verified(&fake_id).await.unwrap_err();
+        matches!(err, StoreError::NotFound);
+    }
+
+    #[tokio::test]
+    async fn email_verification_upserts_on_same_email() {
+        let s = SqliteStore::open_in_memory().await.unwrap();
+
+        // Create first verification
+        let params1 = zopp_storage::CreateEmailVerificationParams {
+            email: "test@example.com".to_string(),
+            code: "111111".to_string(),
+            invite_token: "token1".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
+        };
+        s.create_email_verification(&params1).await.unwrap();
+
+        // Create second verification for same email - should upsert
+        let params2 = zopp_storage::CreateEmailVerificationParams {
+            email: "test@example.com".to_string(),
+            code: "222222".to_string(),
+            invite_token: "token2".to_string(),
+            expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
+        };
+        let second = s.create_email_verification(&params2).await.unwrap();
+
+        // Should return the updated record with new code
+        let got = s.get_email_verification("test@example.com").await.unwrap();
+        assert_eq!(got.id, second.id);
+        assert_eq!(got.code, "222222");
+        assert_eq!(got.invite_token, "token2");
     }
 }

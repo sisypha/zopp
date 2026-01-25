@@ -35,6 +35,10 @@ pub enum Command {
         /// Principal name (optional, defaults to hostname)
         #[arg(long)]
         principal: Option<String>,
+
+        /// Verification code (for non-interactive use when email verification is required)
+        #[arg(long)]
+        verification_code: Option<String>,
     },
     /// Workspace commands
     Workspace {

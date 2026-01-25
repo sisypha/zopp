@@ -7,6 +7,10 @@ service ZoppService {
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
 
+  // Email Verification
+  rpc VerifyEmail(VerifyEmailRequest) returns (VerifyEmailResponse);
+  rpc ResendVerification(ResendVerificationRequest) returns (ResendVerificationResponse);
+
   // Workspaces
   rpc CreateWorkspace(CreateWorkspaceRequest) returns (Workspace);
   rpc ListWorkspaces(Empty) returns (WorkspaceList);
@@ -139,8 +143,9 @@ message JoinRequest {
 
 message JoinResponse {
   string user_id = 1;
-  string principal_id = 2;
+  optional string principal_id = 2;  // Only set if verification_required=false
   repeated Workspace workspaces = 3;
+  bool verification_required = 4;  // If true, client must complete email verification
 }
 
 message RegisterRequest {
@@ -171,6 +176,37 @@ message LoginRequest {
 message LoginResponse {
   string user_id = 1;
   string principal_id = 2;
+}
+
+// Email Verification messages
+message VerifyEmailRequest {
+  string email = 1;
+  string code = 2;                   // 6-digit verification code
+  string principal_name = 3;         // Principal name to create
+  bytes public_key = 4;              // Ed25519 public key for authentication
+  bytes x25519_public_key = 5;       // X25519 public key for encryption (ECDH)
+  // For workspace invites - KEK wrapping data
+  bytes ephemeral_pub = 6;           // Ephemeral X25519 public key for wrapping KEK
+  bytes kek_wrapped = 7;             // Workspace KEK wrapped for this principal
+  bytes kek_nonce = 8;               // 24-byte nonce for wrapping
+}
+
+message VerifyEmailResponse {
+  bool success = 1;
+  string message = 2;
+  int32 attempts_remaining = 3;      // Number of attempts left before code is invalidated
+  string user_id = 4;                // User ID (on success)
+  string principal_id = 5;           // Created principal ID (on success)
+  repeated Workspace workspaces = 6; // Workspaces user now has access to (on success)
+}
+
+message ResendVerificationRequest {
+  string email = 1;
+}
+
+message ResendVerificationResponse {
+  bool success = 1;
+  string message = 2;
 }
 
 // Workspace messages

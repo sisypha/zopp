@@ -1,5 +1,6 @@
 //! Authentication handlers: join, register, login
 
+use chrono::Utc;
 use prost::Message;
 use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
@@ -7,9 +8,11 @@ use zopp_proto::{
     JoinRequest, JoinResponse, LoginRequest, LoginResponse, RegisterRequest, RegisterResponse,
 };
 use zopp_storage::{
-    CreatePrincipalData, CreatePrincipalParams, CreateUserParams, Store, StoreError,
+    CreateEmailVerificationParams, CreatePrincipalData, CreatePrincipalParams, CreateUserParams,
+    Store, StoreError,
 };
 
+use crate::email::generate_verification_code;
 use crate::server::{extract_signature, ZoppServer};
 
 pub async fn join(
@@ -36,7 +39,102 @@ pub async fn join(
         )));
     }
 
-    // Try to create user, but if they already exist, that's okay for workspace invites
+    // Check if invite was already consumed
+    if invite.consumed {
+        return Err(Status::permission_denied(
+            "This invite has already been used",
+        ));
+    }
+
+    // Check if email verification is required
+    let verification_required =
+        server.config.is_verification_required() && server.email_provider.is_some();
+
+    if verification_required {
+        // Verification required: create user only (no principal yet)
+        // Principal will be created when email is verified
+
+        // Try to create user (or get existing if this is a retry)
+        let user_id = match server
+            .store
+            .create_user(&CreateUserParams {
+                email: email.clone(),
+                principal: None,       // No principal yet - created at verification
+                workspace_ids: vec![], // Workspace membership added at verification
+            })
+            .await
+        {
+            Ok((uid, _)) => uid,
+            Err(StoreError::AlreadyExists) => {
+                // User exists - this could be a retry or existing user joining a workspace
+                server
+                    .store
+                    .get_user_by_email(&email)
+                    .await
+                    .map_err(|e| Status::internal(format!("Failed to get existing user: {}", e)))?
+                    .id
+            }
+            Err(e) => return Err(Status::internal(format!("Failed to create user: {}", e))),
+        };
+
+        // Check if a valid verification record already exists for this email+invite
+        // If so, don't regenerate the code (allows retry with same code)
+        let existing_verification = server.store.get_email_verification(&email).await.ok();
+        let should_generate_new_code = match &existing_verification {
+            Some(v) if v.invite_token == req.invite_token && v.expires_at > Utc::now() => {
+                // Valid verification exists for same invite - don't regenerate
+                false
+            }
+            _ => true,
+        };
+
+        if should_generate_new_code {
+            // Generate verification code
+            let code = generate_verification_code();
+
+            // Store verification record (expires in 15 minutes)
+            // This upserts - if there's an existing verification for this email, it's replaced
+            let expires_at = Utc::now() + chrono::Duration::minutes(15);
+            server
+                .store
+                .create_email_verification(&CreateEmailVerificationParams {
+                    email: email.clone(),
+                    code: code.clone(),
+                    invite_token: req.invite_token.clone(),
+                    expires_at,
+                })
+                .await
+                .map_err(|e| Status::internal(format!("Failed to create verification: {}", e)))?;
+
+            // Send verification email - fail if email cannot be sent
+            if let Some(ref provider) = server.email_provider {
+                let email_config = server.config.email.as_ref().unwrap();
+                provider
+                    .send_verification(
+                        &email,
+                        &code,
+                        &email_config.from_address,
+                        email_config.from_name.as_deref(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        Status::internal(format!("Failed to send verification email: {}", e))
+                    })?;
+            }
+        }
+
+        // Return without principal_id - it will be created at verification
+        return Ok(Response::new(JoinResponse {
+            user_id: user_id.0.to_string(),
+            principal_id: None,
+            workspaces: vec![], // Workspaces returned at verification
+            verification_required: true,
+        }));
+    }
+
+    // No verification required: create user + principal immediately
+
+    // Try to create user with principal
     let result = server
         .store
         .create_user(&CreateUserParams {
@@ -105,6 +203,10 @@ pub async fn join(
 
             (existing_user.id, new_principal_id)
         }
+        Err(StoreError::AlreadyExists) => {
+            // Bootstrap invite: user already exists
+            return Err(Status::already_exists("User already exists"));
+        }
         Err(e) => return Err(Status::internal(format!("Failed to create user: {}", e))),
     };
 
@@ -127,6 +229,20 @@ pub async fn join(
         }
     }
 
+    // Consume the invite (mark as used)
+    server
+        .store
+        .consume_invite(&req.invite_token)
+        .await
+        .map_err(|e| Status::internal(format!("Failed to consume invite: {}", e)))?;
+
+    // Mark user as verified (no email verification needed)
+    server
+        .store
+        .mark_user_verified(&user_id)
+        .await
+        .map_err(|e| Status::internal(format!("Failed to mark user verified: {}", e)))?;
+
     let mut workspaces = Vec::new();
     for workspace_id in invite.workspace_ids {
         let workspace = server
@@ -143,8 +259,9 @@ pub async fn join(
 
     Ok(Response::new(JoinResponse {
         user_id: user_id.0.to_string(),
-        principal_id: principal_id.0.to_string(),
+        principal_id: Some(principal_id.0.to_string()),
         workspaces,
+        verification_required: false,
     }))
 }
 

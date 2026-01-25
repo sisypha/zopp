@@ -1,6 +1,7 @@
 //! Unit tests for server logic using real SQLite in-memory database.
 
 use crate::backend::StoreBackend;
+use crate::config::ServerConfig;
 use crate::server::{extract_signature, ZoppServer};
 use chrono::{Duration, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -17,7 +18,34 @@ use zopp_store_sqlite::SqliteStore;
 async fn create_test_server() -> ZoppServer {
     let store = Arc::new(SqliteStore::open_in_memory().await.unwrap());
     let events = Arc::new(MemoryEventBus::new());
-    ZoppServer::new_sqlite(store, events)
+    // Use default config with no email verification for tests
+    let config = ServerConfig::default();
+    ZoppServer::new_sqlite(store, events, config, None)
+}
+
+/// Test helper: Create a ZoppServer with email verification required
+async fn create_test_server_with_verification() -> ZoppServer {
+    use crate::config::{EmailConfig, EmailProviderConfig};
+
+    let store = Arc::new(SqliteStore::open_in_memory().await.unwrap());
+    let events = Arc::new(MemoryEventBus::new());
+    // Config with verification required
+    let config = ServerConfig {
+        email: Some(EmailConfig {
+            verification_required: true,
+            provider: EmailProviderConfig::Smtp {
+                host: "localhost".to_string(),
+                port: 25,
+                username: None,
+                password: None,
+                use_tls: false,
+            },
+            from_address: "test@example.com".to_string(),
+            from_name: None,
+        }),
+    };
+    // No actual email provider - we're testing enforcement, not email sending
+    ZoppServer::new_sqlite(store, events, config, None)
 }
 
 /// Test helper: Generate a random Ed25519 keypair and return (public_key, private_key)
@@ -1118,14 +1146,15 @@ async fn test_server_invite_joins_user_without_creating_workspace() {
     let response = server.join(request).await.unwrap().into_inner();
 
     assert!(!response.user_id.is_empty());
-    assert!(!response.principal_id.is_empty());
+    assert!(!response.principal_id.as_ref().is_none_or(|s| s.is_empty()));
     assert_eq!(
         response.workspaces.len(),
         0,
         "No workspaces should be created automatically"
     );
 
-    let principal_id = PrincipalId(uuid::Uuid::parse_str(&response.principal_id).unwrap());
+    let principal_id =
+        PrincipalId(uuid::Uuid::parse_str(response.principal_id.as_ref().unwrap()).unwrap());
 
     let workspaces = server.store.list_workspaces(&principal_id).await.unwrap();
     assert_eq!(
@@ -1174,6 +1203,169 @@ async fn store_backend_create_user() {
 mod handler_tests {
     use super::*;
     use zopp_proto::zopp_service_server::ZoppService;
+
+    // ---- Email verification enforcement tests ----
+
+    #[tokio::test]
+    async fn unverified_principal_blocked_when_verification_required() {
+        // Server with verification required
+        let server = create_test_server_with_verification().await;
+
+        // Create user with unverified principal (default state)
+        let (_user_id, principal_id, signing_key) =
+            create_test_user(&server, "test@example.com", "laptop").await;
+
+        // Try to create workspace - should be blocked because principal is not verified
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CreateWorkspace",
+            zopp_proto::CreateWorkspaceRequest {
+                id: uuid::Uuid::now_v7().to_string(),
+                name: "my-workspace".to_string(),
+                ephemeral_pub: vec![0u8; 32],
+                kek_wrapped: vec![0u8; 48],
+                kek_nonce: vec![0u8; 24],
+            },
+        );
+
+        let result = server.create_workspace(request).await;
+        assert!(result.is_err(), "Unverified principal should be blocked");
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::PermissionDenied);
+        assert!(
+            status.message().contains("verification"),
+            "Error should mention verification: {}",
+            status.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn verified_principal_allowed_when_verification_required() {
+        // Server with verification required
+        let server = create_test_server_with_verification().await;
+
+        // Create user with principal
+        let (user_id, principal_id, signing_key) =
+            create_test_user(&server, "test@example.com", "laptop").await;
+
+        // Mark user as verified
+        server.store.mark_user_verified(&user_id).await.unwrap();
+
+        // Try to create workspace - should succeed because principal is verified
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CreateWorkspace",
+            zopp_proto::CreateWorkspaceRequest {
+                id: uuid::Uuid::now_v7().to_string(),
+                name: "my-workspace".to_string(),
+                ephemeral_pub: vec![0u8; 32],
+                kek_wrapped: vec![0u8; 48],
+                kek_nonce: vec![0u8; 24],
+            },
+        );
+
+        let result = server.create_workspace(request).await;
+        assert!(result.is_ok(), "Verified principal should be allowed");
+    }
+
+    #[tokio::test]
+    async fn unverified_principal_allowed_when_verification_not_required() {
+        // Server without verification required (default)
+        let server = create_test_server().await;
+
+        // Create user with unverified principal
+        let (_user_id, principal_id, signing_key) =
+            create_test_user(&server, "test@example.com", "laptop").await;
+
+        // Try to create workspace - should succeed because verification is not required
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/CreateWorkspace",
+            zopp_proto::CreateWorkspaceRequest {
+                id: uuid::Uuid::now_v7().to_string(),
+                name: "my-workspace".to_string(),
+                ephemeral_pub: vec![0u8; 32],
+                kek_wrapped: vec![0u8; 48],
+                kek_nonce: vec![0u8; 24],
+            },
+        );
+
+        let result = server.create_workspace(request).await;
+        assert!(
+            result.is_ok(),
+            "Unverified principal should be allowed when verification not required"
+        );
+    }
+
+    #[tokio::test]
+    async fn unverified_principal_blocked_list_workspaces() {
+        // Server with verification required
+        let server = create_test_server_with_verification().await;
+
+        // Create user with unverified principal
+        let (_user_id, principal_id, signing_key) =
+            create_test_user(&server, "test@example.com", "laptop").await;
+
+        // Try to list workspaces - should be blocked
+        let request = create_signed_request(
+            &principal_id,
+            &signing_key,
+            "/zopp.ZoppService/ListWorkspaces",
+            zopp_proto::Empty {},
+        );
+
+        let result = server.list_workspaces(request).await;
+        assert!(result.is_err(), "Unverified principal should be blocked");
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn unverified_principal_blocked_get_secret() {
+        // Server with verification required
+        let server = create_test_server_with_verification().await;
+
+        // Create verified user to set up workspace/project/env
+        let (user_id, owner_principal_id, _) =
+            create_test_user(&server, "owner@example.com", "owner-laptop").await;
+        server.store.mark_user_verified(&user_id).await.unwrap();
+
+        let ws_id = create_test_workspace(&server, &user_id, "test-ws").await;
+        let proj_id = create_test_project(&server, &ws_id, "test-proj").await;
+        let _env_id = create_test_environment(&server, &proj_id, "dev").await;
+
+        // Create unverified principal
+        let (_, unverified_principal_id, unverified_signing_key) =
+            create_test_user(&server, "unverified@example.com", "unverified-laptop").await;
+
+        // Add unverified user to workspace
+        let unverified_user = server
+            .store
+            .get_user_by_email("unverified@example.com")
+            .await
+            .unwrap();
+        add_user_to_workspace(&server, &ws_id, &unverified_user.id, Role::Read).await;
+        add_principal_to_workspace(&server, &ws_id, &unverified_principal_id).await;
+
+        // Try to get secret - should be blocked
+        let request = create_signed_request(
+            &unverified_principal_id,
+            &unverified_signing_key,
+            "/zopp.ZoppService/GetSecret",
+            zopp_proto::GetSecretRequest {
+                workspace_name: "test-ws".to_string(),
+                project_name: "test-proj".to_string(),
+                environment_name: "dev".to_string(),
+                key: "DATABASE_URL".to_string(),
+            },
+        );
+
+        let result = server.get_secret(request).await;
+        assert!(result.is_err(), "Unverified principal should be blocked");
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
 
     // ---- Workspace handlers ----
 
@@ -3999,7 +4191,7 @@ mod handler_tests {
 
         let response = server.join(request).await.unwrap().into_inner();
         assert!(!response.user_id.is_empty());
-        assert!(!response.principal_id.is_empty());
+        assert!(!response.principal_id.as_ref().is_none_or(|s| s.is_empty()));
     }
 
     #[tokio::test]
@@ -4447,7 +4639,7 @@ mod handler_tests {
 
         let response = server.join(request).await.unwrap().into_inner();
         assert!(!response.user_id.is_empty());
-        assert!(!response.principal_id.is_empty());
+        assert!(!response.principal_id.as_ref().is_none_or(|s| s.is_empty()));
         assert_eq!(response.workspaces.len(), 1);
         assert_eq!(response.workspaces[0].name, "shared-ws");
     }
@@ -5474,7 +5666,7 @@ mod handler_tests {
 
         let response = server.join(join_request).await.unwrap().into_inner();
         assert!(!response.user_id.is_empty());
-        assert!(!response.principal_id.is_empty());
+        assert!(!response.principal_id.as_ref().is_none_or(|s| s.is_empty()));
         assert_eq!(response.workspaces.len(), 1);
         assert_eq!(response.workspaces[0].name, "shared-ws");
     }
@@ -14245,7 +14437,7 @@ mod handler_tests {
         assert!(result.is_ok());
         let response = result.unwrap().into_inner();
         assert_eq!(response.user_id, existing_user_id.0.to_string());
-        assert!(!response.principal_id.is_empty());
+        assert!(!response.principal_id.as_ref().is_none_or(|s| s.is_empty()));
         assert_eq!(response.workspaces.len(), 1);
     }
 

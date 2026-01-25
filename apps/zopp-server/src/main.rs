@@ -1,4 +1,6 @@
 mod backend;
+mod config;
+mod email;
 mod handlers;
 mod server;
 
@@ -302,9 +304,36 @@ async fn cmd_serve_with_ready(
         }
     };
 
+    // Load server configuration from environment
+    let server_config = config::ServerConfig::from_env()
+        .map_err(|e| format!("Failed to load server configuration: {}", e))?;
+
+    // Create email provider if configured
+    let email_provider: Option<Arc<dyn email::EmailProvider>> = if server_config.email.is_some() {
+        match email::create_provider(server_config.email.as_ref().unwrap()) {
+            Ok(provider) => {
+                println!("Email verification enabled");
+                Some(Arc::from(provider))
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to create email provider: {}. Email verification will be disabled.", e);
+                None
+            }
+        }
+    } else {
+        if server_config.is_verification_required() {
+            eprintln!("Warning: Email verification is required but no email provider configured. Verification will be skipped.");
+        }
+        None
+    };
+
     let server = match backend {
-        StoreBackend::Sqlite(ref s) => ZoppServer::new_sqlite(s.clone(), events),
-        StoreBackend::Postgres(ref s) => ZoppServer::new_postgres(s.clone(), events),
+        StoreBackend::Sqlite(ref s) => {
+            ZoppServer::new_sqlite(s.clone(), events, server_config, email_provider)
+        }
+        StoreBackend::Postgres(ref s) => {
+            ZoppServer::new_postgres(s.clone(), events, server_config, email_provider)
+        }
     };
 
     // Create gRPC health service (implements gRPC health checking protocol)

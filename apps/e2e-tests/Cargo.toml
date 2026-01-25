@@ -6,7 +6,8 @@ publish = false
 
 [dependencies]
 tokio = { workspace = true, features = ["full"] }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
 
@@ -19,6 +20,10 @@ nix = { version = "0.29", features = ["signal"] }
 
 # For backend_test! macro name generation
 paste = "1.0"
+
+# For mock SMTP server in email verification tests
+mailin-embedded = "0.8"
+regex = "1"
 
 [[test]]
 name = "demo"
@@ -64,3 +69,7 @@ path = "tests/counts.rs"
 [[test]]
 name = "secrets"
 path = "tests/secrets.rs"
+
+[[test]]
+name = "email_verification"
+path = "tests/email_verification.rs"

@@ -25,6 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             token,
             email,
             principal,
+            verification_code,
         } => {
             cmd_join(
                 &cli.server,
@@ -33,6 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &email,
                 principal.as_deref(),
                 cli.use_file_storage,
+                verification_code.as_deref(),
             )
             .await?;
         }

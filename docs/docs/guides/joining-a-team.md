@@ -35,6 +35,18 @@ Use your invite token to register:
 zopp --server https://zopp.yourcompany.com:50051 join <invite-token> you@company.com
 ```
 
+If email verification is enabled on the server, you'll receive a 6-digit code at your email address:
+
+```
+📧 Email verification required.
+
+A verification code has been sent to: you@company.com
+The code is valid for 15 minutes.
+
+Enter verification code (or 'r' to resend, 'q' to quit): 123456
+✓ Email verified successfully!
+```
+
 This creates your device identity (principal) with secure keypairs stored in `~/.zopp/config.json`.
 
 :::tip
