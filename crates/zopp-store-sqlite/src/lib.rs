@@ -4437,22 +4437,18 @@ mod tests {
     async fn mark_user_verified() {
         let s = SqliteStore::open_in_memory().await.unwrap();
 
-        // Create user with principal
+        // Create user without principal (simulates email verification flow)
+        // Users created without principals are unverified until email is confirmed
         let (user_id, _) = s
             .create_user(&CreateUserParams {
                 email: "test@example.com".to_string(),
-                principal: Some(CreatePrincipalData {
-                    name: "laptop".to_string(),
-                    public_key: vec![1, 2, 3, 4],
-                    x25519_public_key: Some(vec![5, 6, 7, 8]),
-                    is_service: false,
-                }),
+                principal: None, // No principal - email verification required
                 workspace_ids: vec![],
             })
             .await
             .unwrap();
 
-        // New users should be unverified by default
+        // Users without principals should be unverified
         let user = s.get_user_by_id(&user_id).await.unwrap();
         assert!(!user.verified);
 
