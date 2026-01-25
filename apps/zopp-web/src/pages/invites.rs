@@ -83,7 +83,7 @@ pub fn InvitesPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <nav class="flex items-center gap-2 text-sm">
+                <nav class="breadcrumbs flex items-center gap-2 text-sm">
                     <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
                     <span class="text-cipher-muted">"/"</span>
                     <span class="text-cipher-text">"Invites"</span>
