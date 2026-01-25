@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO email_verifications(id, email, code_hash, invite_token, expires_at)\n               VALUES($1, $2, $3, $4, $5)\n               ON CONFLICT (email) DO UPDATE SET\n                   id = EXCLUDED.id,\n                   code_hash = EXCLUDED.code_hash,\n                   invite_token = EXCLUDED.invite_token,\n                   expires_at = EXCLUDED.expires_at,\n                   attempts = 0,\n                   created_at = NOW()\n               RETURNING id, email, code_hash, invite_token, attempts, created_at, expires_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "code_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "invite_token",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "attempts",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b5a6aeb9f1b5049260372030776069e4a57a1d746852f82dc15d1dcecb2a98e3"
+}

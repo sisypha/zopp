@@ -52,6 +52,9 @@ pub struct GroupId(pub Uuid);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PrincipalExportId(pub Uuid);
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct EmailVerificationId(pub Uuid);
+
 /// Role for RBAC permissions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Role {
@@ -291,6 +294,7 @@ pub struct CreateEnvParams {
 pub struct User {
     pub id: UserId,
     pub email: String,
+    pub verified: bool, // Email verification status
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -319,6 +323,7 @@ pub struct Invite {
     pub updated_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub created_by_user_id: Option<UserId>, // None for server-created invites
+    pub consumed: bool,                     // Whether invite has been used
 }
 
 /// Workspace record
@@ -411,6 +416,27 @@ pub struct CreatePrincipalExportParams {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Email verification record for verifying email ownership during join
+#[derive(Clone, Debug)]
+pub struct EmailVerification {
+    pub id: EmailVerificationId,
+    pub email: String,        // Email being verified (lowercased, unique)
+    pub code_hash: String,    // Argon2id hash of verification code (hex-encoded, zero-knowledge)
+    pub invite_token: String, // Invite token to consume on verification success
+    pub attempts: i32,        // Failed verification attempts
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// Parameters for creating/upserting an email verification
+#[derive(Clone, Debug)]
+pub struct CreateEmailVerificationParams {
+    pub email: String,             // Email being verified (lowercased)
+    pub code_hash: String, // Argon2id hash of verification code (hex-encoded, zero-knowledge)
+    pub invite_token: String, // Invite token to consume on success
+    pub expires_at: DateTime<Utc>, // When the code expires
+}
+
 /// The storage trait `zopp-core` depends on.
 ///
 /// All methods that act on project/env/secrets are **scoped by workspace**.
@@ -467,6 +493,9 @@ pub trait Store: Send + Sync {
     /// Revoke an invite.
     async fn revoke_invite(&self, invite_id: &InviteId) -> Result<(), StoreError>;
 
+    /// Mark an invite as consumed (used).
+    async fn consume_invite(&self, token: &str) -> Result<(), StoreError>;
+
     // ───────────────────────────────────── Principal Exports ──────────────────────────────
 
     /// Create a principal export for multi-device transfer.
@@ -499,6 +528,34 @@ pub trait Store: Send + Sync {
         &self,
         export_id: &PrincipalExportId,
     ) -> Result<(), StoreError>;
+
+    // ───────────────────────────────────── Email Verification ──────────────────────────────
+
+    /// Create an email verification record.
+    async fn create_email_verification(
+        &self,
+        params: &CreateEmailVerificationParams,
+    ) -> Result<EmailVerification, StoreError>;
+
+    /// Get the latest pending email verification for an email address.
+    async fn get_email_verification(&self, email: &str) -> Result<EmailVerification, StoreError>;
+
+    /// Increment the failed attempts counter for an email verification.
+    /// Returns the new attempts count.
+    async fn increment_email_verification_attempts(
+        &self,
+        id: &EmailVerificationId,
+    ) -> Result<i32, StoreError>;
+
+    /// Delete an email verification (used after successful verification or manual cleanup).
+    async fn delete_email_verification(&self, id: &EmailVerificationId) -> Result<(), StoreError>;
+
+    /// Delete all expired email verifications.
+    /// Returns the number of deleted records.
+    async fn cleanup_expired_email_verifications(&self) -> Result<u64, StoreError>;
+
+    /// Mark a user as verified (email ownership confirmed).
+    async fn mark_user_verified(&self, user_id: &UserId) -> Result<(), StoreError>;
 
     // ───────────────────────────────────── Workspaces ─────────────────────────────────────
 
@@ -1044,6 +1101,7 @@ mod tests {
                 updated_at: Utc::now(),
                 expires_at: Utc::now(),
                 created_by_user_id: _params.created_by_user_id.clone(),
+                consumed: false,
             })
         }
 
@@ -1056,6 +1114,10 @@ mod tests {
         }
 
         async fn revoke_invite(&self, _invite_id: &InviteId) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn consume_invite(&self, _token: &str) -> Result<(), StoreError> {
             Ok(())
         }
 
@@ -1105,6 +1167,50 @@ mod tests {
             &self,
             _export_id: &PrincipalExportId,
         ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn create_email_verification(
+            &self,
+            params: &CreateEmailVerificationParams,
+        ) -> Result<EmailVerification, StoreError> {
+            Ok(EmailVerification {
+                id: EmailVerificationId(Uuid::new_v4()),
+                email: params.email.clone(),
+                code_hash: params.code_hash.clone(),
+                invite_token: params.invite_token.clone(),
+                attempts: 0,
+                created_at: Utc::now(),
+                expires_at: params.expires_at,
+            })
+        }
+
+        async fn get_email_verification(
+            &self,
+            _email: &str,
+        ) -> Result<EmailVerification, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn increment_email_verification_attempts(
+            &self,
+            _id: &EmailVerificationId,
+        ) -> Result<i32, StoreError> {
+            Ok(1)
+        }
+
+        async fn delete_email_verification(
+            &self,
+            _id: &EmailVerificationId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn cleanup_expired_email_verifications(&self) -> Result<u64, StoreError> {
+            Ok(0)
+        }
+
+        async fn mark_user_verified(&self, _user_id: &UserId) -> Result<(), StoreError> {
             Ok(())
         }
 

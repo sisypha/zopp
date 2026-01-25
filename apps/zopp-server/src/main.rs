@@ -1,4 +1,6 @@
 mod backend;
+mod config;
+mod email;
 mod handlers;
 mod server;
 
@@ -302,9 +304,49 @@ async fn cmd_serve_with_ready(
         }
     };
 
+    // Load server configuration from environment
+    let server_config = config::ServerConfig::from_env()
+        .map_err(|e| format!("Failed to load server configuration: {}", e))?;
+
+    // Create email provider if configured
+    let email_provider: Option<Arc<dyn email::EmailProvider>> = if let Some(ref email_config) =
+        server_config.email
+    {
+        match email::create_provider(email_config) {
+            Ok(provider) => {
+                println!("Email verification enabled");
+                Some(Arc::from(provider))
+            }
+            Err(e) => {
+                if server_config.is_verification_required() {
+                    // If verification is required but provider init failed, abort startup
+                    return Err(format!(
+                        "Email verification is required but provider initialization failed: {}",
+                        e
+                    )
+                    .into());
+                }
+                eprintln!("Warning: Failed to create email provider: {}. Email verification will be disabled.", e);
+                None
+            }
+        }
+    } else {
+        if server_config.is_verification_required() {
+            // If verification is required but no provider configured, abort startup
+            return Err(
+                "Email verification is required but no email provider configured. Set ZOPP_EMAIL_PROVIDER environment variable.".into()
+            );
+        }
+        None
+    };
+
     let server = match backend {
-        StoreBackend::Sqlite(ref s) => ZoppServer::new_sqlite(s.clone(), events),
-        StoreBackend::Postgres(ref s) => ZoppServer::new_postgres(s.clone(), events),
+        StoreBackend::Sqlite(ref s) => {
+            ZoppServer::new_sqlite(s.clone(), events, server_config, email_provider)
+        }
+        StoreBackend::Postgres(ref s) => {
+            ZoppServer::new_postgres(s.clone(), events, server_config, email_provider)
+        }
     };
 
     // Create gRPC health service (implements gRPC health checking protocol)

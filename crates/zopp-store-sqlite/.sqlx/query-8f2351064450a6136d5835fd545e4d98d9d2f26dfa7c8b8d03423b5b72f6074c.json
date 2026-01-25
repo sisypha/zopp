@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR REPLACE INTO email_verifications(id, email, code_hash, invite_token, expires_at) VALUES(?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "8f2351064450a6136d5835fd545e4d98d9d2f26dfa7c8b8d03423b5b72f6074c"
+}

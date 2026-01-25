@@ -100,6 +100,13 @@ impl Store for StoreBackend {
         }
     }
 
+    async fn consume_invite(&self, token: &str) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.consume_invite(token).await,
+            StoreBackend::Postgres(s) => s.consume_invite(token).await,
+        }
+    }
+
     async fn create_principal_export(
         &self,
         params: &CreatePrincipalExportParams,
@@ -1080,6 +1087,55 @@ impl Store for StoreBackend {
                 s.remove_user_environment_permission(environment_id, user_id)
                     .await
             }
+        }
+    }
+
+    // Email verification
+    async fn create_email_verification(
+        &self,
+        params: &CreateEmailVerificationParams,
+    ) -> Result<EmailVerification, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.create_email_verification(params).await,
+            StoreBackend::Postgres(s) => s.create_email_verification(params).await,
+        }
+    }
+
+    async fn get_email_verification(&self, email: &str) -> Result<EmailVerification, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_email_verification(email).await,
+            StoreBackend::Postgres(s) => s.get_email_verification(email).await,
+        }
+    }
+
+    async fn increment_email_verification_attempts(
+        &self,
+        id: &EmailVerificationId,
+    ) -> Result<i32, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.increment_email_verification_attempts(id).await,
+            StoreBackend::Postgres(s) => s.increment_email_verification_attempts(id).await,
+        }
+    }
+
+    async fn delete_email_verification(&self, id: &EmailVerificationId) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.delete_email_verification(id).await,
+            StoreBackend::Postgres(s) => s.delete_email_verification(id).await,
+        }
+    }
+
+    async fn cleanup_expired_email_verifications(&self) -> Result<u64, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.cleanup_expired_email_verifications().await,
+            StoreBackend::Postgres(s) => s.cleanup_expired_email_verifications().await,
+        }
+    }
+
+    async fn mark_user_verified(&self, user_id: &UserId) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.mark_user_verified(user_id).await,
+            StoreBackend::Postgres(s) => s.mark_user_verified(user_id).await,
         }
     }
 }

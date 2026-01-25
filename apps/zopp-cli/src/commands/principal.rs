@@ -899,20 +899,8 @@ fn derive_export_key(
     passphrase: &str,
     salt: &[u8],
 ) -> Result<Zeroizing<[u8; 32]>, Box<dyn std::error::Error>> {
-    use argon2::{Algorithm, Argon2, Params, Version};
-
-    // Use lighter params for export (still secure, but faster)
-    // 64 MiB memory, 3 iterations
-    let params =
-        Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-
-    let mut key = Zeroizing::new([0u8; 32]);
-    argon2
-        .hash_password_into(passphrase.as_bytes(), salt, &mut *key)
-        .map_err(|e| format!("Key derivation failed: {}", e))?;
-
-    Ok(key)
+    zopp_crypto::argon2_hash_raw(passphrase.as_bytes(), salt)
+        .map_err(|e| format!("Key derivation failed: {}", e).into())
 }
 
 /// Compute Argon2id verification hash for passphrase
@@ -921,18 +909,6 @@ fn compute_verification_hash(
     passphrase: &str,
     verification_salt: &[u8],
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use argon2::{Algorithm, Argon2, Params, Version};
-
-    // Same Argon2id params as derive_export_key for consistency
-    // 64 MiB memory, 3 iterations - provides strong brute-force resistance
-    let params =
-        Params::new(64 * 1024, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {}", e))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-
-    let mut hash = Zeroizing::new([0u8; 32]);
-    argon2
-        .hash_password_into(passphrase.as_bytes(), verification_salt, &mut *hash)
-        .map_err(|e| format!("Hash computation failed: {}", e))?;
-
-    Ok(hex::encode(*hash))
+    zopp_crypto::argon2_hash(passphrase.as_bytes(), verification_salt)
+        .map_err(|e| format!("Hash computation failed: {}", e).into())
 }

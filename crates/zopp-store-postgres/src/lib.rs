@@ -6,8 +6,9 @@ use zopp_audit::{
     AuditAction, AuditEvent, AuditLog, AuditLogError, AuditLogFilter, AuditLogId, AuditResult,
 };
 use zopp_storage::{
-    AddWorkspacePrincipalParams, CreateEnvParams, CreateInviteParams, CreatePrincipalExportParams,
-    CreatePrincipalParams, CreateProjectParams, CreateUserParams, CreateWorkspaceParams, EnvName,
+    AddWorkspacePrincipalParams, CreateEmailVerificationParams, CreateEnvParams,
+    CreateInviteParams, CreatePrincipalExportParams, CreatePrincipalParams, CreateProjectParams,
+    CreateUserParams, CreateWorkspaceParams, EmailVerification, EmailVerificationId, EnvName,
     Environment, EnvironmentId, EnvironmentPermission, Invite, InviteId, Principal,
     PrincipalExport, PrincipalExportId, PrincipalId, ProjectName, ProjectPermission, Role,
     SecretRow, Store, StoreError, User, UserEnvironmentPermission, UserId, UserProjectPermission,
@@ -63,10 +64,14 @@ impl Store for PostgresStore {
                 existing.id
             } else {
                 let user_id = Uuid::now_v7();
+                // If principal is being created, user is immediately verified (non-verification flow)
+                // If no principal, user is not verified yet (verification flow)
+                let verified = params.principal.is_some();
                 sqlx::query!(
-                    "INSERT INTO users(id, email) VALUES($1, $2)",
+                    "INSERT INTO users(id, email, verified) VALUES($1, $2, $3)",
                     user_id,
-                    params.email
+                    params.email,
+                    verified
                 )
                 .execute(&mut *tx)
                 .await
@@ -119,11 +124,14 @@ impl Store for PostgresStore {
             Ok((UserId(actual_user_id), principal_id))
         } else {
             let user_id = Uuid::now_v7();
+            // No principal = verification flow, so user is not verified yet
+            let verified = false;
 
             sqlx::query!(
-                "INSERT INTO users(id, email) VALUES($1, $2)",
+                "INSERT INTO users(id, email, verified) VALUES($1, $2, $3)",
                 user_id,
-                params.email
+                params.email,
+                verified
             )
             .execute(&self.pool)
             .await
@@ -142,7 +150,7 @@ impl Store for PostgresStore {
 
     async fn get_user_by_email(&self, email: &str) -> Result<User, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, email, created_at, updated_at FROM users WHERE email = $1"#,
+            r#"SELECT id, email, verified, created_at, updated_at FROM users WHERE email = $1"#,
             email
         )
         .fetch_optional(&self.pool)
@@ -153,6 +161,7 @@ impl Store for PostgresStore {
         Ok(User {
             id: UserId(row.id),
             email: row.email,
+            verified: row.verified,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -160,7 +169,7 @@ impl Store for PostgresStore {
 
     async fn get_user_by_id(&self, user_id: &UserId) -> Result<User, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, email, created_at, updated_at FROM users WHERE id = $1"#,
+            r#"SELECT id, email, verified, created_at, updated_at FROM users WHERE id = $1"#,
             user_id.0
         )
         .fetch_optional(&self.pool)
@@ -171,6 +180,7 @@ impl Store for PostgresStore {
         Ok(User {
             id: UserId(row.id),
             email: row.email,
+            verified: row.verified,
             created_at: row.created_at,
             updated_at: row.updated_at,
         })
@@ -315,12 +325,13 @@ impl Store for PostgresStore {
             updated_at: row.updated_at,
             expires_at: params.expires_at,
             created_by_user_id: params.created_by_user_id.clone(),
+            consumed: false,
         })
     }
 
     async fn get_invite_by_token(&self, token: &str) -> Result<Invite, StoreError> {
         let row = sqlx::query!(
-            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce
+            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, consumed, kek_encrypted, kek_nonce
                FROM invites WHERE token = $1"#,
             token
         )
@@ -356,6 +367,7 @@ impl Store for PostgresStore {
             updated_at: row.updated_at,
             expires_at: row.expires_at,
             created_by_user_id: row.created_by_user_id.map(UserId),
+            consumed: row.consumed,
         })
     }
 
@@ -363,7 +375,7 @@ impl Store for PostgresStore {
         let user_id_opt = user_id.map(|id| id.0);
 
         let rows = sqlx::query!(
-            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce
+            r#"SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, consumed, kek_encrypted, kek_nonce
                FROM invites
                WHERE revoked = FALSE AND (
                    ($1::UUID IS NOT NULL AND created_by_user_id = $1) OR
@@ -400,6 +412,7 @@ impl Store for PostgresStore {
                 updated_at: row.updated_at,
                 expires_at: row.expires_at,
                 created_by_user_id: row.created_by_user_id.map(UserId),
+                consumed: row.consumed,
             });
         }
         Ok(invites)
@@ -416,6 +429,38 @@ impl Store for PostgresStore {
 
         if result.rows_affected() == 0 {
             Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn consume_invite(&self, token: &str) -> Result<(), StoreError> {
+        // Atomically consume invite only if not already consumed and not revoked
+        // This prevents concurrent requests from both succeeding
+        let result = sqlx::query!(
+            "UPDATE invites SET consumed = TRUE WHERE token = $1 AND consumed = FALSE AND revoked = FALSE",
+            token
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            // Either token doesn't exist, invite was already consumed, or it's revoked
+            // Check which case it is for a more specific error
+            let exists = sqlx::query_scalar!(
+                "SELECT EXISTS(SELECT 1 FROM invites WHERE token = $1 AND revoked = FALSE) as \"exists!: bool\"",
+                token
+            )
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+            if exists {
+                Err(StoreError::AlreadyExists) // Invite was already consumed
+            } else {
+                Err(StoreError::NotFound) // Token doesn't exist or is revoked
+            }
         } else {
             Ok(())
         }
@@ -544,6 +589,128 @@ impl Store for PostgresStore {
         export_id: &PrincipalExportId,
     ) -> Result<(), StoreError> {
         let result = sqlx::query!("DELETE FROM principal_exports WHERE id = $1", export_id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    // ───────────────────────────── Email Verification ─────────────────────────────
+
+    async fn create_email_verification(
+        &self,
+        params: &CreateEmailVerificationParams,
+    ) -> Result<EmailVerification, StoreError> {
+        let id = Uuid::now_v7();
+        let email = params.email.to_lowercase();
+
+        // Upsert: email is unique, so this replaces any existing verification for this email
+        let row = sqlx::query!(
+            r#"INSERT INTO email_verifications(id, email, code_hash, invite_token, expires_at)
+               VALUES($1, $2, $3, $4, $5)
+               ON CONFLICT (email) DO UPDATE SET
+                   id = EXCLUDED.id,
+                   code_hash = EXCLUDED.code_hash,
+                   invite_token = EXCLUDED.invite_token,
+                   expires_at = EXCLUDED.expires_at,
+                   attempts = 0,
+                   created_at = NOW()
+               RETURNING id, email, code_hash, invite_token, attempts, created_at, expires_at"#,
+            id,
+            email,
+            params.code_hash,
+            params.invite_token,
+            params.expires_at
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(EmailVerification {
+            id: EmailVerificationId(row.id),
+            email: row.email,
+            code_hash: row.code_hash,
+            invite_token: row.invite_token,
+            attempts: row.attempts,
+            created_at: row.created_at,
+            expires_at: row.expires_at,
+        })
+    }
+
+    async fn get_email_verification(&self, email: &str) -> Result<EmailVerification, StoreError> {
+        let email_lower = email.to_lowercase();
+        // Email is unique, so no need for ORDER BY/LIMIT
+        let row = sqlx::query!(
+            r#"SELECT id, email, code_hash, invite_token, attempts, created_at, expires_at
+               FROM email_verifications
+               WHERE email = $1"#,
+            email_lower
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(EmailVerification {
+            id: EmailVerificationId(row.id),
+            email: row.email,
+            code_hash: row.code_hash,
+            invite_token: row.invite_token,
+            attempts: row.attempts,
+            created_at: row.created_at,
+            expires_at: row.expires_at,
+        })
+    }
+
+    async fn increment_email_verification_attempts(
+        &self,
+        id: &EmailVerificationId,
+    ) -> Result<i32, StoreError> {
+        let row = sqlx::query!(
+            r#"UPDATE email_verifications 
+               SET attempts = attempts + 1 
+               WHERE id = $1 
+               RETURNING attempts"#,
+            id.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(row.attempts)
+    }
+
+    async fn delete_email_verification(&self, id: &EmailVerificationId) -> Result<(), StoreError> {
+        let result = sqlx::query!("DELETE FROM email_verifications WHERE id = $1", id.0)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn cleanup_expired_email_verifications(&self) -> Result<u64, StoreError> {
+        let now = Utc::now();
+        let result = sqlx::query!("DELETE FROM email_verifications WHERE expires_at < $1", now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn mark_user_verified(&self, user_id: &UserId) -> Result<(), StoreError> {
+        let result = sqlx::query!("UPDATE users SET verified = TRUE WHERE id = $1", user_id.0)
             .execute(&self.pool)
             .await
             .map_err(|e| StoreError::Backend(e.to_string()))?;

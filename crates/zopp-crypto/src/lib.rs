@@ -20,6 +20,45 @@ pub enum KdfError {
 const MIB: u32 = 1024;
 const MEMORY_COST_KIB: u32 = 64 * MIB;
 
+/// Hash data using Argon2id with a salt.
+/// Returns hex-encoded 32-byte hash.
+///
+/// This is a general-purpose Argon2id hash suitable for verification codes,
+/// tokens, or any data that needs deterministic hashing with a salt.
+pub fn argon2_hash(data: &[u8], salt: &[u8]) -> Result<String, KdfError> {
+    let params =
+        argon2::Params::new(MEMORY_COST_KIB, 3, 1, Some(32)).map_err(KdfError::InvalidParams)?;
+
+    let argon2 = argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+
+    let mut hash = Zeroizing::new([0u8; 32]);
+
+    argon2
+        .hash_password_into(data, salt, hash.as_mut())
+        .map_err(KdfError::DerivationFailed)?;
+
+    Ok(hex::encode(hash.as_ref()))
+}
+
+/// Hash data using Argon2id, returning raw bytes instead of hex.
+/// Returns 32-byte hash wrapped in Zeroizing for security.
+///
+/// Use this when you need the raw key bytes (e.g., for encryption).
+pub fn argon2_hash_raw(data: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, KdfError> {
+    let params =
+        argon2::Params::new(MEMORY_COST_KIB, 3, 1, Some(32)).map_err(KdfError::InvalidParams)?;
+
+    let argon2 = argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+
+    let mut hash = Zeroizing::new([0u8; 32]);
+
+    argon2
+        .hash_password_into(data, salt, hash.as_mut())
+        .map_err(KdfError::DerivationFailed)?;
+
+    Ok(hash)
+}
+
 /// Derive master key from passphrase
 pub fn derive_master_key(pass: &str, salt: &[u8]) -> Result<MasterKey, KdfError> {
     let mut key = Zeroizing::new([0u8; 32]);
@@ -436,5 +475,55 @@ mod tests {
 
         let bob_shared = bob.shared_secret(alice.public_key());
         assert!(unwrap_key(&wrapped.0, &nonce, &bob_shared, b"bad-aad").is_err());
+    }
+
+    // ───────────────────────────── Argon2 Hash Tests ─────────────────────────────
+
+    #[test]
+    fn argon2_hash_is_deterministic() {
+        let data = b"123456";
+        let salt = b"test@example.com";
+
+        let hash1 = argon2_hash(data, salt).unwrap();
+        let hash2 = argon2_hash(data, salt).unwrap();
+
+        assert_eq!(hash1, hash2, "Same input should produce same hash");
+    }
+
+    #[test]
+    fn argon2_hash_different_inputs() {
+        let salt = b"test@example.com";
+
+        let hash1 = argon2_hash(b"123456", salt).unwrap();
+        let hash2 = argon2_hash(b"654321", salt).unwrap();
+
+        assert_ne!(
+            hash1, hash2,
+            "Different inputs should produce different hashes"
+        );
+    }
+
+    #[test]
+    fn argon2_hash_different_salts() {
+        let data = b"123456";
+
+        let hash1 = argon2_hash(data, b"test@example.com").unwrap();
+        let hash2 = argon2_hash(data, b"other@example.com").unwrap();
+
+        assert_ne!(
+            hash1, hash2,
+            "Different salts should produce different hashes"
+        );
+    }
+
+    #[test]
+    fn argon2_hash_raw_is_deterministic() {
+        let data = b"123456";
+        let salt = b"test@example.com";
+
+        let hash1 = argon2_hash_raw(data, salt).unwrap();
+        let hash2 = argon2_hash_raw(data, salt).unwrap();
+
+        assert_eq!(*hash1, *hash2, "Same input should produce same hash");
     }
 }

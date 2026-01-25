@@ -1,0 +1,35 @@
+# Shared Docker Compose for E2E tests (CLI and Web)
+#
+# This provides a MailHog instance for capturing verification emails.
+# Both Rust CLI tests and Playwright web tests can use this.
+#
+# Usage:
+#   # Start MailHog
+#   docker compose -f docker/docker-compose.test.yaml up -d
+#
+#   # Run CLI E2E tests (uses MailHog on port 1025)
+#   MAILHOG_HOST=127.0.0.1 MAILHOG_PORT=1025 cargo test --package e2e-tests
+#
+#   # Run web E2E tests
+#   cd apps/zopp-web && npm run test:e2e
+#
+#   # View captured emails (optional)
+#   open http://localhost:8025
+#
+#   # Stop when done
+#   docker compose -f docker/docker-compose.test.yaml down
+
+services:
+  # MailHog - Mock SMTP server with web UI and API
+  # SMTP: port 1025 (servers send emails here)
+  # HTTP: port 8025 (web UI and API for retrieving emails)
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI / API
+    environment:
+      MH_STORAGE: memory
+      MH_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MH_API_BIND_ADDR: 0.0.0.0:8025
+      MH_UI_BIND_ADDR: 0.0.0.0:8025

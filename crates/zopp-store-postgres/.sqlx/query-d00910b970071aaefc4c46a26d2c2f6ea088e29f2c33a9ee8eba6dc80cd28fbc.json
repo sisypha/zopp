@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, kek_encrypted, kek_nonce\n               FROM invites\n               WHERE revoked = FALSE AND (\n                   ($1::UUID IS NOT NULL AND created_by_user_id = $1) OR\n                   ($1::UUID IS NULL AND created_by_user_id IS NULL)\n               )",
+  "query": "SELECT id, token, created_at, updated_at, expires_at, created_by_user_id, revoked, consumed, kek_encrypted, kek_nonce\n               FROM invites WHERE token = $1",
   "describe": {
     "columns": [
       {
@@ -40,18 +40,23 @@
       },
       {
         "ordinal": 7,
+        "name": "consumed",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
         "name": "kek_encrypted",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "kek_nonce",
         "type_info": "Bytea"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -62,9 +67,10 @@
       false,
       true,
       false,
+      false,
       true,
       true
     ]
   },
-  "hash": "65d598cc37def0ad646786055025e60c57ea9054b9e3b1e386b27fe9d1809026"
+  "hash": "d00910b970071aaefc4c46a26d2c2f6ea088e29f2c33a9ee8eba6dc80cd28fbc"
 }

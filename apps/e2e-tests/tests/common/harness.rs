@@ -98,6 +98,13 @@ impl BackendConfig {
 // Test Harness
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Email capture backend - MailHog (via docker-compose.test.yaml)
+#[derive(Clone)]
+pub struct EmailBackend {
+    pub smtp_port: u16,
+    pub api_port: u16,
+}
+
 /// Test harness that manages server lifecycle and provides test utilities
 pub struct TestHarness {
     /// Server URL for CLI connections
@@ -128,6 +135,10 @@ pub struct TestHarness {
     server_stdout_path: PathBuf,
     /// Server stderr log file path (for diagnostics on failure)
     server_stderr_path: PathBuf,
+    /// Whether email verification is enabled for this test
+    email_verification_enabled: bool,
+    /// Email capture backend (MailHog)
+    email_backend: Option<EmailBackend>,
 }
 
 impl TestHarness {
@@ -210,6 +221,125 @@ impl TestHarness {
             pg_events_db_name,
             server_stdout_path,
             server_stderr_path,
+            email_verification_enabled: false,
+            email_backend: None,
+        };
+
+        // Start the server
+        harness.start_server().await?;
+
+        Ok(harness)
+    }
+
+    /// Create a new test harness with email verification enabled.
+    /// Requires MailHog to be running (via docker-compose.test.yaml).
+    /// Use `get_verification_code_from_email()` to retrieve codes from captured emails.
+    pub async fn new_with_verification(
+        test_name: &str,
+        config: BackendConfig,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        // Check postgres availability if required
+        if config.requires_postgres() {
+            check_postgres_available()?;
+        }
+
+        // Check if MailHog is available (docker-compose.test.yaml)
+        let mailhog_smtp_port: u16 = std::env::var("MAILHOG_SMTP_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(1025);
+        let mailhog_api_port: u16 = std::env::var("MAILHOG_API_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(8025);
+
+        // Require MailHog to be running (via docker-compose.test.yaml)
+        let mailhog_client = super::mailhog::MailHogClient::from_env();
+        if !mailhog_client.is_available().await {
+            return Err(
+                "MailHog not available. Start it with: docker compose -f docker/docker-compose.test.yaml up -d".into()
+            );
+        }
+
+        println!(
+            "Using MailHog for email capture (SMTP port: {}, API port: {})",
+            mailhog_smtp_port, mailhog_api_port
+        );
+        // Clear any existing emails from previous test runs
+        // Fail fast if cleanup fails to avoid stale messages causing flaky tests
+        mailhog_client.clear().await?;
+
+        let email_backend = Some(EmailBackend {
+            smtp_port: mailhog_smtp_port,
+            api_port: mailhog_api_port,
+        });
+
+        // Get binary paths from shared function
+        let (zopp_server_bin, zopp_bin, _) = super::get_binary_paths()?;
+
+        // Create test directory
+        let test_id = std::process::id();
+        let config_name = config.name();
+        let test_dir = std::env::temp_dir().join(format!(
+            "zopp-e2e-{}-{}-{}",
+            test_name, config_name, test_id
+        ));
+        if test_dir.exists() {
+            fs::remove_dir_all(&test_dir)?;
+        }
+        fs::create_dir_all(&test_dir)?;
+
+        // Find available ports
+        let port = find_available_port()?;
+        let health_port = find_available_port()?;
+
+        // Setup database
+        let full_test_name = format!("{}_{}", test_name, config.name());
+        let (database_url, pg_db_name) =
+            setup_database(&config.storage, &full_test_name, test_id).await?;
+
+        // Setup events database if needed
+        let (events_database_url, pg_events_db_name) = match &config.events {
+            EventsBackend::Memory => (None, None),
+            EventsBackend::Postgres => match &config.storage {
+                StorageBackend::Postgres => (None, None),
+                StorageBackend::Sqlite => {
+                    let events_db_name = format!(
+                        "zopp_events_{}_{}_{}",
+                        full_test_name.replace(['-', '+'], "_"),
+                        test_id,
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis()
+                            % 10000
+                    );
+                    let events_url = create_postgres_db(&events_db_name).await?;
+                    (Some(events_url), Some(events_db_name))
+                }
+            },
+        };
+
+        let server_stdout_path = test_dir.join("server_stdout.log");
+        let server_stderr_path = test_dir.join("server_stderr.log");
+
+        let mut harness = Self {
+            server_url: format!("http://127.0.0.1:{}", port),
+            config,
+            test_dir,
+            zopp_bin,
+            zopp_server_bin,
+            server_process: None,
+            port,
+            health_port,
+            database_url,
+            events_database_url,
+            pg_db_name,
+            pg_events_db_name,
+            server_stdout_path,
+            server_stderr_path,
+            email_verification_enabled: true,
+            email_backend,
         };
 
         // Start the server
@@ -265,6 +395,22 @@ impl TestHarness {
             "--health-addr",
             &health_addr,
         ]);
+
+        // Configure email verification if enabled
+        if self.email_verification_enabled {
+            let backend = self
+                .email_backend
+                .as_ref()
+                .ok_or("Email verification enabled but no email backend configured")?;
+
+            let host = std::env::var("MAILHOG_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+            cmd.env("ZOPP_EMAIL_VERIFICATION_REQUIRED", "true")
+                .env("ZOPP_EMAIL_PROVIDER", "smtp")
+                .env("SMTP_HOST", host)
+                .env("SMTP_PORT", backend.smtp_port.to_string())
+                .env("SMTP_USE_TLS", "false")
+                .env("ZOPP_EMAIL_FROM", "test@example.com");
+        }
 
         // Configure events backend
         match &self.config.events {
@@ -424,6 +570,113 @@ impl TestHarness {
     pub fn test_dir(&self) -> &PathBuf {
         &self.test_dir
     }
+
+    /// Get the database URL (for direct queries in tests)
+    pub fn database_url(&self) -> &str {
+        &self.database_url
+    }
+
+    /// Get the latest verification code for an email from MailHog.
+    /// Returns an error if MailHog is not configured or no email was found.
+    pub async fn get_verification_code_from_email(
+        &self,
+        email: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let backend = self
+            .email_backend
+            .as_ref()
+            .ok_or("No email backend enabled - use new_with_verification()")?;
+
+        let host = std::env::var("MAILHOG_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let client = super::mailhog::MailHogClient::new(&host, backend.api_port);
+
+        // Wait for email to arrive
+        if !client.wait_for_email(email, 5000).await? {
+            let stderr = self.read_server_log(&self.server_stderr_path.clone());
+            return Err(format!(
+                "No emails captured by MailHog for: {}\n\
+                 Server stderr:\n{}",
+                email,
+                stderr.unwrap_or_else(|e| format!("<failed to read: {}>", e))
+            )
+            .into());
+        }
+
+        let code = client.get_verification_code(email).await?;
+        code.ok_or_else(|| {
+            format!(
+                "No verification code found in MailHog emails for: {}",
+                email
+            )
+            .into()
+        })
+    }
+
+    /// Check that a verification record exists for an email in the database.
+    /// Returns true if a verification record exists with a hashed code.
+    /// Note: We store hashes (zero-knowledge), so we can't retrieve the plaintext code.
+    pub fn has_verification_record(&self, email: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        if self.database_url.starts_with("postgres:") {
+            // PostgreSQL: use psql
+            // Escape single quotes for SQL safety
+            let escaped_email = email.replace('\'', "''");
+            let output = Command::new("psql")
+                .arg(&self.database_url)
+                .arg("-t") // tuple only (no headers)
+                .arg("-A") // unaligned output
+                .arg("-c")
+                .arg(format!(
+                    "SELECT COUNT(*) FROM email_verifications WHERE email = '{}'",
+                    escaped_email
+                ))
+                .output()?;
+
+            if !output.status.success() {
+                return Err(
+                    format!("psql failed: {}", String::from_utf8_lossy(&output.stderr)).into(),
+                );
+            }
+
+            let count: i32 = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse()
+                .unwrap_or(0);
+            Ok(count > 0)
+        } else {
+            // SQLite: extract path and use sqlite3
+            let db_path = self
+                .database_url
+                .strip_prefix("sqlite://")
+                .or_else(|| self.database_url.strip_prefix("sqlite:"))
+                .map(|p| p.split('?').next().unwrap_or(p))
+                .ok_or("Invalid SQLite URL")?;
+
+            // Escape single quotes for SQL safety
+            let escaped_email = email.replace('\'', "''");
+            let output = Command::new("sqlite3")
+                .arg(db_path)
+                .arg("-noheader")
+                .arg(format!(
+                    "SELECT COUNT(*) FROM email_verifications WHERE email = '{}';",
+                    escaped_email
+                ))
+                .output()?;
+
+            if !output.status.success() {
+                return Err(format!(
+                    "sqlite3 failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                )
+                .into());
+            }
+
+            let count: i32 = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse()
+                .unwrap_or(0);
+            Ok(count > 0)
+        }
+    }
 }
 
 impl Drop for TestHarness {
@@ -523,6 +776,26 @@ impl TestUser {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let result = self.exec(&["join", invite, email, "--principal", principal]);
         result.success_or_err("join")
+    }
+
+    /// Join the server with an invite and verification code
+    pub fn join_with_verification(
+        &self,
+        invite: &str,
+        email: &str,
+        principal: &str,
+        verification_code: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let result = self.exec(&[
+            "join",
+            invite,
+            email,
+            "--principal",
+            principal,
+            "--verification-code",
+            verification_code,
+        ]);
+        result.success_or_err("join with verification")
     }
 }
 

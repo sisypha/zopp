@@ -496,6 +496,34 @@ impl ZoppWebClient {
         Ok(response.into_inner())
     }
 
+    // ============ Email Verification RPCs ============
+
+    /// Verify email with a code (unauthenticated)
+    pub async fn verify_email(
+        &self,
+        request: VerifyEmailRequest,
+    ) -> Result<VerifyEmailResponse, WebClientError> {
+        let mut client = zopp_service_client::ZoppServiceClient::new(self.client());
+        let response = client
+            .verify_email(request)
+            .await
+            .map_err(WebClientError::from)?;
+        Ok(response.into_inner())
+    }
+
+    /// Resend verification email (unauthenticated)
+    pub async fn resend_verification(
+        &self,
+        request: ResendVerificationRequest,
+    ) -> Result<ResendVerificationResponse, WebClientError> {
+        let mut client = zopp_service_client::ZoppServiceClient::new(self.client());
+        let response = client
+            .resend_verification(request)
+            .await
+            .map_err(WebClientError::from)?;
+        Ok(response.into_inner())
+    }
+
     /// Create an invite (authenticated)
     pub async fn create_invite(
         &self,

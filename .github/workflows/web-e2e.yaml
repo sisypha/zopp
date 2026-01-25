@@ -58,6 +58,24 @@ jobs:
           cd apps/zopp-web
           npx playwright install chromium --with-deps
 
+      - name: Start MailHog
+        run: |
+          docker run -d \
+            --name mailhog \
+            --network host \
+            mailhog/mailhog:v1.0.1
+          # Wait for MailHog to be ready
+          for i in {1..30}; do
+            if curl -sf http://localhost:8025/api/v2/messages > /dev/null 2>&1; then
+              echo "MailHog is ready"
+              exit 0
+            fi
+            echo "Waiting for MailHog... ($i/30)"
+            sleep 1
+          done
+          echo "ERROR: MailHog failed to become ready"
+          exit 1
+
       - name: Start zopp-server
         run: |
           ./target/debug/zopp-server serve --health-addr 0.0.0.0:8081 &
@@ -70,6 +88,14 @@ jobs:
             echo "Waiting for server... ($i/30)"
             sleep 1
           done
+        env:
+          # Email verification settings for MailHog
+          ZOPP_EMAIL_VERIFICATION_REQUIRED: "true"
+          ZOPP_EMAIL_PROVIDER: smtp
+          SMTP_HOST: 127.0.0.1
+          SMTP_PORT: "1025"
+          SMTP_USE_TLS: "false"
+          ZOPP_EMAIL_FROM: test@zopp.local
 
       - name: Create Envoy config for CI
         run: |
@@ -99,6 +125,10 @@ jobs:
           npx playwright test --reporter=list
         env:
           CI: true
+          # MailHog API for verification code retrieval
+          MAILHOG_API_URL: http://localhost:8025/api/v2
+          # Database URL for creating test invites
+          DATABASE_URL: sqlite://${{ github.workspace }}/zopp.db
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -112,4 +142,5 @@ jobs:
         if: always()
         run: |
           docker stop envoy || true
+          docker stop mailhog || true
           pkill -f zopp-server || true

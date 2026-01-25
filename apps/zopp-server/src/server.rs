@@ -1,4 +1,6 @@
 use crate::backend::StoreBackend;
+use crate::config::ServerConfig;
+use crate::email::EmailProvider;
 use chrono::Utc;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use prost::Message;
@@ -15,20 +17,36 @@ use zopp_store_sqlite::SqliteStore;
 pub struct ZoppServer {
     pub store: StoreBackend,
     pub events: Arc<dyn EventBus>,
+    pub config: Arc<ServerConfig>,
+    pub email_provider: Option<Arc<dyn EmailProvider>>,
 }
 
 impl ZoppServer {
-    pub fn new_sqlite(store: Arc<SqliteStore>, events: Arc<dyn EventBus>) -> Self {
+    pub fn new_sqlite(
+        store: Arc<SqliteStore>,
+        events: Arc<dyn EventBus>,
+        config: ServerConfig,
+        email_provider: Option<Arc<dyn EmailProvider>>,
+    ) -> Self {
         Self {
             store: StoreBackend::Sqlite(store),
             events,
+            config: Arc::new(config),
+            email_provider,
         }
     }
 
-    pub fn new_postgres(store: Arc<PostgresStore>, events: Arc<dyn EventBus>) -> Self {
+    pub fn new_postgres(
+        store: Arc<PostgresStore>,
+        events: Arc<dyn EventBus>,
+        config: ServerConfig,
+        email_provider: Option<Arc<dyn EmailProvider>>,
+    ) -> Self {
         Self {
             store: StoreBackend::Postgres(store),
             events,
+            config: Arc::new(config),
+            email_provider,
         }
     }
 
@@ -1001,6 +1019,23 @@ impl ZoppServer {
         verifying_key
             .verify(&message, &sig)
             .map_err(|_| Status::unauthenticated("Invalid signature"))?;
+
+        // Check if user is verified (when verification is required)
+        // Service principals (no user_id) are always allowed
+        if self.config.is_verification_required() {
+            if let Some(user_id) = &principal.user_id {
+                let user = self
+                    .store
+                    .get_user_by_id(user_id)
+                    .await
+                    .map_err(|e| Status::internal(format!("Failed to get user: {}", e)))?;
+                if !user.verified {
+                    return Err(Status::permission_denied(
+                        "Email verification required. Please verify your email to continue.",
+                    ));
+                }
+            }
+        }
 
         Ok(principal)
     }

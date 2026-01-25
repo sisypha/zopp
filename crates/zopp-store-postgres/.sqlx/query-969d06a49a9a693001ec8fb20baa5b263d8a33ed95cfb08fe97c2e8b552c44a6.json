@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invites SET consumed = TRUE WHERE token = $1 AND consumed = FALSE AND revoked = FALSE",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "969d06a49a9a693001ec8fb20baa5b263d8a33ed95cfb08fe97c2e8b552c44a6"
+}
