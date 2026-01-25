@@ -168,7 +168,7 @@ impl MailHogClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::MailHogClient;
 
     #[tokio::test]
     async fn test_mailhog_client_creation() {

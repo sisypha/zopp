@@ -195,7 +195,7 @@ impl Drop for MockSmtpServer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::MockSmtpServer;
 
     #[test]
     fn test_mock_smtp_starts() {
