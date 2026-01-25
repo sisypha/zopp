@@ -578,10 +578,10 @@ impl Store for SqliteStore {
     }
 
     async fn consume_invite(&self, token: &str) -> Result<(), StoreError> {
-        // Atomically consume invite only if not already consumed
+        // Atomically consume invite only if not already consumed and not revoked
         // This prevents concurrent requests from both succeeding
         let result = sqlx::query!(
-            "UPDATE invites SET consumed = 1 WHERE token = ? AND consumed = 0",
+            "UPDATE invites SET consumed = 1 WHERE token = ? AND consumed = 0 AND revoked = 0",
             token
         )
         .execute(&self.pool)
@@ -589,17 +589,20 @@ impl Store for SqliteStore {
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         if result.rows_affected() == 0 {
-            // Either token doesn't exist or invite was already consumed
+            // Either token doesn't exist, invite was already consumed, or it's revoked
             // Check which case it is for a more specific error
-            let exists = sqlx::query!("SELECT token FROM invites WHERE token = ?", token)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|e| StoreError::Backend(e.to_string()))?;
+            let exists = sqlx::query!(
+                "SELECT token FROM invites WHERE token = ? AND revoked = 0",
+                token
+            )
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
 
             if exists.is_some() {
                 Err(StoreError::AlreadyExists) // Invite was already consumed
             } else {
-                Err(StoreError::NotFound) // Token doesn't exist
+                Err(StoreError::NotFound) // Token doesn't exist or is revoked
             }
         } else {
             Ok(())
@@ -3451,7 +3454,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        matches!(err, StoreError::AlreadyExists);
+        assert!(matches!(err, StoreError::AlreadyExists));
     }
 
     #[tokio::test]
@@ -3518,7 +3521,7 @@ mod tests {
 
         // env2 must NOT be able to see env1's secret
         let err = s.get_secret(&env_id2, "TOKEN").await.unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -3597,7 +3600,7 @@ mod tests {
             })
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -3642,7 +3645,7 @@ mod tests {
             })
             .await
             .unwrap_err();
-        matches!(err, StoreError::AlreadyExists);
+        assert!(matches!(err, StoreError::AlreadyExists));
     }
 
     #[tokio::test]
@@ -3961,7 +3964,7 @@ mod tests {
             .get_workspace_permission(&ws, &principal_id)
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4059,7 +4062,7 @@ mod tests {
             .get_user_by_email("notfound@example.com")
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4102,7 +4105,7 @@ mod tests {
         // Revoke invite
         s.revoke_invite(&invite.id).await.unwrap();
         let err = s.get_invite_by_token("test-token").await.unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4142,12 +4145,12 @@ mod tests {
         // Delete environment
         s.delete_environment(&env_id).await.unwrap();
         let err = s.get_environment(&env_id).await.unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
 
         // Delete project
         s.delete_project(&project_id).await.unwrap();
         let err = s.get_project(&project_id).await.unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4237,7 +4240,7 @@ mod tests {
             .get_user_workspace_permission(&ws, &user_id)
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4291,7 +4294,7 @@ mod tests {
             .get_workspace_principal(&ws, &principal_id)
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     // ─────────────────────────── Email Verification Tests ───────────────────────────
@@ -4328,7 +4331,7 @@ mod tests {
             .get_email_verification("nonexistent@example.com")
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4384,7 +4387,7 @@ mod tests {
             .get_email_verification("test@example.com")
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4393,7 +4396,7 @@ mod tests {
 
         let fake_id = zopp_storage::EmailVerificationId(uuid::Uuid::now_v7());
         let err = s.delete_email_verification(&fake_id).await.unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]
@@ -4427,7 +4430,7 @@ mod tests {
             .get_email_verification("expired@example.com")
             .await
             .unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
 
         // Valid one should still exist
         s.get_email_verification("valid@example.com").await.unwrap();
@@ -4470,7 +4473,7 @@ mod tests {
 
         let fake_id = zopp_storage::UserId(uuid::Uuid::now_v7());
         let err = s.mark_user_verified(&fake_id).await.unwrap_err();
-        matches!(err, StoreError::NotFound);
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     #[tokio::test]

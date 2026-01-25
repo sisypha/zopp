@@ -435,10 +435,10 @@ impl Store for PostgresStore {
     }
 
     async fn consume_invite(&self, token: &str) -> Result<(), StoreError> {
-        // Atomically consume invite only if not already consumed
+        // Atomically consume invite only if not already consumed and not revoked
         // This prevents concurrent requests from both succeeding
         let result = sqlx::query!(
-            "UPDATE invites SET consumed = TRUE WHERE token = $1 AND consumed = FALSE",
+            "UPDATE invites SET consumed = TRUE WHERE token = $1 AND consumed = FALSE AND revoked = FALSE",
             token
         )
         .execute(&self.pool)
@@ -446,10 +446,10 @@ impl Store for PostgresStore {
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         if result.rows_affected() == 0 {
-            // Either token doesn't exist or invite was already consumed
+            // Either token doesn't exist, invite was already consumed, or it's revoked
             // Check which case it is for a more specific error
             let exists = sqlx::query_scalar!(
-                "SELECT EXISTS(SELECT 1 FROM invites WHERE token = $1) as \"exists!: bool\"",
+                "SELECT EXISTS(SELECT 1 FROM invites WHERE token = $1 AND revoked = FALSE) as \"exists!: bool\"",
                 token
             )
             .fetch_one(&self.pool)
@@ -459,7 +459,7 @@ impl Store for PostgresStore {
             if exists {
                 Err(StoreError::AlreadyExists) // Invite was already consumed
             } else {
-                Err(StoreError::NotFound) // Token doesn't exist
+                Err(StoreError::NotFound) // Token doesn't exist or is revoked
             }
         } else {
             Ok(())

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT token FROM invites WHERE token = ?",
+  "query": "SELECT token FROM invites WHERE token = ? AND revoked = 0",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "a8c0c502c39e88507def64c9cca7d56e039664dbf1cf4c08836c84990c93198d"
+  "hash": "8fb3c267898d969b5956f25e59729e8211fc31b5dc372416fb8138b347a4c5e7"
 }

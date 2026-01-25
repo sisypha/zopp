@@ -31,7 +31,11 @@ async function getVerificationCodeFromMailHog(apiUrl: string, toEmail: string, t
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await fetch(`${apiUrl}/messages`);
+      // Use AbortController to ensure fetch honors overall timeout
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(`${apiUrl}/messages`, { signal: controller.signal });
+      clearTimeout(fetchTimeout);
       if (!response.ok) continue;
 
       const data = await response.json();

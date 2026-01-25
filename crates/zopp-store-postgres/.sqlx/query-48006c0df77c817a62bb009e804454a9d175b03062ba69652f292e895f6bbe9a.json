@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT EXISTS(SELECT 1 FROM invites WHERE token = $1) as \"exists!: bool\"",
+  "query": "SELECT EXISTS(SELECT 1 FROM invites WHERE token = $1 AND revoked = FALSE) as \"exists!: bool\"",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       null
     ]
   },
-  "hash": "4ed1f63d30d7a812224d49f5db2d3068bf65761764c9429d4d923ace5850a91a"
+  "hash": "48006c0df77c817a62bb009e804454a9d175b03062ba69652f292e895f6bbe9a"
 }

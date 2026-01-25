@@ -142,8 +142,8 @@ pub fn RegisterPage() -> impl IntoView {
                                 pending.email,
                                 pending.device_name,
                                 auth_clone,
-                                set_error,
-                                set_loading,
+                                set_verification_error,
+                                set_verifying,
                             )
                             .await
                             {
@@ -152,6 +152,7 @@ pub fn RegisterPage() -> impl IntoView {
                                     let _ = window.location().set_href("/workspaces");
                                 }
                             }
+                            // Note: complete_registration_impl sets error and loading state on failure
                         } else {
                             let err_msg =
                                 match (verify_result.message, verify_result.attempts_remaining) {
