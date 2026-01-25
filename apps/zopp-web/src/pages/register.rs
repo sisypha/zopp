@@ -218,62 +218,56 @@ pub fn RegisterPage() -> impl IntoView {
     };
 
     view! {
-        <div class="min-h-screen flex items-center justify-center bg-base-200">
-            <div class="card w-96 bg-base-100 shadow-xl">
-                <div class="card-body">
+        <div class="min-h-screen flex items-center justify-center bg-vault-base">
+            <div class="bg-vault-100 border border-terminal-border rounded-md p-6 w-96">
+                <div class="space-y-4">
                     <Show
                         when=move || pending_verification.get().is_some()
                         fallback=move || {
                             view! {
-                                <h2 class="card-title text-2xl font-bold">"Join Workspace"</h2>
-                                <p class="text-base-content/70 text-sm">
+                                <h2 class="text-2xl font-bold text-cipher-text">"Join Workspace"</h2>
+                                <p class="text-cipher-secondary text-sm">
                                     "Create a new principal using an invite token."
                                 </p>
 
                                 <form on:submit=on_submit class="space-y-4 mt-4">
                                     <Show when=move || error.get().is_some()>
-                                        <div class="alert alert-error">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                        <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                             </svg>
                                             <span>{move || error.get().unwrap_or_default()}</span>
                                         </div>
                                     </Show>
 
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">"Invite Token"</span>
-                                        </label>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-sm font-medium text-cipher-text">"Invite Token"</label>
                                         <input
                                             type="text"
-                                            placeholder="zopp-invite-xxxx"
-                                            class="input input-bordered"
+                                            placeholder="inv_xxxx..."
+                                            class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
                                             prop:value=move || invite_token.get()
                                             on:input=move |ev| set_invite_token.set(event_target_value(&ev))
                                         />
                                     </div>
 
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">"Email"</span>
-                                        </label>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-sm font-medium text-cipher-text">"Email"</label>
                                         <input
                                             type="email"
                                             placeholder="you@example.com"
-                                            class="input input-bordered"
+                                            class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
                                             prop:value=move || email.get()
                                             on:input=move |ev| set_email.set(event_target_value(&ev))
                                         />
                                     </div>
 
-                                    <div class="form-control">
-                                        <label class="label">
-                                            <span class="label-text">"Device Name"</span>
-                                        </label>
+                                    <div class="space-y-1.5">
+                                        <label class="block text-sm font-medium text-cipher-text">"Device Name"</label>
                                         <input
                                             type="text"
                                             placeholder="My Laptop"
-                                            class="input input-bordered"
+                                            class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
                                             prop:value=move || device_name.get()
                                             on:input=move |ev| set_device_name.set(event_target_value(&ev))
                                         />
@@ -281,27 +275,34 @@ pub fn RegisterPage() -> impl IntoView {
 
                                     <button
                                         type="submit"
-                                        class="btn btn-primary w-full"
+                                        class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         disabled=move || loading.get()
                                     >
                                         <Show when=move || loading.get()>
-                                            <span class="loading loading-spinner"></span>
+                                            <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                         </Show>
                                         "Create Principal"
                                     </button>
                                 </form>
 
-                                <div class="divider">"OR"</div>
+                                <div class="my-6 flex items-center gap-4">
+                                    <div class="flex-1 border-t border-terminal-border"></div>
+                                    <span class="text-cipher-muted text-sm">"or"</span>
+                                    <div class="flex-1 border-t border-terminal-border"></div>
+                                </div>
 
-                                <a href="/import" class="btn btn-outline w-full">
+                                <a
+                                    href="/import"
+                                    class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
+                                >
                                     "Import Existing Principal"
                                 </a>
                             }
                         }
                     >
                         // Email verification UI
-                        <h2 class="card-title text-2xl font-bold">"Verify Your Email"</h2>
-                        <p class="text-base-content/70 text-sm">
+                        <h2 class="text-2xl font-bold text-cipher-text">"Verify Your Email"</h2>
+                        <p class="text-cipher-secondary text-sm">
                             "We sent a verification code to "
                             <span class="font-medium">
                                 {move || pending_verification.get().map(|p| p.email).unwrap_or_default()}
@@ -310,8 +311,8 @@ pub fn RegisterPage() -> impl IntoView {
 
                         <form on:submit=on_verify class="space-y-4 mt-4">
                             <Show when=move || verification_error.get().is_some()>
-                                <div class="alert alert-error">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span>{move || verification_error.get().unwrap_or_default()}</span>
@@ -319,23 +320,21 @@ pub fn RegisterPage() -> impl IntoView {
                             </Show>
 
                             <Show when=move || verification_success.get().is_some()>
-                                <div class="alert alert-success">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-success-muted bg-success-muted text-success">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span>{move || verification_success.get().unwrap_or_default()}</span>
                                 </div>
                             </Show>
 
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text">"Verification Code"</span>
-                                </label>
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Verification Code"</label>
                                 <input
                                     type="text"
                                     placeholder="123456"
                                     maxlength="6"
-                                    class="input input-bordered text-center text-2xl tracking-widest"
+                                    class="w-full px-3 py-2.5 text-center text-2xl tracking-widest rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
                                     prop:value=move || verification_code.get()
                                     on:input=move |ev| set_verification_code.set(event_target_value(&ev))
                                 />
@@ -343,33 +342,37 @@ pub fn RegisterPage() -> impl IntoView {
 
                             <button
                                 type="submit"
-                                class="btn btn-primary w-full"
+                                class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 disabled=move || verifying.get()
                             >
                                 <Show when=move || verifying.get()>
-                                    <span class="loading loading-spinner"></span>
+                                    <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                 </Show>
                                 "Verify Email"
                             </button>
                         </form>
 
-                        <div class="divider">"Didn't receive the code?"</div>
+                        <div class="my-6 flex items-center gap-4">
+                            <div class="flex-1 border-t border-terminal-border"></div>
+                            <span class="text-cipher-muted text-sm">"Didn't receive the code?"</span>
+                            <div class="flex-1 border-t border-terminal-border"></div>
+                        </div>
 
                         <button
                             type="button"
-                            class="btn btn-outline w-full"
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             disabled=move || resending.get()
                             on:click=on_resend
                         >
                             <Show when=move || resending.get()>
-                                <span class="loading loading-spinner"></span>
+                                <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-amber/30 border-t-amber"></span>
                             </Show>
                             "Resend Code"
                         </button>
 
                         <button
                             type="button"
-                            class="btn btn-ghost btn-sm w-full mt-2"
+                            class="w-full px-4 py-2 mt-2 text-sm font-medium rounded-sm text-cipher-muted hover:text-cipher-text hover:bg-vault-200 transition-colors"
                             on:click=move |_| {
                                 set_pending_verification.set(None);
                                 set_verification_code.set(String::new());

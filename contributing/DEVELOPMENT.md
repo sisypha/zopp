@@ -69,14 +69,13 @@ cd apps/zopp-web && npm install
 
 #### Option 1: Docker Compose (Easiest)
 ```bash
-# Terminal 1: Start server + Envoy proxy
-cd docker
-docker-compose -f docker-compose.web-dev.yaml up
+# Terminal 1: Start server + Envoy proxy (without web service for local dev)
+docker compose -f docker/docker-compose.dev.yaml up zopp-server envoy
 
 # Terminal 2: Build WASM crypto module (one-time)
 wasm-pack build --target web --out-dir apps/zopp-web/pkg crates/zopp-crypto-wasm
 
-# Terminal 3: Start web UI
+# Terminal 3: Start web UI locally (faster iteration)
 cd apps/zopp-web
 trunk serve
 ```

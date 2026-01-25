@@ -97,19 +97,16 @@ pub fn ProjectsPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <div class="text-sm breadcrumbs">
-                    <ul>
-                        <li><a href="/workspaces">"Workspaces"</a></li>
-                        <li>{workspace}</li>
-                    </ul>
-                </div>
+                <nav class="flex items-center gap-2 text-sm">
+                    <span class="text-cipher-text">{workspace}</span>
+                </nav>
 
                 <div class="flex items-center justify-between">
-                    <h1 class="text-3xl font-bold">"Projects"</h1>
+                    <h1 class="text-3xl font-bold text-cipher-text">"Projects"</h1>
                     <div class="flex gap-2">
                         <a
                             href=move || format!("/workspaces/{}/invites", workspace())
-                            class="btn btn-outline"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
@@ -118,7 +115,7 @@ pub fn ProjectsPage() -> impl IntoView {
                         </a>
                         <a
                             href=move || format!("/workspaces/{}/permissions", workspace())
-                            class="btn btn-outline"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -126,7 +123,7 @@ pub fn ProjectsPage() -> impl IntoView {
                             "Permissions"
                         </a>
                         <button
-                            class="btn btn-primary"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
                             on:click=move |_| set_show_create_modal.set(true)
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -138,33 +135,35 @@ pub fn ProjectsPage() -> impl IntoView {
                 </div>
 
                 <Show when=move || error.get().is_some()>
-                    <div class="alert alert-error">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{move || error.get().unwrap_or_default()}</span>
-                        <button class="btn btn-ghost btn-sm" on:click=move |_| set_error.set(None)>"Dismiss"</button>
+                    <div class="flex items-center justify-between gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                        <div class="flex items-start gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>{move || error.get().unwrap_or_default()}</span>
+                        </div>
+                        <button class="text-sm hover:underline" on:click=move |_| set_error.set(None)>"Dismiss"</button>
                     </div>
                 </Show>
 
                 <Show when=move || loading.get()>
                     <div class="flex justify-center py-12">
-                        <span class="loading loading-spinner loading-lg"></span>
+                        <span class="inline-block w-8 h-8 border-4 rounded-full animate-spin border-amber/30 border-t-amber"></span>
                     </div>
                 </Show>
 
                 <Show when=move || !loading.get() && projects.get().is_empty()>
-                    <div class="card bg-base-100 shadow">
-                        <div class="card-body items-center text-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="bg-vault-100 border border-terminal-border rounded-md">
+                        <div class="p-12 flex flex-col items-center text-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-cipher-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                             </svg>
-                            <h2 class="text-xl font-bold mt-4">"No projects yet"</h2>
-                            <p class="text-base-content/70">
+                            <h2 class="text-xl font-bold mt-4 text-cipher-text">"No projects yet"</h2>
+                            <p class="text-cipher-secondary mt-2">
                                 "Create a project to organize your environments and secrets."
                             </p>
                             <button
-                                class="btn btn-primary mt-4"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2 mt-6 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
                                 on:click=move |_| set_show_create_modal.set(true)
                             >
                                 "Create First Project"
@@ -184,17 +183,15 @@ pub fn ProjectsPage() -> impl IntoView {
                                 let display_name = proj.name.clone();
                                 let env_count = proj.environment_count;
                                 view! {
-                                    <a href=format!("/workspaces/{}/projects/{}", ws, name) class="card bg-base-100 shadow hover:shadow-lg transition-shadow">
-                                        <div class="card-body">
-                                            <h2 class="card-title">{display_name}</h2>
-                                            <p class="text-base-content/70">
-                                                {if env_count == 1 {
-                                                    "1 environment".to_string()
-                                                } else {
-                                                    format!("{} environments", env_count)
-                                                }}
-                                            </p>
-                                        </div>
+                                    <a href=format!("/workspaces/{}/projects/{}", ws, name) class="block bg-vault-100 border border-terminal-border rounded-md p-6 hover:border-terminal-border-strong transition-colors">
+                                        <h2 class="text-lg font-semibold text-cipher-text">{display_name}</h2>
+                                        <p class="text-cipher-secondary mt-1">
+                                            {if env_count == 1 {
+                                                "1 environment".to_string()
+                                            } else {
+                                                format!("{} environments", env_count)
+                                            }}
+                                        </p>
                                     </a>
                                 }
                             }
@@ -204,44 +201,43 @@ pub fn ProjectsPage() -> impl IntoView {
 
                 // Create Project Modal
                 <Show when=move || show_create_modal.get()>
-                    <div class="modal modal-open">
-                        <div class="modal-box">
-                            <h3 class="font-bold text-lg mb-4">"Create Project"</h3>
+                    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" on:click=move |_| set_show_create_modal.set(false)>
+                        <div class="relative w-full max-w-md rounded-lg bg-vault-100 border border-terminal-border p-6" on:click=move |ev| ev.stop_propagation()>
+                            <h3 class="text-lg font-semibold text-cipher-text mb-4">"Create Project"</h3>
                             <form on:submit=on_create>
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">"Project Name"</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="my-project"
-                                        class="input input-bordered"
-                                        prop:value=move || new_project_name.get()
-                                        on:input=move |ev| set_new_project_name.set(event_target_value(&ev))
-                                    />
+                                <div class="mb-6">
+                                    <div class="space-y-1.5">
+                                        <label class="block text-sm font-medium text-cipher-text">"Project Name"</label>
+                                        <input
+                                            type="text"
+                                            placeholder="my-project"
+                                            class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
+                                            prop:value=move || new_project_name.get()
+                                            on:input=move |ev| set_new_project_name.set(event_target_value(&ev))
+                                        />
+                                    </div>
                                 </div>
-                                <div class="modal-action">
+                                <div class="flex items-center justify-end gap-3">
                                     <button
                                         type="button"
-                                        class="btn"
+                                        class="px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
                                         on:click=move |_| set_show_create_modal.set(false)
                                     >
                                         "Cancel"
                                     </button>
                                     <button
                                         type="submit"
-                                        class="btn btn-primary"
+                                        class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         disabled=move || creating.get() || new_project_name.get().is_empty()
                                     >
                                         <Show when=move || creating.get()>
-                                            <span class="loading loading-spinner loading-sm"></span>
+                                            <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                         </Show>
                                         "Create"
                                     </button>
                                 </div>
                             </form>
                         </div>
-                        <div class="modal-backdrop" on:click=move |_| set_show_create_modal.set(false)></div>
                     </div>
                 </Show>
             </div>

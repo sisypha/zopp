@@ -6,12 +6,12 @@ use leptos_router::{
 };
 
 use crate::pages::{
-    dashboard::DashboardPage, environments::EnvironmentsPage, invites::InvitesPage,
-    landing::LandingPage, login::LoginPage, not_found::NotFoundPage, permissions::PermissionsPage,
-    projects::ProjectsPage, register::RegisterPage, secrets::SecretsPage, settings::SettingsPage,
-    workspaces::WorkspacesPage,
+    environments::EnvironmentsPage, invites::InvitesPage, landing::LandingPage, login::LoginPage,
+    not_found::NotFoundPage, permissions::PermissionsPage, projects::ProjectsPage,
+    register::RegisterPage, secrets::SecretsPage, settings::SettingsPage,
 };
 use crate::state::auth::AuthProvider;
+use crate::state::workspace::WorkspaceProvider;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -25,25 +25,25 @@ pub fn App() -> impl IntoView {
         <Title text="Zopp"/>
 
         <AuthProvider>
-            <Router>
-                <main class="min-h-screen bg-base-200">
-                    <Routes fallback=|| view! { <NotFoundPage/> }>
-                        <Route path=path!("/") view=LandingPage/>
-                        <Route path=path!("/login") view=LoginPage/>
-                        <Route path=path!("/import") view=LoginPage/>
-                        <Route path=path!("/register") view=RegisterPage/>
-                        <Route path=path!("/invite") view=RegisterPage/>
-                        <Route path=path!("/dashboard") view=DashboardPage/>
-                        <Route path=path!("/settings") view=SettingsPage/>
-                        <Route path=path!("/workspaces") view=WorkspacesPage/>
-                        <Route path=path!("/workspaces/:workspace") view=ProjectsPage/>
-                        <Route path=path!("/workspaces/:workspace/invites") view=InvitesPage/>
-                        <Route path=path!("/workspaces/:workspace/permissions") view=PermissionsPage/>
-                        <Route path=path!("/workspaces/:workspace/projects/:project") view=EnvironmentsPage/>
-                        <Route path=path!("/workspaces/:workspace/projects/:project/environments/:environment") view=SecretsPage/>
-                    </Routes>
-                </main>
-            </Router>
+            <WorkspaceProvider>
+                <Router>
+                    <main class="min-h-screen bg-vault-base">
+                        <Routes fallback=|| view! { <NotFoundPage/> }>
+                            <Route path=path!("/") view=LandingPage/>
+                            <Route path=path!("/login") view=LoginPage/>
+                            <Route path=path!("/import") view=LoginPage/>
+                            <Route path=path!("/register") view=RegisterPage/>
+                            <Route path=path!("/invite") view=RegisterPage/>
+                            <Route path=path!("/settings") view=SettingsPage/>
+                            <Route path=path!("/workspaces/:workspace") view=ProjectsPage/>
+                            <Route path=path!("/workspaces/:workspace/invites") view=InvitesPage/>
+                            <Route path=path!("/workspaces/:workspace/permissions") view=PermissionsPage/>
+                            <Route path=path!("/workspaces/:workspace/projects/:project") view=EnvironmentsPage/>
+                            <Route path=path!("/workspaces/:workspace/projects/:project/environments/:environment") view=SecretsPage/>
+                        </Routes>
+                    </main>
+                </Router>
+            </WorkspaceProvider>
         </AuthProvider>
     }
 }

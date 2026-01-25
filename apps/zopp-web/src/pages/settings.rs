@@ -3,7 +3,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 
-use crate::components::Layout;
+use crate::components::{ButtonSize, ButtonVariant, Layout, LinkButton};
 use crate::services::storage::PrincipalMetadata;
 #[cfg(target_arch = "wasm32")]
 use crate::services::storage::{IndexedDbStorage, KeyStorage};
@@ -167,23 +167,25 @@ pub fn SettingsPage() -> impl IntoView {
     view! {
         <Layout>
             <div class="space-y-6">
-                <h1 class="text-3xl font-bold">"Settings"</h1>
+                <h1 class="text-3xl font-bold text-cipher-text">"Settings"</h1>
 
                 <Show when=move || error.get().is_some()>
-                    <div class="alert alert-error">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{move || error.get().unwrap_or_default()}</span>
-                        <button class="btn btn-ghost btn-sm" on:click=move |_| set_error.set(None)>"Dismiss"</button>
+                    <div class="flex items-center justify-between gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                        <div class="flex items-start gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>{move || error.get().unwrap_or_default()}</span>
+                        </div>
+                        <button class="text-sm hover:underline" on:click=move |_| set_error.set(None)>"Dismiss"</button>
                     </div>
                 </Show>
 
                 // Current Principal Info
-                <div class="card bg-base-100 shadow">
-                    <div class="card-body">
-                        <h2 class="card-title">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="bg-vault-100 border border-terminal-border rounded-md">
+                    <div class="p-6">
+                        <h2 class="flex items-center gap-2 text-base font-medium mb-2 text-cipher-text">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                             </svg>
                             "Current Principal"
@@ -191,16 +193,16 @@ pub fn SettingsPage() -> impl IntoView {
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <div>
-                                <span class="text-base-content/70 text-sm">"Name"</span>
-                                <p class="font-medium">{move || auth.principal().map(|p| p.name.clone()).unwrap_or_default()}</p>
+                                <span class="text-cipher-secondary text-sm">"Name"</span>
+                                <p class="font-medium text-cipher-text">{move || auth.principal().map(|p| p.name.clone()).unwrap_or_default()}</p>
                             </div>
                             <div>
-                                <span class="text-base-content/70 text-sm">"Email"</span>
-                                <p class="font-medium">{move || auth.principal().and_then(|p| p.email.clone()).unwrap_or_else(|| "-".to_string())}</p>
+                                <span class="text-cipher-secondary text-sm">"Email"</span>
+                                <p class="font-medium text-cipher-text">{move || auth.principal().and_then(|p| p.email.clone()).unwrap_or_else(|| "-".to_string())}</p>
                             </div>
                             <div class="md:col-span-2">
-                                <span class="text-base-content/70 text-sm">"Principal ID"</span>
-                                <p class="font-mono text-sm break-all">{move || auth.principal().map(|p| p.id.clone()).unwrap_or_default()}</p>
+                                <span class="text-cipher-secondary text-sm">"Principal ID"</span>
+                                <p class="font-mono text-sm break-all text-cipher-text">{move || auth.principal().map(|p| p.id.clone()).unwrap_or_default()}</p>
                             </div>
                         </div>
                     </div>
@@ -208,15 +210,15 @@ pub fn SettingsPage() -> impl IntoView {
 
                 // Switch Principal (only show if more than one principal)
                 <Show when=move || { principals.get().len() > 1 }>
-                    <div class="card bg-base-100 shadow">
-                        <div class="card-body">
-                            <h2 class="card-title">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="bg-vault-100 border border-terminal-border rounded-md">
+                        <div class="p-6">
+                            <h2 class="flex items-center gap-2 text-base font-medium mb-2 text-cipher-text">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
                                 </svg>
                                 "Switch Principal"
                             </h2>
-                            <p class="text-base-content/70">
+                            <p class="text-cipher-secondary">
                                 "You have multiple principals stored. Select one to switch to."
                             </p>
 
@@ -234,20 +236,18 @@ pub fn SettingsPage() -> impl IntoView {
                                             <div class=move || {
                                                 let is_current = auth.principal().map(|p| p.id == principal_id_for_class).unwrap_or(false);
                                                 if is_current {
-                                                    "flex items-center justify-between p-3 bg-primary/10 border border-primary rounded-lg"
+                                                    "flex items-center justify-between p-3 bg-amber-muted border border-amber rounded-lg"
                                                 } else {
-                                                    "flex items-center justify-between p-3 bg-base-200 rounded-lg hover:bg-base-300 transition-colors"
+                                                    "flex items-center justify-between p-3 bg-vault-inset rounded-lg hover:bg-vault-200 transition-colors"
                                                 }
                                             }>
                                                 <div class="flex items-center gap-3">
-                                                    <div class="avatar placeholder">
-                                                        <div class="bg-neutral text-neutral-content rounded-full w-10">
-                                                            <span class="text-sm">{principal.name.chars().next().unwrap_or('?').to_uppercase().to_string()}</span>
-                                                        </div>
+                                                    <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-vault-200 text-cipher-text font-medium">
+                                                        <span class="text-sm">{principal.name.chars().next().unwrap_or('?').to_uppercase().to_string()}</span>
                                                     </div>
                                                     <div>
-                                                        <p class="font-medium">{principal.name.clone()}</p>
-                                                        <p class="text-sm text-base-content/70">{principal.email.clone().unwrap_or_else(|| "-".to_string())}</p>
+                                                        <p class="font-medium text-cipher-text">{principal.name.clone()}</p>
+                                                        <p class="text-sm text-cipher-secondary">{principal.email.clone().unwrap_or_else(|| "-".to_string())}</p>
                                                     </div>
                                                 </div>
                                                 <Show
@@ -256,7 +256,7 @@ pub fn SettingsPage() -> impl IntoView {
                                                         let id = principal_id_for_click.clone();
                                                         view! {
                                                             <button
-                                                                class="btn btn-sm btn-ghost"
+                                                                class="px-3 py-1.5 text-sm font-medium rounded-sm text-cipher-secondary hover:text-cipher-text hover:bg-vault-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                                 on:click=move |_| {
                                                                     let id_clone = id.clone();
                                                                     switch_principal.with_value(|f| f(id_clone));
@@ -264,14 +264,14 @@ pub fn SettingsPage() -> impl IntoView {
                                                                 disabled=move || switching.get()
                                                             >
                                                                 <Show when=move || switching.get()>
-                                                                    <span class="loading loading-spinner loading-xs"></span>
+                                                                    <span class="inline-block w-3 h-3 mr-1 border-2 rounded-full animate-spin border-cipher-secondary/30 border-t-cipher-secondary"></span>
                                                                 </Show>
                                                                 "Switch"
                                                             </button>
                                                         }
                                                     }
                                                 >
-                                                    <span class="badge badge-primary">"Current"</span>
+                                                    <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-muted text-amber">"Current"</span>
                                                 </Show>
                                             </div>
                                         }
@@ -280,34 +280,34 @@ pub fn SettingsPage() -> impl IntoView {
                             </div>
 
                             <div class="mt-4">
-                                <a href="/import" class="btn btn-outline btn-sm">
+                                <LinkButton href="/import" variant=ButtonVariant::Secondary size=ButtonSize::Sm>
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                     </svg>
                                     "Import Another Principal"
-                                </a>
+                                </LinkButton>
                             </div>
                         </div>
                     </div>
                 </Show>
 
                 // Export Principal
-                <div class="card bg-base-100 shadow">
-                    <div class="card-body">
-                        <h2 class="card-title">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="bg-vault-100 border border-terminal-border rounded-md">
+                    <div class="p-6">
+                        <h2 class="flex items-center gap-2 text-base font-medium mb-2 text-cipher-text">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                             </svg>
                             "Export Principal"
                         </h2>
-                        <p class="text-base-content/70">
+                        <p class="text-cipher-secondary">
                             "Export your principal to use on another device or browser. "
                             "You'll receive an export code and passphrase that can be used to import your credentials."
                         </p>
 
                         <Show when=move || export_code.get().is_some()>
-                            <div class="alert alert-success mt-4">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-success-muted bg-success-muted text-success mt-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 <span>"Export created successfully!"</span>
@@ -315,22 +315,20 @@ pub fn SettingsPage() -> impl IntoView {
 
                             <div class="space-y-4 mt-4">
                                 <div>
-                                    <label class="label">
-                                        <span class="label-text font-medium">"Export Code"</span>
-                                    </label>
-                                    <div class="bg-base-200 rounded-lg p-4">
+                                    <label class="block text-sm font-medium text-cipher-text mb-1.5">"Export Code"</label>
+                                    <div class="bg-vault-inset rounded-lg p-4">
                                         <div class="flex items-center gap-2">
-                                            <code class="flex-1 font-mono text-sm break-all">
+                                            <code class="flex-1 font-mono text-sm break-all text-cipher-text">
                                                 {move || export_code.get().unwrap_or_default()}
                                             </code>
                                             <button
-                                                class="btn btn-square btn-sm"
+                                                class="p-2 rounded-sm border border-terminal-border hover:bg-vault-200 transition-colors"
                                                 on:click=copy_code
                                             >
                                                 <Show
                                                     when=move || copied_code.get()
                                                     fallback=move || view! {
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-cipher-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                                         </svg>
                                                     }
@@ -345,22 +343,20 @@ pub fn SettingsPage() -> impl IntoView {
                                 </div>
 
                                 <div>
-                                    <label class="label">
-                                        <span class="label-text font-medium">"Passphrase"</span>
-                                    </label>
-                                    <div class="bg-base-200 rounded-lg p-4">
+                                    <label class="block text-sm font-medium text-cipher-text mb-1.5">"Passphrase"</label>
+                                    <div class="bg-vault-inset rounded-lg p-4">
                                         <div class="flex items-center gap-2">
-                                            <code class="flex-1 font-mono text-sm break-all">
+                                            <code class="flex-1 font-mono text-sm break-all text-cipher-text">
                                                 {move || export_passphrase.get().unwrap_or_default()}
                                             </code>
                                             <button
-                                                class="btn btn-square btn-sm"
+                                                class="p-2 rounded-sm border border-terminal-border hover:bg-vault-200 transition-colors"
                                                 on:click=copy_passphrase
                                             >
                                                 <Show
                                                     when=move || copied_passphrase.get()
                                                     fallback=move || view! {
-                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-cipher-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                                         </svg>
                                                     }
@@ -375,8 +371,8 @@ pub fn SettingsPage() -> impl IntoView {
                                 </div>
                             </div>
 
-                            <div class="alert alert-warning mt-4">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-warning-muted bg-warning-muted text-warning mt-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
                                 <div>
@@ -386,14 +382,14 @@ pub fn SettingsPage() -> impl IntoView {
                             </div>
                         </Show>
 
-                        <div class="card-actions justify-end mt-4">
+                        <div class="flex justify-end mt-4">
                             <button
-                                class="btn btn-primary"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 on:click=on_export
                                 disabled=move || exporting.get()
                             >
                                 <Show when=move || exporting.get()>
-                                    <span class="loading loading-spinner loading-sm"></span>
+                                    <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                 </Show>
                                 "Create Export"
                             </button>
@@ -402,24 +398,24 @@ pub fn SettingsPage() -> impl IntoView {
                 </div>
 
                 // Danger Zone
-                <div class="card bg-base-100 shadow border border-error/20">
-                    <div class="card-body">
-                        <h2 class="card-title text-error">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="bg-vault-100 border border-error-muted rounded-md">
+                    <div class="p-6">
+                        <h2 class="flex items-center gap-2 text-base font-medium mb-2 text-error">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                             "Danger Zone"
                         </h2>
 
-                        <div class="flex items-center justify-between mt-4 p-4 bg-error/5 rounded-lg">
+                        <div class="flex items-center justify-between mt-4 p-4 bg-error-muted rounded-lg">
                             <div>
-                                <p class="font-medium">"Log out"</p>
-                                <p class="text-base-content/70 text-sm">
+                                <p class="font-medium text-cipher-text">"Log out"</p>
+                                <p class="text-cipher-secondary text-sm">
                                     "Clear your credentials from this browser. You can log back in with an export code."
                                 </p>
                             </div>
                             <button
-                                class="btn btn-error btn-outline"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-error text-white hover:bg-error/90 transition-colors"
                                 on:click=on_logout
                             >
                                 "Log out"

@@ -110,18 +110,16 @@ pub fn EnvironmentsPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <div class="text-sm breadcrumbs">
-                    <ul>
-                        <li><a href="/workspaces">"Workspaces"</a></li>
-                        <li><a href=move || format!("/workspaces/{}", workspace())>{workspace}</a></li>
-                        <li>{project}</li>
-                    </ul>
-                </div>
+                <nav class="flex items-center gap-2 text-sm">
+                    <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
+                    <span class="text-cipher-muted">"/"</span>
+                    <span class="text-cipher-text">{project}</span>
+                </nav>
 
                 <div class="flex items-center justify-between">
-                    <h1 class="text-3xl font-bold">"Environments"</h1>
+                    <h1 class="text-3xl font-bold text-cipher-text">"Environments"</h1>
                     <button
-                        class="btn btn-primary"
+                        class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
                         on:click=move |_| set_show_create_modal.set(true)
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,33 +130,35 @@ pub fn EnvironmentsPage() -> impl IntoView {
                 </div>
 
                 <Show when=move || error.get().is_some()>
-                    <div class="alert alert-error">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{move || error.get().unwrap_or_default()}</span>
-                        <button class="btn btn-ghost btn-sm" on:click=move |_| set_error.set(None)>"Dismiss"</button>
+                    <div class="flex items-center justify-between gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                        <div class="flex items-start gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>{move || error.get().unwrap_or_default()}</span>
+                        </div>
+                        <button class="text-sm hover:underline" on:click=move |_| set_error.set(None)>"Dismiss"</button>
                     </div>
                 </Show>
 
                 <Show when=move || loading.get()>
                     <div class="flex justify-center py-12">
-                        <span class="loading loading-spinner loading-lg"></span>
+                        <span class="inline-block w-8 h-8 border-4 rounded-full animate-spin border-amber/30 border-t-amber"></span>
                     </div>
                 </Show>
 
                 <Show when=move || !loading.get() && environments.get().is_empty()>
-                    <div class="card bg-base-100 shadow">
-                        <div class="card-body items-center text-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="bg-vault-100 border border-terminal-border rounded-md">
+                        <div class="p-12 flex flex-col items-center text-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-cipher-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
                             </svg>
-                            <h2 class="text-xl font-bold mt-4">"No environments yet"</h2>
-                            <p class="text-base-content/70">
+                            <h2 class="text-xl font-bold mt-4 text-cipher-text">"No environments yet"</h2>
+                            <p class="text-cipher-secondary mt-2">
                                 "Create an environment to store your secrets."
                             </p>
                             <button
-                                class="btn btn-primary mt-4"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2 mt-6 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
                                 on:click=move |_| set_show_create_modal.set(true)
                             >
                                 "Create First Environment"
@@ -179,17 +179,15 @@ pub fn EnvironmentsPage() -> impl IntoView {
                                 let display_name = env.name.clone();
                                 let secret_count = env.secret_count;
                                 view! {
-                                    <a href=format!("/workspaces/{}/projects/{}/environments/{}", ws, proj, name) class="card bg-base-100 shadow hover:shadow-lg transition-shadow">
-                                        <div class="card-body">
-                                            <h2 class="card-title">{display_name}</h2>
-                                            <p class="text-base-content/70">
-                                                {if secret_count == 1 {
-                                                    "1 secret".to_string()
-                                                } else {
-                                                    format!("{} secrets", secret_count)
-                                                }}
-                                            </p>
-                                        </div>
+                                    <a href=format!("/workspaces/{}/projects/{}/environments/{}", ws, proj, name) class="block bg-vault-100 border border-terminal-border rounded-md p-6 hover:border-terminal-border-strong transition-colors">
+                                        <h2 class="text-lg font-semibold text-cipher-text">{display_name}</h2>
+                                        <p class="text-cipher-secondary mt-1">
+                                            {if secret_count == 1 {
+                                                "1 secret".to_string()
+                                            } else {
+                                                format!("{} secrets", secret_count)
+                                            }}
+                                        </p>
                                     </a>
                                 }
                             }
@@ -199,44 +197,43 @@ pub fn EnvironmentsPage() -> impl IntoView {
 
                 // Create Environment Modal
                 <Show when=move || show_create_modal.get()>
-                    <div class="modal modal-open">
-                        <div class="modal-box">
-                            <h3 class="font-bold text-lg mb-4">"Create Environment"</h3>
+                    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" on:click=move |_| set_show_create_modal.set(false)>
+                        <div class="relative w-full max-w-md rounded-lg bg-vault-100 border border-terminal-border p-6" on:click=|ev| ev.stop_propagation()>
+                            <h3 class="text-lg font-semibold text-cipher-text mb-4">"Create Environment"</h3>
                             <form on:submit=on_create>
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">"Environment Name"</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="production"
-                                        class="input input-bordered"
-                                        prop:value=move || new_env_name.get()
-                                        on:input=move |ev| set_new_env_name.set(event_target_value(&ev))
-                                    />
+                                <div class="mb-6">
+                                    <div class="space-y-1.5">
+                                        <label class="block text-sm font-medium text-cipher-text">"Environment Name"</label>
+                                        <input
+                                            type="text"
+                                            placeholder="production"
+                                            class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
+                                            prop:value=move || new_env_name.get()
+                                            on:input=move |ev| set_new_env_name.set(event_target_value(&ev))
+                                        />
+                                    </div>
                                 </div>
-                                <div class="modal-action">
+                                <div class="flex items-center justify-end gap-3">
                                     <button
                                         type="button"
-                                        class="btn"
+                                        class="px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
                                         on:click=move |_| set_show_create_modal.set(false)
                                     >
                                         "Cancel"
                                     </button>
                                     <button
                                         type="submit"
-                                        class="btn btn-primary"
+                                        class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         disabled=move || creating.get() || new_env_name.get().is_empty()
                                     >
                                         <Show when=move || creating.get()>
-                                            <span class="loading loading-spinner loading-sm"></span>
+                                            <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                         </Show>
                                         "Create"
                                     </button>
                                 </div>
                             </form>
                         </div>
-                        <div class="modal-backdrop" on:click=move |_| set_show_create_modal.set(false)></div>
                     </div>
                 </Show>
             </div>

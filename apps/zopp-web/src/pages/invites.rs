@@ -83,29 +83,27 @@ pub fn InvitesPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <div class="text-sm breadcrumbs">
-                    <ul>
-                        <li><a href="/workspaces">"Workspaces"</a></li>
-                        <li><a href=move || format!("/workspaces/{}", workspace())>{workspace}</a></li>
-                        <li>"Invites"</li>
-                    </ul>
-                </div>
+                <nav class="flex items-center gap-2 text-sm">
+                    <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
+                    <span class="text-cipher-muted">"/"</span>
+                    <span class="text-cipher-text">"Invites"</span>
+                </nav>
 
                 <div class="flex items-center justify-between">
-                    <h1 class="text-3xl font-bold">"Workspace Invites"</h1>
+                    <h1 class="text-3xl font-bold text-cipher-text">"Workspace Invites"</h1>
                 </div>
 
-                <div class="card bg-base-100 shadow">
-                    <div class="card-body">
-                        <h2 class="card-title">"Invite Team Members"</h2>
-                        <p class="text-base-content/70">
+                <div class="bg-vault-100 border border-terminal-border rounded-md">
+                    <div class="p-6">
+                        <h2 class="text-lg font-semibold text-cipher-text mb-2">"Invite Team Members"</h2>
+                        <p class="text-cipher-secondary">
                             "Create an invite link to add team members to this workspace. "
                             "Each invite can only be used once."
                         </p>
 
                         <Show when=move || error.get().is_some()>
-                            <div class="alert alert-error mt-4">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error mt-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 <span>{move || error.get().unwrap_or_default()}</span>
@@ -113,29 +111,29 @@ pub fn InvitesPage() -> impl IntoView {
                         </Show>
 
                         <Show when=move || invite_code.get().is_some()>
-                            <div class="alert alert-success mt-4">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-success-muted bg-success-muted text-success mt-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 <div>
                                     <h3 class="font-bold">"Invite Created!"</h3>
-                                    <p class="text-sm">"Share this code with the person you want to invite:"</p>
+                                    <p class="text-sm mt-1">"Share this code with the person you want to invite:"</p>
                                 </div>
                             </div>
 
-                            <div class="bg-base-200 rounded-lg p-4 mt-4">
+                            <div class="bg-vault-inset rounded-lg p-4 mt-4">
                                 <div class="flex items-center gap-2">
-                                    <code class="flex-1 font-mono text-sm break-all">
+                                    <code class="flex-1 font-mono text-sm break-all text-cipher-text">
                                         {move || invite_code.get().unwrap_or_default()}
                                     </code>
                                     <button
-                                        class="btn btn-square btn-sm"
+                                        class="p-2 rounded-sm border border-terminal-border hover:bg-vault-200 transition-colors"
                                         on:click=copy_to_clipboard
                                     >
                                         <Show
                                             when=move || copied.get()
                                             fallback=move || view! {
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-cipher-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                                 </svg>
                                             }
@@ -148,22 +146,22 @@ pub fn InvitesPage() -> impl IntoView {
                                 </div>
                             </div>
 
-                            <div class="alert alert-warning mt-4">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-warning-muted bg-warning-muted text-warning mt-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
                                 <span>"This code will only be shown once. Make sure to copy it now!"</span>
                             </div>
                         </Show>
 
-                        <div class="card-actions justify-end mt-4">
+                        <div class="flex justify-end mt-6">
                             <button
-                                class="btn btn-primary"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 on:click=create_invite
                                 disabled=move || loading.get()
                             >
                                 <Show when=move || loading.get()>
-                                    <span class="loading loading-spinner loading-sm"></span>
+                                    <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                 </Show>
                                 "Create Invite"
                             </button>
@@ -171,33 +169,33 @@ pub fn InvitesPage() -> impl IntoView {
                     </div>
                 </div>
 
-                <div class="card bg-base-100 shadow">
-                    <div class="card-body">
-                        <h2 class="card-title">"How Invites Work"</h2>
+                <div class="bg-vault-100 border border-terminal-border rounded-md">
+                    <div class="p-6">
+                        <h2 class="text-lg font-semibold text-cipher-text mb-4">"How Invites Work"</h2>
                         <div class="space-y-4">
                             <div class="flex gap-4">
-                                <div class="badge badge-primary badge-lg">"1"</div>
+                                <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full bg-amber-muted text-amber">"1"</span>
                                 <div>
-                                    <h3 class="font-medium">"Create an invite"</h3>
-                                    <p class="text-base-content/70 text-sm">
+                                    <h3 class="font-medium text-cipher-text">"Create an invite"</h3>
+                                    <p class="text-cipher-secondary text-sm">
                                         "Click the button above to generate a unique invite code."
                                     </p>
                                 </div>
                             </div>
                             <div class="flex gap-4">
-                                <div class="badge badge-primary badge-lg">"2"</div>
+                                <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full bg-amber-muted text-amber">"2"</span>
                                 <div>
-                                    <h3 class="font-medium">"Share the code"</h3>
-                                    <p class="text-base-content/70 text-sm">
+                                    <h3 class="font-medium text-cipher-text">"Share the code"</h3>
+                                    <p class="text-cipher-secondary text-sm">
                                         "Send the invite code to your team member via a secure channel."
                                     </p>
                                 </div>
                             </div>
                             <div class="flex gap-4">
-                                <div class="badge badge-primary badge-lg">"3"</div>
+                                <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full bg-amber-muted text-amber">"3"</span>
                                 <div>
-                                    <h3 class="font-medium">"They join the workspace"</h3>
-                                    <p class="text-base-content/70 text-sm">
+                                    <h3 class="font-medium text-cipher-text">"They join the workspace"</h3>
+                                    <p class="text-cipher-secondary text-sm">
                                         "They can use the invite code on the registration page to create their account and join this workspace."
                                     </p>
                                 </div>

@@ -4,7 +4,7 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use std::collections::HashSet;
 
-use crate::components::Layout;
+use crate::components::{Layout, Modal, ModalActions, ModalBody, ModalTitle};
 use crate::state::auth::use_auth;
 
 #[component]
@@ -238,19 +238,18 @@ pub fn SecretsPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <div class="text-sm breadcrumbs">
-                    <ul>
-                        <li><a href="/workspaces">"Workspaces"</a></li>
-                        <li><a href=move || format!("/workspaces/{}", workspace())>{workspace}</a></li>
-                        <li><a href=move || format!("/workspaces/{}/projects/{}", workspace(), project())>{project}</a></li>
-                        <li>{environment}</li>
-                    </ul>
-                </div>
+                <nav class="flex items-center gap-2 text-sm">
+                    <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
+                    <span class="text-cipher-muted">"/"</span>
+                    <a href=move || format!("/workspaces/{}/projects/{}", workspace(), project()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{project}</a>
+                    <span class="text-cipher-muted">"/"</span>
+                    <span class="text-cipher-text">{environment}</span>
+                </nav>
 
                 <div class="flex items-center justify-between">
-                    <h1 class="text-3xl font-bold">"Secrets"</h1>
+                    <h1 class="text-3xl font-bold text-cipher-text">"Secrets"</h1>
                     <button
-                        class="btn btn-primary"
+                        class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
                         on:click=move |_| set_show_add_modal.set(true)
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -261,33 +260,35 @@ pub fn SecretsPage() -> impl IntoView {
                 </div>
 
                 <Show when=move || error.get().is_some()>
-                    <div class="alert alert-error">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{move || error.get().unwrap_or_default()}</span>
-                        <button class="btn btn-ghost btn-sm" on:click=move |_| set_error.set(None)>"Dismiss"</button>
+                    <div class="flex items-center justify-between gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                        <div class="flex items-start gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>{move || error.get().unwrap_or_default()}</span>
+                        </div>
+                        <button class="text-sm hover:underline" on:click=move |_| set_error.set(None)>"Dismiss"</button>
                     </div>
                 </Show>
 
                 <Show when=move || loading.get()>
                     <div class="flex justify-center py-12">
-                        <span class="loading loading-spinner loading-lg"></span>
+                        <span class="inline-block w-8 h-8 border-4 rounded-full animate-spin border-amber/30 border-t-amber"></span>
                     </div>
                 </Show>
 
                 <Show when=move || !loading.get() && secrets.get().is_empty()>
-                    <div class="card bg-base-100 shadow">
-                        <div class="card-body items-center text-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="bg-vault-100 border border-terminal-border rounded-md">
+                        <div class="p-12 flex flex-col items-center text-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-cipher-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                             </svg>
-                            <h2 class="text-xl font-bold mt-4">"No secrets yet"</h2>
-                            <p class="text-base-content/70">
+                            <h2 class="text-xl font-bold mt-4 text-cipher-text">"No secrets yet"</h2>
+                            <p class="text-cipher-secondary mt-2">
                                 "Add your first secret to this environment."
                             </p>
                             <button
-                                class="btn btn-primary mt-4"
+                                class="inline-flex items-center justify-center gap-2 px-4 py-2 mt-6 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
                                 on:click=move |_| set_show_add_modal.set(true)
                             >
                                 "Add First Secret"
@@ -297,13 +298,13 @@ pub fn SecretsPage() -> impl IntoView {
                 </Show>
 
                 <Show when=move || !loading.get() && !secrets.get().is_empty()>
-                    <div class="overflow-x-auto">
-                        <table class="table bg-base-100">
+                    <div class="overflow-x-auto bg-vault-100 border border-terminal-border rounded-md">
+                        <table class="w-full text-sm">
                             <thead>
-                                <tr>
-                                    <th>"Key"</th>
-                                    <th>"Value"</th>
-                                    <th>"Actions"</th>
+                                <tr class="border-b border-terminal-border-subtle">
+                                    <th class="text-left px-4 py-3 font-medium text-cipher-secondary">"Key"</th>
+                                    <th class="text-left px-4 py-3 font-medium text-cipher-secondary">"Value"</th>
+                                    <th class="text-left px-4 py-3 font-medium text-cipher-secondary">"Actions"</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -341,17 +342,17 @@ pub fn SecretsPage() -> impl IntoView {
                                                 .unwrap_or_default()
                                         });
                                         view! {
-                                            <tr>
-                                                <td class="font-mono">{key}</td>
-                                                <td>
-                                                    <Show when=is_visible fallback=move || view! { <span class="text-base-content/50">"********"</span> }>
-                                                        <span class="font-mono">{move || displayed_value.get()}</span>
+                                            <tr class="border-b border-terminal-border-subtle last:border-b-0">
+                                                <td class="px-4 py-3 font-mono text-cipher-text">{key}</td>
+                                                <td class="px-4 py-3">
+                                                    <Show when=is_visible fallback=move || view! { <span class="text-cipher-muted">"********"</span> }>
+                                                        <span class="font-mono text-cipher-text">{move || displayed_value.get()}</span>
                                                     </Show>
                                                 </td>
-                                                <td>
-                                                    <div class="flex gap-2">
+                                                <td class="px-4 py-3">
+                                                    <div class="flex gap-1">
                                                         <button
-                                                            class="btn btn-ghost btn-sm"
+                                                            class="p-1.5 rounded-sm text-cipher-secondary hover:text-cipher-text hover:bg-vault-200 transition-colors"
                                                             on:click=toggle_visibility
                                                             title="Toggle visibility"
                                                         >
@@ -367,7 +368,7 @@ pub fn SecretsPage() -> impl IntoView {
                                                             </Show>
                                                         </button>
                                                         <button
-                                                            class="btn btn-ghost btn-sm"
+                                                            class="p-1.5 rounded-sm text-cipher-secondary hover:text-cipher-text hover:bg-vault-200 transition-colors"
                                                             title="Edit secret"
                                                             on:click={
                                                                 let k = key_for_edit.clone();
@@ -387,7 +388,7 @@ pub fn SecretsPage() -> impl IntoView {
                                                             </svg>
                                                         </button>
                                                         <button
-                                                            class="btn btn-ghost btn-sm btn-error"
+                                                            class="p-1.5 rounded-sm text-error hover:bg-error-muted transition-colors"
                                                             title="Delete secret"
                                                             on:click={
                                                                 let key = key_for_delete.clone();
@@ -410,113 +411,101 @@ pub fn SecretsPage() -> impl IntoView {
                 </Show>
 
                 // Add Secret Modal
-                <Show when=move || show_add_modal.get()>
-                    <div class="modal modal-open">
-                        <div class="modal-box">
-                            <h3 class="font-bold text-lg">"Add Secret"</h3>
-                            <form on:submit=on_add_secret class="space-y-4 mt-4">
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">"Key"</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="DATABASE_URL"
-                                        class="input input-bordered font-mono"
-                                        prop:value=move || new_key.get()
-                                        on:input=move |ev| set_new_key.set(event_target_value(&ev))
-                                    />
-                                </div>
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">"Value"</span>
-                                    </label>
-                                    <textarea
-                                        placeholder="Enter secret value"
-                                        class="textarea textarea-bordered font-mono"
-                                        rows="3"
-                                        prop:value=move || new_value.get()
-                                        on:input=move |ev| set_new_value.set(event_target_value(&ev))
-                                    ></textarea>
-                                </div>
-                                <div class="modal-action">
-                                    <button
-                                        type="button"
-                                        class="btn"
-                                        on:click=move |_| set_show_add_modal.set(false)
-                                    >
-                                        "Cancel"
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        class="btn btn-primary"
-                                        disabled=move || creating.get() || new_key.get().is_empty()
-                                    >
-                                        <Show when=move || creating.get()>
-                                            <span class="loading loading-spinner loading-sm"></span>
-                                        </Show>
-                                        "Add Secret"
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-backdrop" on:click=move |_| set_show_add_modal.set(false)></div>
-                    </div>
-                </Show>
+                <Modal open=show_add_modal.into() on_close=Callback::new(move |_| set_show_add_modal.set(false)) max_width="max-w-md">
+                    <ModalTitle>"Add Secret"</ModalTitle>
+                    <ModalBody>
+                        <form id="add-secret-form" on:submit=on_add_secret class="space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Key"</label>
+                                <input
+                                    type="text"
+                                    placeholder="DATABASE_URL"
+                                    class="w-full px-3 py-2.5 text-sm font-mono rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
+                                    prop:value=move || new_key.get()
+                                    on:input=move |ev| set_new_key.set(event_target_value(&ev))
+                                />
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Value"</label>
+                                <textarea
+                                    placeholder="Enter secret value"
+                                    class="w-full px-3 py-2.5 text-sm font-mono rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors resize-none"
+                                    rows="3"
+                                    prop:value=move || new_value.get()
+                                    on:input=move |ev| set_new_value.set(event_target_value(&ev))
+                                ></textarea>
+                            </div>
+                        </form>
+                    </ModalBody>
+                    <ModalActions>
+                        <button
+                            type="button"
+                            class="px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
+                            on:click=move |_| set_show_add_modal.set(false)
+                        >
+                            "Cancel"
+                        </button>
+                        <button
+                            type="submit"
+                            form="add-secret-form"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled=move || creating.get() || new_key.get().is_empty()
+                        >
+                            <Show when=move || creating.get()>
+                                <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
+                            </Show>
+                            "Add Secret"
+                        </button>
+                    </ModalActions>
+                </Modal>
 
                 // Edit Secret Modal
-                <Show when=move || show_edit_modal.get()>
-                    <div class="modal modal-open">
-                        <div class="modal-box">
-                            <h3 class="font-bold text-lg">"Edit Secret"</h3>
-                            <form on:submit=on_save_edit class="space-y-4 mt-4">
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">"Key"</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        class="input input-bordered font-mono"
-                                        prop:value=move || edit_key.get()
-                                        disabled=true
-                                    />
-                                </div>
-                                <div class="form-control">
-                                    <label class="label">
-                                        <span class="label-text">"Value"</span>
-                                    </label>
-                                    <textarea
-                                        placeholder="Enter secret value"
-                                        class="textarea textarea-bordered font-mono"
-                                        rows="3"
-                                        prop:value=move || edit_value.get()
-                                        on:input=move |ev| set_edit_value.set(event_target_value(&ev))
-                                    ></textarea>
-                                </div>
-                                <div class="modal-action">
-                                    <button
-                                        type="button"
-                                        class="btn"
-                                        on:click=move |_| set_show_edit_modal.set(false)
-                                    >
-                                        "Cancel"
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        class="btn btn-primary"
-                                        disabled=move || saving.get()
-                                    >
-                                        <Show when=move || saving.get()>
-                                            <span class="loading loading-spinner loading-sm"></span>
-                                        </Show>
-                                        "Save"
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-backdrop" on:click=move |_| set_show_edit_modal.set(false)></div>
-                    </div>
-                </Show>
+                <Modal open=show_edit_modal.into() on_close=Callback::new(move |_| set_show_edit_modal.set(false)) max_width="max-w-md">
+                    <ModalTitle>"Edit Secret"</ModalTitle>
+                    <ModalBody>
+                        <form id="edit-secret-form" on:submit=on_save_edit class="space-y-4">
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Key"</label>
+                                <input
+                                    type="text"
+                                    class="w-full px-3 py-2.5 text-sm font-mono rounded-sm bg-vault-inset border border-control-border text-cipher-muted cursor-not-allowed"
+                                    prop:value=move || edit_key.get()
+                                    disabled=true
+                                />
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Value"</label>
+                                <textarea
+                                    placeholder="Enter secret value"
+                                    class="w-full px-3 py-2.5 text-sm font-mono rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors resize-none"
+                                    rows="3"
+                                    prop:value=move || edit_value.get()
+                                    on:input=move |ev| set_edit_value.set(event_target_value(&ev))
+                                ></textarea>
+                            </div>
+                        </form>
+                    </ModalBody>
+                    <ModalActions>
+                        <button
+                            type="button"
+                            class="px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
+                            on:click=move |_| set_show_edit_modal.set(false)
+                        >
+                            "Cancel"
+                        </button>
+                        <button
+                            type="submit"
+                            form="edit-secret-form"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled=move || saving.get()
+                        >
+                            <Show when=move || saving.get()>
+                                <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
+                            </Show>
+                            "Save"
+                        </button>
+                    </ModalActions>
+                </Modal>
             </div>
         </Layout>
     }
