@@ -18,6 +18,8 @@ apps/zopp-web/test-results/
 *.db-*
 
 # .sqlx/ directories are committed per-backend for offline compile checks
+# Ignore root-level .sqlx (created by workspace-wide sqlx prepare, should not be committed)
+/.sqlx
 
 # Documentation build output
 docs/build/
