@@ -108,7 +108,7 @@ pub fn PermissionsPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <nav data-testid="breadcrumb" class="flex items-center gap-2 text-sm">
+                <nav class="flex items-center gap-2 text-sm">
                     <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
                     <span class="text-cipher-muted">"/"</span>
                     <span class="text-cipher-text">"Permissions"</span>
@@ -131,7 +131,7 @@ pub fn PermissionsPage() -> impl IntoView {
                 </Show>
 
                 // Tabs
-                <div data-testid="tabs" class="flex gap-1 p-1 rounded-lg bg-vault-inset">
+                <div class="flex gap-1 p-1 rounded-lg bg-vault-inset">
                     <button
                         class=move || if active_tab.get() == "permissions" {
                             "px-4 py-2 text-sm font-medium rounded-md bg-vault-100 text-cipher-text transition-colors"

@@ -13,8 +13,7 @@ pub fn Spinner(
     #[prop(optional)] size: SpinnerSize,
     #[prop(optional)] class: &'static str,
 ) -> impl IntoView {
-    let base =
-        "inline-block border-2 rounded-full animate-spin border-terminal-border border-t-amber";
+    let base = "inline-block border-2 rounded-full animate-spin border-terminal-border border-t-amber";
 
     let size_class = match size {
         SpinnerSize::Sm => "w-4 h-4",

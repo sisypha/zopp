@@ -33,11 +33,7 @@ pub fn CardTitle(
     #[prop(optional)] error: bool,
     children: Children,
 ) -> impl IntoView {
-    let color = if error {
-        "text-error"
-    } else {
-        "text-cipher-text"
-    };
+    let color = if error { "text-error" } else { "text-cipher-text" };
 
     view! {
         <h2 class=format!("flex items-center gap-2 text-base font-medium mb-2 {} {}", color, class)>
@@ -47,7 +43,10 @@ pub fn CardTitle(
 }
 
 #[component]
-pub fn CardBody(#[prop(optional)] class: &'static str, children: Children) -> impl IntoView {
+pub fn CardBody(
+    #[prop(optional)] class: &'static str,
+    children: Children,
+) -> impl IntoView {
     view! {
         <div class=format!("space-y-4 {}", class)>
             {children()}
@@ -56,7 +55,10 @@ pub fn CardBody(#[prop(optional)] class: &'static str, children: Children) -> im
 }
 
 #[component]
-pub fn CardActions(#[prop(optional)] class: &'static str, children: Children) -> impl IntoView {
+pub fn CardActions(
+    #[prop(optional)] class: &'static str,
+    children: Children,
+) -> impl IntoView {
     view! {
         <div class=format!("flex items-center justify-end gap-3 mt-4 {}", class)>
             {children()}

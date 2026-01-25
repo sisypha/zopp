@@ -16,12 +16,6 @@ pub struct WorkspaceContext {
     loading: RwSignal<bool>,
 }
 
-impl Default for WorkspaceContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl WorkspaceContext {
     pub fn new() -> Self {
         Self {
@@ -105,9 +99,7 @@ impl WorkspaceContext {
                         }
                     }
                     Err(e) => {
-                        web_sys::console::warn_1(
-                            &format!("Failed to fetch workspaces: {}", e).into(),
-                        );
+                        web_sys::console::warn_1(&format!("Failed to fetch workspaces: {}", e).into());
                     }
                 }
                 ctx.loading.set(false);
