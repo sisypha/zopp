@@ -98,7 +98,16 @@ pub async fn join(
 
         // Check if a valid verification record already exists for this email+invite
         // If so, don't regenerate the code (allows retry with same code)
-        let existing_verification = server.store.get_email_verification(&email).await.ok();
+        let existing_verification = match server.store.get_email_verification(&email).await {
+            Ok(v) => Some(v),
+            Err(zopp_storage::StoreError::NotFound) => None,
+            Err(e) => {
+                return Err(Status::internal(format!(
+                    "Failed to check existing verification: {}",
+                    e
+                )))
+            }
+        };
         let should_generate_new_code = match &existing_verification {
             Some(v) if v.invite_token == req.invite_token && v.expires_at > Utc::now() => {
                 // Valid verification exists for same invite - don't regenerate

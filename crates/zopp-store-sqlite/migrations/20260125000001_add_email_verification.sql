@@ -15,7 +15,7 @@ ALTER TABLE invites ADD COLUMN consumed INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE IF NOT EXISTS email_verifications (
   id TEXT PRIMARY KEY NOT NULL,              -- UUID string
   email TEXT NOT NULL UNIQUE,                -- Email being verified (lowercased, unique)
-  code_hash TEXT NOT NULL,                   -- SHA-256 hash of verification code (zero-knowledge)
+  code_hash TEXT NOT NULL,                   -- Argon2id hash of verification code (zero-knowledge)
   invite_token TEXT NOT NULL,                -- Invite token to consume on success
   attempts INTEGER NOT NULL DEFAULT 0,       -- Failed verification attempts
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),

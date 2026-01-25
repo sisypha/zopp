@@ -421,7 +421,7 @@ pub struct CreatePrincipalExportParams {
 pub struct EmailVerification {
     pub id: EmailVerificationId,
     pub email: String,        // Email being verified (lowercased, unique)
-    pub code_hash: String,    // SHA-256 hash of verification code (hex-encoded, zero-knowledge)
+    pub code_hash: String,    // Argon2id hash of verification code (hex-encoded, zero-knowledge)
     pub invite_token: String, // Invite token to consume on verification success
     pub attempts: i32,        // Failed verification attempts
     pub created_at: DateTime<Utc>,
@@ -432,7 +432,7 @@ pub struct EmailVerification {
 #[derive(Clone, Debug)]
 pub struct CreateEmailVerificationParams {
     pub email: String,             // Email being verified (lowercased)
-    pub code_hash: String, // SHA-256 hash of verification code (hex-encoded, zero-knowledge)
+    pub code_hash: String, // Argon2id hash of verification code (hex-encoded, zero-knowledge)
     pub invite_token: String, // Invite token to consume on success
     pub expires_at: DateTime<Utc>, // When the code expires
 }
