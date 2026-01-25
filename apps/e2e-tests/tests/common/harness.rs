@@ -578,7 +578,7 @@ impl TestHarness {
 
     /// Get the latest verification code for an email from MailHog.
     /// Returns an error if MailHog is not configured or no email was found.
-    pub fn get_verification_code_from_email(
+    pub async fn get_verification_code_from_email(
         &self,
         email: &str,
     ) -> Result<String, Box<dyn std::error::Error>> {
@@ -590,23 +590,19 @@ impl TestHarness {
         let host = std::env::var("MAILHOG_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let client = super::mailhog::MailHogClient::new(&host, backend.api_port);
 
-        // Block on async - this is OK for tests
-        let rt = tokio::runtime::Handle::current();
-        let code = rt.block_on(async {
-            // Wait for email to arrive
-            if !client.wait_for_email(email, 5000).await? {
-                let stderr = self.read_server_log(&self.server_stderr_path.clone());
-                return Err(format!(
-                    "No emails captured by MailHog for: {}\n\
-                     Server stderr:\n{}",
-                    email,
-                    stderr.unwrap_or_else(|e| format!("<failed to read: {}>", e))
-                )
-                .into());
-            }
-            client.get_verification_code(email).await
-        })?;
+        // Wait for email to arrive
+        if !client.wait_for_email(email, 5000).await? {
+            let stderr = self.read_server_log(&self.server_stderr_path.clone());
+            return Err(format!(
+                "No emails captured by MailHog for: {}\n\
+                 Server stderr:\n{}",
+                email,
+                stderr.unwrap_or_else(|e| format!("<failed to read: {}>", e))
+            )
+            .into());
+        }
 
+        let code = client.get_verification_code(email).await?;
         code.ok_or_else(|| {
             format!(
                 "No verification code found in MailHog emails for: {}",

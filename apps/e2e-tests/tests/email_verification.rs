@@ -97,7 +97,7 @@ async fn run_test_invalid_verification_code(
     println!("  Test 2: Verification email should have been sent...");
 
     // The join attempt should have sent a verification email
-    let code = harness.get_verification_code_from_email(&alice.email())?;
+    let code = harness.get_verification_code_from_email(&alice.email()).await?;
     assert_eq!(code.len(), 6, "Verification code should be 6 digits");
     assert!(
         code.chars().all(|c| c.is_ascii_digit()),
@@ -139,7 +139,7 @@ async fn run_test_full_verification_flow(
     assert!(result.failed(), "First join should fail with wrong code");
 
     // Get the verification code from the captured email
-    let code = harness.get_verification_code_from_email(&bob.email())?;
+    let code = harness.get_verification_code_from_email(&bob.email()).await?;
     println!("    Received verification code: {}", code);
 
     println!("  Test 2: Join with correct verification code should succeed...");
