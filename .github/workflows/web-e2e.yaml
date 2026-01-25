@@ -127,6 +127,8 @@ jobs:
           CI: true
           # MailHog API for verification code retrieval
           MAILHOG_API_URL: http://localhost:8025/api/v2
+          # Database URL for creating test invites
+          DATABASE_URL: sqlite://${{ github.workspace }}/zopp.db
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
