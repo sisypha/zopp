@@ -318,13 +318,24 @@ async fn cmd_serve_with_ready(
                 Some(Arc::from(provider))
             }
             Err(e) => {
+                if server_config.is_verification_required() {
+                    // If verification is required but provider init failed, abort startup
+                    return Err(format!(
+                        "Email verification is required but provider initialization failed: {}",
+                        e
+                    )
+                    .into());
+                }
                 eprintln!("Warning: Failed to create email provider: {}. Email verification will be disabled.", e);
                 None
             }
         }
     } else {
         if server_config.is_verification_required() {
-            eprintln!("Warning: Email verification is required but no email provider configured. Verification will be skipped.");
+            // If verification is required but no provider configured, abort startup
+            return Err(
+                "Email verification is required but no email provider configured. Set ZOPP_EMAIL_PROVIDER environment variable.".into()
+            );
         }
         None
     };

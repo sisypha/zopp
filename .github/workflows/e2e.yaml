@@ -32,7 +32,7 @@ jobs:
 
       # MailHog - Mock SMTP server for email verification tests
       mailhog:
-        image: mailhog/mailhog:latest
+        image: mailhog/mailhog:v1.0.1
         ports:
           - 1025:1025   # SMTP
           - 8025:8025   # Web UI / API

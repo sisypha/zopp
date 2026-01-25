@@ -9,7 +9,7 @@
  */
 
 import { test as base, Page } from '@playwright/test';
-import { execSync, spawn, ChildProcess } from 'child_process';
+import { execSync, execFileSync, spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -190,8 +190,12 @@ export async function teardownVerificationTest(ctx: VerificationTestContext): Pr
  */
 export function getVerificationCodeFromDb(dbPath: string, email: string): string | null {
   try {
-    const result = execSync(
-      `sqlite3 "${dbPath}" "SELECT code FROM email_verifications WHERE email = '${email}' ORDER BY created_at DESC LIMIT 1;"`,
+    // Use execFileSync to avoid shell injection - email is passed via SQL query directly
+    // Escape single quotes in email for SQL safety
+    const escapedEmail = email.replace(/'/g, "''");
+    const result = execFileSync(
+      'sqlite3',
+      [dbPath, `SELECT code FROM email_verifications WHERE email = '${escapedEmail}' ORDER BY created_at DESC LIMIT 1;`],
       { encoding: 'utf-8' }
     ).trim();
     return result || null;

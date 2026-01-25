@@ -3,7 +3,9 @@
 -- Principal is created only after successful verification
 
 -- Add verified flag to users table
-ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0;
+-- Existing users are grandfathered in as verified (1=TRUE) since they joined before verification was required
+-- New users joining with verification enabled will have verified=0 until email is verified
+ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 1;
 
 -- Add consumed flag to invites table (tracks whether invite has been used)
 ALTER TABLE invites ADD COLUMN consumed INTEGER NOT NULL DEFAULT 0;

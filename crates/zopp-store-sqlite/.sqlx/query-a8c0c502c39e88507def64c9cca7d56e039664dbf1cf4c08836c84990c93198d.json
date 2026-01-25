@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT token FROM invites WHERE token = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "token",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a8c0c502c39e88507def64c9cca7d56e039664dbf1cf4c08836c84990c93198d"
+}

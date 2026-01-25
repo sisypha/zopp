@@ -3,7 +3,10 @@
 -- Principal is created only after successful verification
 
 -- Add verified flag to users table
-ALTER TABLE users ADD COLUMN verified BOOLEAN NOT NULL DEFAULT FALSE;
+-- Step 1: Add column with DEFAULT TRUE to grandfather existing users as verified
+ALTER TABLE users ADD COLUMN verified BOOLEAN NOT NULL DEFAULT TRUE;
+-- Step 2: Change default to FALSE for new users (verification flow creates unverified users)
+ALTER TABLE users ALTER COLUMN verified SET DEFAULT FALSE;
 
 -- Add consumed flag to invites table (tracks whether invite has been used)
 ALTER TABLE invites ADD COLUMN consumed BOOLEAN NOT NULL DEFAULT FALSE;

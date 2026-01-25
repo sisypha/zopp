@@ -66,13 +66,31 @@ pub async fn join(
         {
             Ok((uid, _)) => uid,
             Err(StoreError::AlreadyExists) => {
-                // User exists - this could be a retry or existing user joining a workspace
-                server
-                    .store
-                    .get_user_by_email(&email)
-                    .await
-                    .map_err(|e| Status::internal(format!("Failed to get existing user: {}", e)))?
-                    .id
+                // User exists - check if this is a bootstrap invite
+                // Bootstrap invites (no workspace_ids) should not allow existing verified users
+                if invite.workspace_ids.is_empty() {
+                    let existing_user =
+                        server.store.get_user_by_email(&email).await.map_err(|e| {
+                            Status::internal(format!("Failed to get existing user: {}", e))
+                        })?;
+
+                    // If user is verified, reject bootstrap invite
+                    if existing_user.verified {
+                        return Err(Status::already_exists("User already exists"));
+                    }
+                    // If not verified, allow retry (user_id from existing user)
+                    existing_user.id
+                } else {
+                    // Workspace invite for existing user - this is allowed
+                    server
+                        .store
+                        .get_user_by_email(&email)
+                        .await
+                        .map_err(|e| {
+                            Status::internal(format!("Failed to get existing user: {}", e))
+                        })?
+                        .id
+                }
             }
             Err(e) => return Err(Status::internal(format!("Failed to create user: {}", e))),
         };

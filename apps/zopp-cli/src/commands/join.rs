@@ -274,14 +274,16 @@ async fn verify_email_flow(
     email: &str,
     keys: &PrincipalKeys,
 ) -> Result<Option<VerifySuccess>, Box<dyn std::error::Error>> {
-    const MAX_ATTEMPTS: u32 = 3;
-    let mut attempt = 0;
+    // Track if user must resend before trying another code (after server lockout)
+    let mut must_resend = false;
 
     loop {
-        attempt += 1;
-
-        // Prompt for verification code
-        print!("Enter verification code (or 'r' to resend, 'q' to quit): ");
+        // If user must resend, don't allow entering codes until they do
+        if must_resend {
+            print!("Enter 'r' to request a new code (or 'q' to quit): ");
+        } else {
+            print!("Enter verification code (or 'r' to resend, 'q' to quit): ");
+        }
         io::stdout().flush()?;
 
         let mut input = String::new();
@@ -304,12 +306,18 @@ async fn verify_email_flow(
 
             if resend_response.success {
                 println!("✓ New verification code sent to {}\n", email);
-                attempt = 0; // Reset attempts after successful resend
+                must_resend = false; // Allow attempts again after successful resend
                 continue;
             } else {
                 println!("⚠ {}\n", resend_response.message);
                 continue;
             }
+        }
+
+        // If user must resend but didn't, remind them
+        if must_resend {
+            println!("⚠ Please request a new code first (enter 'r').\n");
+            continue;
         }
 
         // Validate code format (6 digits)
@@ -343,10 +351,10 @@ async fn verify_email_flow(
 
         println!("⚠ {}\n", verify_response.message);
 
-        // Check if we've exceeded max attempts
-        if attempt >= MAX_ATTEMPTS {
-            println!("Too many failed attempts. You can request a new code with 'r'.\n");
-            attempt = 0; // Reset to allow more attempts after message
+        // Check if server says no attempts remaining (server deleted the verification)
+        if verify_response.attempts_remaining <= 0 {
+            println!("You must request a new verification code.\n");
+            must_resend = true;
         }
     }
 }

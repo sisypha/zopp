@@ -64,10 +64,14 @@ impl Store for PostgresStore {
                 existing.id
             } else {
                 let user_id = Uuid::now_v7();
+                // If principal is being created, user is immediately verified (non-verification flow)
+                // If no principal, user is not verified yet (verification flow)
+                let verified = params.principal.is_some();
                 sqlx::query!(
-                    "INSERT INTO users(id, email) VALUES($1, $2)",
+                    "INSERT INTO users(id, email, verified) VALUES($1, $2, $3)",
                     user_id,
-                    params.email
+                    params.email,
+                    verified
                 )
                 .execute(&mut *tx)
                 .await
@@ -120,11 +124,14 @@ impl Store for PostgresStore {
             Ok((UserId(actual_user_id), principal_id))
         } else {
             let user_id = Uuid::now_v7();
+            // No principal = verification flow, so user is not verified yet
+            let verified = false;
 
             sqlx::query!(
-                "INSERT INTO users(id, email) VALUES($1, $2)",
+                "INSERT INTO users(id, email, verified) VALUES($1, $2, $3)",
                 user_id,
-                params.email
+                params.email,
+                verified
             )
             .execute(&self.pool)
             .await
@@ -428,13 +435,32 @@ impl Store for PostgresStore {
     }
 
     async fn consume_invite(&self, token: &str) -> Result<(), StoreError> {
-        let result = sqlx::query!("UPDATE invites SET consumed = TRUE WHERE token = $1", token)
-            .execute(&self.pool)
+        // Atomically consume invite only if not already consumed
+        // This prevents concurrent requests from both succeeding
+        let result = sqlx::query!(
+            "UPDATE invites SET consumed = TRUE WHERE token = $1 AND consumed = FALSE",
+            token
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            // Either token doesn't exist or invite was already consumed
+            // Check which case it is for a more specific error
+            let exists = sqlx::query_scalar!(
+                "SELECT EXISTS(SELECT 1 FROM invites WHERE token = $1) as \"exists!: bool\"",
+                token
+            )
+            .fetch_one(&self.pool)
             .await
             .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        if result.rows_affected() == 0 {
-            Err(StoreError::NotFound)
+            if exists {
+                Err(StoreError::AlreadyExists) // Invite was already consumed
+            } else {
+                Err(StoreError::NotFound) // Token doesn't exist
+            }
         } else {
             Ok(())
         }

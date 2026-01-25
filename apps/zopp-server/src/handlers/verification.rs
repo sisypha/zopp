@@ -107,7 +107,26 @@ pub async fn verify_email(
             .await
             .map_err(|e| Status::internal(format!("Failed to increment attempts: {}", e)))?;
 
-        let remaining = MAX_ATTEMPTS - attempts;
+        // Check if we've now reached MAX_ATTEMPTS after incrementing
+        if attempts >= MAX_ATTEMPTS {
+            // Delete the verification record - user must request a new code
+            let _ = server
+                .store
+                .delete_email_verification(&verification.id)
+                .await;
+
+            return Ok(Response::new(VerifyEmailResponse {
+                success: false,
+                message: "Too many failed attempts. Please request a new verification code."
+                    .to_string(),
+                attempts_remaining: 0,
+                user_id: String::new(),
+                principal_id: String::new(),
+                workspaces: vec![],
+            }));
+        }
+
+        let remaining = (MAX_ATTEMPTS - attempts).max(0);
         return Ok(Response::new(VerifyEmailResponse {
             success: false,
             message: format!(

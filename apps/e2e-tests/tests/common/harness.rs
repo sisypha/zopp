@@ -617,6 +617,8 @@ impl TestHarness {
     pub fn get_verification_code(&self, email: &str) -> Result<String, Box<dyn std::error::Error>> {
         if self.database_url.starts_with("postgres:") {
             // PostgreSQL: use psql
+            // Escape single quotes for SQL safety
+            let escaped_email = email.replace('\'', "''");
             let output = Command::new("psql")
                 .arg(&self.database_url)
                 .arg("-t") // tuple only (no headers)
@@ -624,7 +626,7 @@ impl TestHarness {
                 .arg("-c")
                 .arg(format!(
                     "SELECT code FROM email_verifications WHERE email = '{}' ORDER BY created_at DESC LIMIT 1",
-                    email
+                    escaped_email
                 ))
                 .output()?;
 
@@ -648,12 +650,14 @@ impl TestHarness {
                 .map(|p| p.split('?').next().unwrap_or(p))
                 .ok_or("Invalid SQLite URL")?;
 
+            // Escape single quotes for SQL safety
+            let escaped_email = email.replace('\'', "''");
             let output = Command::new("sqlite3")
                 .arg(db_path)
                 .arg("-noheader")
                 .arg(format!(
                     "SELECT code FROM email_verifications WHERE email = '{}' ORDER BY created_at DESC LIMIT 1;",
-                    email
+                    escaped_email
                 ))
                 .output()?;
 

@@ -63,16 +63,18 @@ jobs:
           docker run -d \
             --name mailhog \
             --network host \
-            mailhog/mailhog:latest
+            mailhog/mailhog:v1.0.1
           # Wait for MailHog to be ready
           for i in {1..30}; do
             if curl -sf http://localhost:8025/api/v2/messages > /dev/null 2>&1; then
               echo "MailHog is ready"
-              break
+              exit 0
             fi
             echo "Waiting for MailHog... ($i/30)"
             sleep 1
           done
+          echo "ERROR: MailHog failed to become ready"
+          exit 1
 
       - name: Start zopp-server
         run: |

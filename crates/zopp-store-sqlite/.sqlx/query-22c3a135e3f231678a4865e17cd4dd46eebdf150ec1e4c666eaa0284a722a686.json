@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE invites SET consumed = 1 WHERE token = ? AND consumed = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "22c3a135e3f231678a4865e17cd4dd46eebdf150ec1e4c666eaa0284a722a686"
+}
