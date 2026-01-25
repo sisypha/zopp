@@ -16,6 +16,12 @@ pub struct WorkspaceContext {
     loading: RwSignal<bool>,
 }
 
+impl Default for WorkspaceContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WorkspaceContext {
     pub fn new() -> Self {
         Self {
