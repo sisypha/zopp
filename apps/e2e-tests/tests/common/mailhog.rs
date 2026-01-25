@@ -168,11 +168,9 @@ impl MailHogClient {
 
 #[cfg(test)]
 mod tests {
-    use super::MailHogClient;
-
     #[tokio::test]
     async fn test_mailhog_client_creation() {
-        let client = MailHogClient::new("localhost", 8025);
+        let client = super::MailHogClient::new("localhost", 8025);
         assert!(client.api_url.contains("localhost:8025"));
     }
 }

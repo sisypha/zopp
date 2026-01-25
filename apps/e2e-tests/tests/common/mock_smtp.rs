@@ -195,11 +195,9 @@ impl Drop for MockSmtpServer {
 
 #[cfg(test)]
 mod tests {
-    use super::MockSmtpServer;
-
     #[test]
     fn test_mock_smtp_starts() {
-        let server = MockSmtpServer::start().expect("Failed to start mock SMTP");
+        let server = super::MockSmtpServer::start().expect("Failed to start mock SMTP");
         assert!(server.port() > 0);
     }
 }
