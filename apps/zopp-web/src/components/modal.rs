@@ -8,7 +8,11 @@ pub fn Modal(
     #[prop(optional)] max_width: &'static str,
     children: ChildrenFn,
 ) -> impl IntoView {
-    let max_w = if max_width.is_empty() { "max-w-lg" } else { max_width };
+    let max_w = if max_width.is_empty() {
+        "max-w-lg"
+    } else {
+        max_width
+    };
     let children = StoredValue::new(children);
 
     view! {
@@ -31,10 +35,7 @@ pub fn Modal(
 }
 
 #[component]
-pub fn ModalTitle(
-    #[prop(optional)] class: &'static str,
-    children: Children,
-) -> impl IntoView {
+pub fn ModalTitle(#[prop(optional)] class: &'static str, children: Children) -> impl IntoView {
     view! {
         <h3 class=format!("flex items-center gap-3 text-lg font-semibold text-cipher-text mb-4 {}", class)>
             {children()}
@@ -43,10 +44,7 @@ pub fn ModalTitle(
 }
 
 #[component]
-pub fn ModalBody(
-    #[prop(optional)] class: &'static str,
-    children: Children,
-) -> impl IntoView {
+pub fn ModalBody(#[prop(optional)] class: &'static str, children: Children) -> impl IntoView {
     view! {
         <div class=format!("mb-6 {}", class)>
             {children()}
@@ -55,10 +53,7 @@ pub fn ModalBody(
 }
 
 #[component]
-pub fn ModalActions(
-    #[prop(optional)] class: &'static str,
-    children: Children,
-) -> impl IntoView {
+pub fn ModalActions(#[prop(optional)] class: &'static str, children: Children) -> impl IntoView {
     view! {
         <div class=format!("flex items-center justify-end gap-3 {}", class)>
             {children()}

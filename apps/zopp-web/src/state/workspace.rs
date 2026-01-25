@@ -99,7 +99,9 @@ impl WorkspaceContext {
                         }
                     }
                     Err(e) => {
-                        web_sys::console::warn_1(&format!("Failed to fetch workspaces: {}", e).into());
+                        web_sys::console::warn_1(
+                            &format!("Failed to fetch workspaces: {}", e).into(),
+                        );
                     }
                 }
                 ctx.loading.set(false);
