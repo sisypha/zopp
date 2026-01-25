@@ -22,6 +22,43 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+/**
+ * Get verification code from MailHog API.
+ * Waits for email to arrive and extracts the 6-digit code.
+ */
+async function getVerificationCodeFromMailHog(apiUrl: string, toEmail: string, timeoutMs = 10000): Promise<string | null> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(`${apiUrl}/messages`);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      // Find email sent to this address (most recent first)
+      const email = data.items?.reverse().find((msg: { To?: Array<{ Mailbox: string; Domain: string }> }) =>
+        msg.To?.some(to => `${to.Mailbox}@${to.Domain}`.toLowerCase() === toEmail.toLowerCase())
+      );
+
+      if (email) {
+        // Extract 6-digit code from email body
+        const body = email.Content?.Body || '';
+        const match = body.match(/\b(\d{6})\b/);
+        if (match) {
+          return match[1];
+        }
+      }
+    } catch {
+      // Retry on error
+    }
+
+    // Wait before retrying
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  return null;
+}
+
 // Credentials structure matching what the web app expects
 interface StoredCredentials {
   principal_id: string;
@@ -144,11 +181,47 @@ export async function setupTestData(serverUrl: string): Promise<TestContext> {
   const email = `${testId}@example.com`;
   const principalDeviceName = `${testId}-device`;
 
-  // Create test user
-  execSync(`${cliBin} --server ${serverUrl} --use-file-storage join "${inviteToken}" ${email} --principal ${principalDeviceName}`, {
-    env: { ...process.env, HOME: userHomeDir },
-    stdio: 'pipe',
-  });
+  // Check if email verification is enabled by environment variable
+  const mailhogApiUrl = process.env.MAILHOG_API_URL;
+  const isVerificationEnabled = !!mailhogApiUrl;
+
+  if (isVerificationEnabled) {
+    // Email verification flow:
+    // 1. First join attempt with invalid code triggers verification email
+    // 2. Get code from MailHog
+    // 3. Join with correct code
+
+    // Step 1: Trigger verification email (use invalid code to fail but still trigger email send)
+    try {
+      execSync(`${cliBin} --server ${serverUrl} --use-file-storage join "${inviteToken}" ${email} --principal ${principalDeviceName} --verification-code 000000`, {
+        env: { ...process.env, HOME: userHomeDir },
+        stdio: 'pipe',
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+      });
+    } catch {
+      // Expected to fail with invalid code - but email should be sent
+    }
+
+    // Step 2: Get verification code from MailHog
+    const verificationCode = await getVerificationCodeFromMailHog(mailhogApiUrl, email);
+    if (!verificationCode) {
+      throw new Error(`Failed to get verification code from MailHog for ${email}`);
+    }
+
+    // Step 3: Join with correct code
+    execSync(`${cliBin} --server ${serverUrl} --use-file-storage join "${inviteToken}" ${email} --principal ${principalDeviceName} --verification-code ${verificationCode}`, {
+      env: { ...process.env, HOME: userHomeDir },
+      stdio: 'pipe',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } else {
+    // No verification - direct join
+    execSync(`${cliBin} --server ${serverUrl} --use-file-storage join "${inviteToken}" ${email} --principal ${principalDeviceName}`, {
+      env: { ...process.env, HOME: userHomeDir },
+      stdio: 'pipe',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  }
 
   // Read credentials from CLI config
   const configPath = path.join(userHomeDir, '.zopp', 'config.json');
