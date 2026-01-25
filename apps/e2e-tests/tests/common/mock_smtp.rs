@@ -2,6 +2,11 @@
 //!
 //! Uses mailin-embedded to create a real SMTP server that captures emails,
 //! allowing tests to retrieve verification codes from the email body.
+//!
+//! Note: This module is kept for potential future use but currently tests use
+//! MailHog (via docker-compose.test.yaml) for email capture.
+
+#![allow(dead_code)]
 
 use mailin_embedded::response::{OK, START_DATA};
 use mailin_embedded::{Handler, Response, Server};

@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 /// MailHog API response for messages
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields needed for deserialization but not all are read
 pub struct MailHogMessages {
     pub total: u32,
     pub count: u32,
@@ -156,7 +157,7 @@ impl MailHogClient {
         let timeout = std::time::Duration::from_millis(timeout_ms);
 
         while start.elapsed() < timeout {
-            if let Some(_) = self.get_email_for(to_email).await? {
+            if self.get_email_for(to_email).await?.is_some() {
                 return Ok(true);
             }
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
