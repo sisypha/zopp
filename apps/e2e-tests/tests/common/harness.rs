@@ -266,7 +266,8 @@ impl TestHarness {
             mailhog_smtp_port, mailhog_api_port
         );
         // Clear any existing emails from previous test runs
-        let _ = mailhog_client.clear().await;
+        // Fail fast if cleanup fails to avoid stale messages causing flaky tests
+        mailhog_client.clear().await?;
 
         let email_backend = Some(EmailBackend {
             smtp_port: mailhog_smtp_port,

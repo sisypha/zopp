@@ -317,20 +317,8 @@ pub async fn resend_verification(
     // Generate new verification code
     let code = generate_verification_code();
 
-    // Update verification record with new code (upsert preserves invite_token)
-    let expires_at = Utc::now() + chrono::Duration::minutes(15);
-    server
-        .store
-        .create_email_verification(&CreateEmailVerificationParams {
-            email: email.clone(),
-            code: code.clone(),
-            invite_token: existing.invite_token, // Preserve the original invite token
-            expires_at,
-        })
-        .await
-        .map_err(|e| Status::internal(format!("Failed to update verification: {}", e)))?;
-
-    // Send verification email
+    // Send verification email FIRST before updating DB
+    // This ensures we don't lose the old code if sending fails
     let email_config = server.config.email.as_ref().unwrap();
     if let Err(e) = provider
         .send_verification(
@@ -347,6 +335,19 @@ pub async fn resend_verification(
             message: "Failed to send verification email. Please try again later.".to_string(),
         }));
     }
+
+    // Email sent successfully - now update verification record with new code
+    let expires_at = Utc::now() + chrono::Duration::minutes(15);
+    server
+        .store
+        .create_email_verification(&CreateEmailVerificationParams {
+            email: email.clone(),
+            code: code.clone(),
+            invite_token: existing.invite_token, // Preserve the original invite token
+            expires_at,
+        })
+        .await
+        .map_err(|e| Status::internal(format!("Failed to update verification: {}", e)))?;
 
     Ok(Response::new(ResendVerificationResponse {
         success: true,

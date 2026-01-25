@@ -40,12 +40,16 @@ async function waitForServer(url: string, timeoutMs: number = 30000): Promise<bo
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
-      await fetch(url, { signal: controller.signal });
+      const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
-      return true;
+      // Only return true if server responds successfully
+      if (response.ok) {
+        return true;
+      }
     } catch {
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Retry on network error
     }
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
   return false;
 }

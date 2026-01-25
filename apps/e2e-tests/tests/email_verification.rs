@@ -136,7 +136,7 @@ async fn run_test_full_verification_flow(
         "--principal",
         &bob.principal(),
         "--verification-code",
-        "000000",
+        "XXXXXX", // Non-numeric code - guaranteed to be invalid
     ]);
     assert!(result.failed(), "First join should fail with wrong code");
 
