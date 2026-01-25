@@ -21,8 +21,7 @@ nix = { version = "0.29", features = ["signal"] }
 # For backend_test! macro name generation
 paste = "1.0"
 
-# For mock SMTP server in email verification tests
-mailin-embedded = "0.8"
+# For email parsing in tests
 regex = "1"
 
 [[test]]

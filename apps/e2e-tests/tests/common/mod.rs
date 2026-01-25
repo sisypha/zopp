@@ -2,7 +2,6 @@
 
 pub mod harness;
 pub mod mailhog;
-pub mod mock_smtp;
 pub mod utils;
 
 // Re-export for tests that use the new infrastructure
@@ -11,7 +10,5 @@ pub mod utils;
 pub use harness::*;
 #[allow(unused_imports)]
 pub use mailhog::*;
-#[allow(unused_imports)]
-pub use mock_smtp::*;
 #[allow(unused_imports)]
 pub use utils::*;
