@@ -612,9 +612,10 @@ impl TestHarness {
         })
     }
 
-    /// Get the latest verification code for an email from the database.
-    /// This is used for E2E testing email verification flows.
-    pub fn get_verification_code(&self, email: &str) -> Result<String, Box<dyn std::error::Error>> {
+    /// Check that a verification record exists for an email in the database.
+    /// Returns true if a verification record exists with a hashed code.
+    /// Note: We store hashes (zero-knowledge), so we can't retrieve the plaintext code.
+    pub fn has_verification_record(&self, email: &str) -> Result<bool, Box<dyn std::error::Error>> {
         if self.database_url.starts_with("postgres:") {
             // PostgreSQL: use psql
             // Escape single quotes for SQL safety
@@ -625,7 +626,7 @@ impl TestHarness {
                 .arg("-A") // unaligned output
                 .arg("-c")
                 .arg(format!(
-                    "SELECT code FROM email_verifications WHERE email = '{}' ORDER BY created_at DESC LIMIT 1",
+                    "SELECT COUNT(*) FROM email_verifications WHERE email = '{}'",
                     escaped_email
                 ))
                 .output()?;
@@ -636,11 +637,11 @@ impl TestHarness {
                 );
             }
 
-            let code = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if code.is_empty() {
-                return Err(format!("No verification code found for email: {}", email).into());
-            }
-            Ok(code)
+            let count: i32 = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse()
+                .unwrap_or(0);
+            Ok(count > 0)
         } else {
             // SQLite: extract path and use sqlite3
             let db_path = self
@@ -656,7 +657,7 @@ impl TestHarness {
                 .arg(db_path)
                 .arg("-noheader")
                 .arg(format!(
-                    "SELECT code FROM email_verifications WHERE email = '{}' ORDER BY created_at DESC LIMIT 1;",
+                    "SELECT COUNT(*) FROM email_verifications WHERE email = '{}';",
                     escaped_email
                 ))
                 .output()?;
@@ -669,11 +670,11 @@ impl TestHarness {
                 .into());
             }
 
-            let code = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if code.is_empty() {
-                return Err(format!("No verification code found for email: {}", email).into());
-            }
-            Ok(code)
+            let count: i32 = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse()
+                .unwrap_or(0);
+            Ok(count > 0)
         }
     }
 }

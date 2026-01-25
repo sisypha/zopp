@@ -2,6 +2,7 @@
 
 use chrono::Utc;
 use tonic::{Request, Response, Status};
+use zopp_crypto::argon2_hash;
 use zopp_storage::{CreateEmailVerificationParams, Store};
 
 use crate::email::generate_verification_code;
@@ -95,9 +96,12 @@ pub async fn verify_email(
         }));
     }
 
-    // Verify the code using constant-time comparison
+    // Hash the submitted code and compare with stored hash (email is already lowercased)
+    let submitted_hash = argon2_hash(req.code.as_bytes(), email.as_bytes())
+        .map_err(|e| Status::internal(format!("Failed to hash verification code: {}", e)))?;
     let code_matches: bool =
-        subtle::ConstantTimeEq::ct_eq(req.code.as_bytes(), verification.code.as_bytes()).into();
+        subtle::ConstantTimeEq::ct_eq(submitted_hash.as_bytes(), verification.code_hash.as_bytes())
+            .into();
 
     if !code_matches {
         // Increment attempts
@@ -336,13 +340,15 @@ pub async fn resend_verification(
         }));
     }
 
-    // Email sent successfully - now update verification record with new code
+    // Email sent successfully - now update verification record with hashed code
+    let code_hash = argon2_hash(code.as_bytes(), email.as_bytes())
+        .map_err(|e| Status::internal(format!("Failed to hash verification code: {}", e)))?;
     let expires_at = Utc::now() + chrono::Duration::minutes(15);
     server
         .store
         .create_email_verification(&CreateEmailVerificationParams {
             email: email.clone(),
-            code: code.clone(),
+            code_hash,
             invite_token: existing.invite_token, // Preserve the original invite token
             expires_at,
         })

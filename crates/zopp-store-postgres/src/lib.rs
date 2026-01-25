@@ -611,19 +611,19 @@ impl Store for PostgresStore {
 
         // Upsert: email is unique, so this replaces any existing verification for this email
         let row = sqlx::query!(
-            r#"INSERT INTO email_verifications(id, email, code, invite_token, expires_at)
+            r#"INSERT INTO email_verifications(id, email, code_hash, invite_token, expires_at)
                VALUES($1, $2, $3, $4, $5)
                ON CONFLICT (email) DO UPDATE SET
                    id = EXCLUDED.id,
-                   code = EXCLUDED.code,
+                   code_hash = EXCLUDED.code_hash,
                    invite_token = EXCLUDED.invite_token,
                    expires_at = EXCLUDED.expires_at,
                    attempts = 0,
                    created_at = NOW()
-               RETURNING id, email, code, invite_token, attempts, created_at, expires_at"#,
+               RETURNING id, email, code_hash, invite_token, attempts, created_at, expires_at"#,
             id,
             email,
-            params.code,
+            params.code_hash,
             params.invite_token,
             params.expires_at
         )
@@ -634,7 +634,7 @@ impl Store for PostgresStore {
         Ok(EmailVerification {
             id: EmailVerificationId(row.id),
             email: row.email,
-            code: row.code,
+            code_hash: row.code_hash,
             invite_token: row.invite_token,
             attempts: row.attempts,
             created_at: row.created_at,
@@ -646,7 +646,7 @@ impl Store for PostgresStore {
         let email_lower = email.to_lowercase();
         // Email is unique, so no need for ORDER BY/LIMIT
         let row = sqlx::query!(
-            r#"SELECT id, email, code, invite_token, attempts, created_at, expires_at
+            r#"SELECT id, email, code_hash, invite_token, attempts, created_at, expires_at
                FROM email_verifications
                WHERE email = $1"#,
             email_lower
@@ -659,7 +659,7 @@ impl Store for PostgresStore {
         Ok(EmailVerification {
             id: EmailVerificationId(row.id),
             email: row.email,
-            code: row.code,
+            code_hash: row.code_hash,
             invite_token: row.invite_token,
             attempts: row.attempts,
             created_at: row.created_at,

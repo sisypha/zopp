@@ -108,11 +108,16 @@ async fn run_test_invalid_verification_code(
     );
     println!("    Retrieved verification code from email: {}", code);
 
-    println!("  Test 3: Database code should match email code...");
+    println!(
+        "  Test 3: Database should have a verification record (hash stored, not plaintext)..."
+    );
 
-    let db_code = harness.get_verification_code(&alice.email())?;
-    assert_eq!(code, db_code, "Email code should match database code");
-    println!("    Database code matches: {}", db_code);
+    let has_record = harness.has_verification_record(&alice.email())?;
+    assert!(
+        has_record,
+        "Database should have a verification record for the email"
+    );
+    println!("    Verification record exists in database (code hash stored)");
 
     println!("test_email_verification_invalid_code PASSED");
     Ok(())

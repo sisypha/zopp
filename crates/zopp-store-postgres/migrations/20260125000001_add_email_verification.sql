@@ -16,7 +16,7 @@ ALTER TABLE invites ADD COLUMN consumed BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS email_verifications (
   id UUID PRIMARY KEY NOT NULL,
   email TEXT NOT NULL UNIQUE,                -- Email being verified (lowercased, unique)
-  code TEXT NOT NULL,                        -- 6-digit verification code
+  code_hash TEXT NOT NULL,                   -- SHA-256 hash of verification code (zero-knowledge)
   invite_token TEXT NOT NULL,                -- Invite token to consume on success
   attempts INTEGER NOT NULL DEFAULT 0,       -- Failed verification attempts
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

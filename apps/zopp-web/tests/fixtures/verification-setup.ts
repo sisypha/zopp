@@ -189,22 +189,22 @@ export async function teardownVerificationTest(ctx: VerificationTestContext): Pr
 }
 
 /**
- * Get verification code from the database directly.
- * This is a fallback if mock SMTP doesn't capture the email.
+ * Check if a verification record exists in the database.
+ * Note: We store hashes (zero-knowledge), so we can't retrieve the plaintext code.
  */
-export function getVerificationCodeFromDb(dbPath: string, email: string): string | null {
+export function hasVerificationRecord(dbPath: string, email: string): boolean {
   try {
     // Use execFileSync to avoid shell injection - email is passed via SQL query directly
     // Escape single quotes in email for SQL safety
     const escapedEmail = email.replace(/'/g, "''");
     const result = execFileSync(
       'sqlite3',
-      [dbPath, `SELECT code FROM email_verifications WHERE email = '${escapedEmail}' ORDER BY created_at DESC LIMIT 1;`],
+      [dbPath, `SELECT COUNT(*) FROM email_verifications WHERE email = '${escapedEmail}';`],
       { encoding: 'utf-8' }
     ).trim();
-    return result || null;
+    return parseInt(result, 10) > 0;
   } catch {
-    return null;
+    return false;
   }
 }
 

@@ -140,10 +140,9 @@ impl MailHogClient {
 
     /// Clear all messages
     pub async fn clear(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.client
-            .delete(format!("{}/messages", self.api_url))
-            .send()
-            .await?;
+        // MailHog delete endpoint is on v1, not v2
+        let delete_url = self.api_url.replace("/api/v2", "/api/v1/messages");
+        self.client.delete(&delete_url).send().await?;
         Ok(())
     }
 

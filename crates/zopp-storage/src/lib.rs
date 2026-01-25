@@ -421,7 +421,7 @@ pub struct CreatePrincipalExportParams {
 pub struct EmailVerification {
     pub id: EmailVerificationId,
     pub email: String,        // Email being verified (lowercased, unique)
-    pub code: String,         // 6-digit verification code
+    pub code_hash: String,    // SHA-256 hash of verification code (hex-encoded, zero-knowledge)
     pub invite_token: String, // Invite token to consume on verification success
     pub attempts: i32,        // Failed verification attempts
     pub created_at: DateTime<Utc>,
@@ -432,8 +432,8 @@ pub struct EmailVerification {
 #[derive(Clone, Debug)]
 pub struct CreateEmailVerificationParams {
     pub email: String,             // Email being verified (lowercased)
-    pub code: String,              // 6-digit verification code
-    pub invite_token: String,      // Invite token to consume on success
+    pub code_hash: String, // SHA-256 hash of verification code (hex-encoded, zero-knowledge)
+    pub invite_token: String, // Invite token to consume on success
     pub expires_at: DateTime<Utc>, // When the code expires
 }
 
@@ -1177,7 +1177,7 @@ mod tests {
             Ok(EmailVerification {
                 id: EmailVerificationId(Uuid::new_v4()),
                 email: params.email.clone(),
-                code: params.code.clone(),
+                code_hash: params.code_hash.clone(),
                 invite_token: params.invite_token.clone(),
                 attempts: 0,
                 created_at: Utc::now(),

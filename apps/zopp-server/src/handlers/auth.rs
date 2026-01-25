@@ -4,6 +4,7 @@ use chrono::Utc;
 use prost::Message;
 use sha2::{Digest, Sha256};
 use tonic::{Request, Response, Status};
+use zopp_crypto::argon2_hash;
 use zopp_proto::{
     JoinRequest, JoinResponse, LoginRequest, LoginResponse, RegisterRequest, RegisterResponse,
 };
@@ -129,13 +130,17 @@ pub async fn join(
             }
 
             // Email sent successfully - now store verification record (expires in 15 minutes)
+            // Hash the code using Argon2id with email as salt for zero-knowledge storage
+            let code_hash = argon2_hash(code.as_bytes(), email.as_bytes()).map_err(|e| {
+                Status::internal(format!("Failed to hash verification code: {}", e))
+            })?;
             // This upserts - if there's an existing verification for this email, it's replaced
             let expires_at = Utc::now() + chrono::Duration::minutes(15);
             server
                 .store
                 .create_email_verification(&CreateEmailVerificationParams {
                     email: email.clone(),
-                    code: code.clone(),
+                    code_hash,
                     invite_token: req.invite_token.clone(),
                     expires_at,
                 })

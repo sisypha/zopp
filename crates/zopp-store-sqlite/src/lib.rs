@@ -773,11 +773,12 @@ impl Store for SqliteStore {
         let email = params.email.to_lowercase();
 
         // Upsert: email is unique, so this replaces any existing verification for this email
+        // Note: code_hash is already hashed by the caller (zero-knowledge)
         sqlx::query!(
-            "INSERT OR REPLACE INTO email_verifications(id, email, code, invite_token, expires_at) VALUES(?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO email_verifications(id, email, code_hash, invite_token, expires_at) VALUES(?, ?, ?, ?, ?)",
             id_str,
             email,
-            params.code,
+            params.code_hash,
             params.invite_token,
             params.expires_at
         )
@@ -788,7 +789,7 @@ impl Store for SqliteStore {
         Ok(EmailVerification {
             id: EmailVerificationId(id),
             email,
-            code: params.code.clone(),
+            code_hash: params.code_hash.clone(),
             invite_token: params.invite_token.clone(),
             attempts: 0,
             created_at: Utc::now(),
@@ -800,7 +801,7 @@ impl Store for SqliteStore {
         let email_lower = email.to_lowercase();
         // Email is unique, so no need for ORDER BY/LIMIT
         let row = sqlx::query!(
-            r#"SELECT id, email, code, invite_token, attempts,
+            r#"SELECT id, email, code_hash, invite_token, attempts,
                created_at as "created_at: DateTime<Utc>",
                expires_at as "expires_at: DateTime<Utc>"
                FROM email_verifications
@@ -819,7 +820,7 @@ impl Store for SqliteStore {
                 Ok(EmailVerification {
                     id: EmailVerificationId(id),
                     email: row.email,
-                    code: row.code,
+                    code_hash: row.code_hash,
                     invite_token: row.invite_token,
                     attempts: row.attempts as i32,
                     created_at: row.created_at,
@@ -4305,14 +4306,18 @@ mod tests {
 
         let params = zopp_storage::CreateEmailVerificationParams {
             email: "Test@Example.com".to_string(),
-            code: "123456".to_string(),
+            code_hash: "e150a1ec81e8e93e1eae2c3a77e66ec6dbd6a3b460f89c1d08aecf422ee401a0"
+                .to_string(), // SHA256("123456")
             invite_token: "test-token".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
         };
 
         let verification = s.create_email_verification(&params).await.unwrap();
         assert_eq!(verification.email, "test@example.com"); // Should be lowercased
-        assert_eq!(verification.code, "123456");
+        assert_eq!(
+            verification.code_hash,
+            "e150a1ec81e8e93e1eae2c3a77e66ec6dbd6a3b460f89c1d08aecf422ee401a0"
+        );
         assert_eq!(verification.invite_token, "test-token");
         assert_eq!(verification.attempts, 0);
 
@@ -4340,7 +4345,8 @@ mod tests {
 
         let params = zopp_storage::CreateEmailVerificationParams {
             email: "test@example.com".to_string(),
-            code: "123456".to_string(),
+            code_hash: "e150a1ec81e8e93e1eae2c3a77e66ec6dbd6a3b460f89c1d08aecf422ee401a0"
+                .to_string(), // SHA256("123456")
             invite_token: "test-token".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
         };
@@ -4372,7 +4378,8 @@ mod tests {
 
         let params = zopp_storage::CreateEmailVerificationParams {
             email: "test@example.com".to_string(),
-            code: "123456".to_string(),
+            code_hash: "e150a1ec81e8e93e1eae2c3a77e66ec6dbd6a3b460f89c1d08aecf422ee401a0"
+                .to_string(), // SHA256("123456")
             invite_token: "test-token".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
         };
@@ -4406,7 +4413,7 @@ mod tests {
         // Create an expired verification
         let expired_params = zopp_storage::CreateEmailVerificationParams {
             email: "expired@example.com".to_string(),
-            code: "111111".to_string(),
+            code_hash: "hash111111".to_string(),
             invite_token: "expired-token".to_string(),
             expires_at: chrono::Utc::now() - chrono::Duration::minutes(1), // Already expired
         };
@@ -4415,7 +4422,7 @@ mod tests {
         // Create a valid verification
         let valid_params = zopp_storage::CreateEmailVerificationParams {
             email: "valid@example.com".to_string(),
-            code: "222222".to_string(),
+            code_hash: "hash222222".to_string(),
             invite_token: "valid-token".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
         };
@@ -4483,7 +4490,7 @@ mod tests {
         // Create first verification
         let params1 = zopp_storage::CreateEmailVerificationParams {
             email: "test@example.com".to_string(),
-            code: "111111".to_string(),
+            code_hash: "hash111111".to_string(),
             invite_token: "token1".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
         };
@@ -4492,16 +4499,16 @@ mod tests {
         // Create second verification for same email - should upsert
         let params2 = zopp_storage::CreateEmailVerificationParams {
             email: "test@example.com".to_string(),
-            code: "222222".to_string(),
+            code_hash: "hash222222".to_string(),
             invite_token: "token2".to_string(),
             expires_at: chrono::Utc::now() + chrono::Duration::minutes(15),
         };
         let second = s.create_email_verification(&params2).await.unwrap();
 
-        // Should return the updated record with new code
+        // Should return the updated record with new code_hash
         let got = s.get_email_verification("test@example.com").await.unwrap();
         assert_eq!(got.id, second.id);
-        assert_eq!(got.code, "222222");
+        assert_eq!(got.code_hash, "hash222222");
         assert_eq!(got.invite_token, "token2");
     }
 }

@@ -65,7 +65,8 @@ fn generate_x25519_keypair() -> (Vec<u8>, [u8; 32]) {
     (public.as_bytes().to_vec(), private_key)
 }
 
-/// Test helper: Create a user with principal for testing
+/// Test helper: Create a user with principal for testing.
+/// The user is automatically verified (non-verification flow behavior).
 async fn create_test_user(
     server: &ZoppServer,
     email: &str,
@@ -90,6 +91,42 @@ async fn create_test_user(
         .unwrap();
 
     (user_id, principal_id.unwrap(), signing_key)
+}
+
+/// Test helper: Create an unverified user with principal.
+/// This simulates the state after join but before email verification completes.
+async fn create_unverified_test_user(
+    server: &ZoppServer,
+    email: &str,
+    principal_name: &str,
+) -> (UserId, PrincipalId, SigningKey) {
+    let (public_key, signing_key) = generate_keypair();
+    let (x25519_public, _) = generate_x25519_keypair();
+
+    // Create user WITHOUT principal (verified=false)
+    let (user_id, _) = server
+        .store
+        .create_user(&CreateUserParams {
+            email: email.to_string(),
+            principal: None, // No principal = unverified
+            workspace_ids: vec![],
+        })
+        .await
+        .unwrap();
+
+    // Create principal separately
+    let principal_id = server
+        .store
+        .create_principal(&CreatePrincipalParams {
+            user_id: Some(user_id.clone()),
+            name: principal_name.to_string(),
+            public_key,
+            x25519_public_key: Some(x25519_public),
+        })
+        .await
+        .unwrap();
+
+    (user_id, principal_id, signing_key)
 }
 
 /// Test helper: Create a workspace owned by a user
@@ -1211,9 +1248,9 @@ mod handler_tests {
         // Server with verification required
         let server = create_test_server_with_verification().await;
 
-        // Create user with unverified principal (default state)
+        // Create unverified user with principal
         let (_user_id, principal_id, signing_key) =
-            create_test_user(&server, "test@example.com", "laptop").await;
+            create_unverified_test_user(&server, "test@example.com", "laptop").await;
 
         // Try to create workspace - should be blocked because principal is not verified
         let request = create_signed_request(
@@ -1305,9 +1342,9 @@ mod handler_tests {
         // Server with verification required
         let server = create_test_server_with_verification().await;
 
-        // Create user with unverified principal
+        // Create unverified user with principal
         let (_user_id, principal_id, signing_key) =
-            create_test_user(&server, "test@example.com", "laptop").await;
+            create_unverified_test_user(&server, "test@example.com", "laptop").await;
 
         // Try to list workspaces - should be blocked
         let request = create_signed_request(
@@ -1338,7 +1375,8 @@ mod handler_tests {
 
         // Create unverified principal
         let (_, unverified_principal_id, unverified_signing_key) =
-            create_test_user(&server, "unverified@example.com", "unverified-laptop").await;
+            create_unverified_test_user(&server, "unverified@example.com", "unverified-laptop")
+                .await;
 
         // Add unverified user to workspace
         let unverified_user = server
