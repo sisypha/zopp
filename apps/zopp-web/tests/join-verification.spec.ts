@@ -197,9 +197,9 @@ test.describe('Join with Email Verification', () => {
     // Submit the form
     await page.getByRole('button', { name: /Create Principal/i }).click();
 
-    // Should show verification code input
-    await expect(page.getByText(/verification code/i)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByPlaceholder(/Enter.*code/i)).toBeVisible();
+    // Should show verification code input (use heading which is unique)
+    await expect(page.getByRole('heading', { name: /Verify Your Email/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByPlaceholder('123456')).toBeVisible();
   });
 
   test('should complete registration with valid verification code', async ({ page }) => {
@@ -218,15 +218,15 @@ test.describe('Join with Email Verification', () => {
     // Submit the form
     await page.getByRole('button', { name: /Create Principal/i }).click();
 
-    // Wait for verification code input to appear
-    await expect(page.getByText(/verification code/i)).toBeVisible({ timeout: 10000 });
+    // Wait for verification code input to appear (use heading which is unique)
+    await expect(page.getByRole('heading', { name: /Verify Your Email/i })).toBeVisible({ timeout: 10000 });
 
     // Get verification code from MailHog
     const verificationCode = await getVerificationCodeFromMailhog(testEmail);
     expect(verificationCode).toMatch(/^\d{6}$/);
 
     // Enter the verification code
-    await page.getByPlaceholder(/Enter.*code/i).fill(verificationCode);
+    await page.getByPlaceholder('123456').fill(verificationCode);
 
     // Submit verification
     await page.getByRole('button', { name: /Verify/i }).click();
@@ -251,11 +251,11 @@ test.describe('Join with Email Verification', () => {
     // Submit the form
     await page.getByRole('button', { name: /Create Principal/i }).click();
 
-    // Wait for verification code input to appear
-    await expect(page.getByText(/verification code/i)).toBeVisible({ timeout: 10000 });
+    // Wait for verification code input to appear (use heading which is unique)
+    await expect(page.getByRole('heading', { name: /Verify Your Email/i })).toBeVisible({ timeout: 10000 });
 
     // Enter an invalid code
-    await page.getByPlaceholder(/Enter.*code/i).fill('000000');
+    await page.getByPlaceholder('123456').fill('000000');
 
     // Submit verification
     await page.getByRole('button', { name: /Verify/i }).click();
@@ -283,11 +283,11 @@ test.describe('Join with Email Verification', () => {
     // Submit the form
     await page.getByRole('button', { name: /Create Principal/i }).click();
 
-    // Wait for verification code input
-    await expect(page.getByText(/verification code/i)).toBeVisible({ timeout: 10000 });
+    // Wait for verification code input (use heading which is unique)
+    await expect(page.getByRole('heading', { name: /Verify Your Email/i })).toBeVisible({ timeout: 10000 });
 
     // First attempt with invalid code
-    await page.getByPlaceholder(/Enter.*code/i).fill('000000');
+    await page.getByPlaceholder('123456').fill('000000');
     await page.getByRole('button', { name: /Verify/i }).click();
 
     // Should show error
@@ -297,8 +297,8 @@ test.describe('Join with Email Verification', () => {
     const verificationCode = await getVerificationCodeFromMailhog(testEmail);
 
     // Clear and enter correct code
-    await page.getByPlaceholder(/Enter.*code/i).clear();
-    await page.getByPlaceholder(/Enter.*code/i).fill(verificationCode);
+    await page.getByPlaceholder('123456').clear();
+    await page.getByPlaceholder('123456').fill(verificationCode);
 
     // Submit again
     await page.getByRole('button', { name: /Verify/i }).click();
