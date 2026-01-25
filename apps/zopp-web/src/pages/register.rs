@@ -245,7 +245,7 @@ pub fn RegisterPage() -> impl IntoView {
                                         </label>
                                         <input
                                             type="text"
-                                            placeholder="inv_xxxx..."
+                                            placeholder="zopp-invite-xxxx"
                                             class="input input-bordered"
                                             prop:value=move || invite_token.get()
                                             on:input=move |ev| set_invite_token.set(event_target_value(&ev))
