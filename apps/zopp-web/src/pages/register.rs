@@ -580,9 +580,9 @@ async fn join_workspace(
                 principal_name: principal_name.to_string(),
                 public_key,
                 x25519_public_key: x25519_public_bytes,
-                ephemeral_pub,
-                kek_wrapped,
-                kek_nonce,
+                ephemeral_pub: ephemeral_pub.clone(),
+                kek_wrapped: kek_wrapped.clone(),
+                kek_nonce: kek_nonce.clone(),
             })
             .await
             .map_err(|e| format!("Join failed: {}", e))?;
@@ -659,7 +659,7 @@ async fn verify_email_code(
             Some(response.message)
         },
         attempts_remaining: if response.attempts_remaining > 0 {
-            Some(response.attempts_remaining)
+            Some(response.attempts_remaining as u32)
         } else {
             None
         },
