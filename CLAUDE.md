@@ -287,12 +287,30 @@ When creating PRs and working through CI:
 1. **Create the PR**: Use `gh pr create` with a clear title and description
 2. **Monitor CI**: Watch for CI check results
    - **Ignore docker builds** - they are slow and not required for most PRs
-   - Focus on: clippy, tests, fmt checks
-3. **Wait for Cubic review**: Cubic is an AI code reviewer that runs automatically
-   - Address any comments Cubic makes
-   - Iterate until Cubic has no further comments
-   - Re-run CI after making changes
-4. **Repeat until green**: Keep iterating until CI passes and Cubic is satisfied
+   - Focus on: clippy, tests, fmt checks, E2E tests, web-e2e tests
+3. **Work with Cubic reviews**: Cubic is an AI code reviewer that does two types of reviews:
+   - **Incremental reviews**: Automatically triggered on each push, reviews only changed files
+   - **Full reviews**: Triggered by tagging `@cubic-dev-ai` in a PR comment
+
+### Cubic Review Workflow
+
+1. **Initial full review**: When PR is created, Cubic does a full review
+2. **Address issues**: Fix any issues Cubic identifies, commit and push
+3. **Incremental review**: Cubic automatically reviews only the new changes
+   - Check the CI check output: "AI review completed with X review. Y issues found across Z files"
+   - If issues found, fix them and push again
+   - If 0 issues found, the incremental changes are good
+4. **Request full re-review**: Once incremental reviews pass, comment `@cubic-dev-ai Please do a full re-review of the PR.`
+5. **Iterate**: Repeat until full review passes with 0 issues or acceptable issues
+
+### Reading Cubic Results
+
+- **CI Check**: Look at the "cubic-dev-ai / cubic · AI code reviewer" check for quick status
+- **Review comments**: Cubic posts detailed issues as PR review comments
+- **Addressed marker**: When you fix an issue, Cubic edits its comment to show "✅ Addressed in <commit>" - check if comments are marked as addressed rather than waiting for a new review
+- **Outdated comments**: GitHub may mark comments as "outdated" if the code changed - these can often be ignored
+- **Confidence score**: Higher is better (5/5 means high confidence the code is good)
+- **Priority levels**: P1 (critical), P2 (important), P3 (minor) - always fix P1/P2
 
 Example workflow:
 ```bash
@@ -308,8 +326,12 @@ gh pr create --title "Add my feature" --body "Description..."
 # Monitor CI (ignore docker builds)
 gh pr checks
 
-# If Cubic comments, address them and push again
-# Repeat until all checks pass
+# Check Cubic's initial review, fix issues, push
+# Cubic does incremental review automatically
+# When incremental shows 0 issues, request full re-review:
+gh pr comment --body "@cubic-dev-ai Please do a full re-review of the PR."
+
+# Repeat until all checks pass and Cubic is satisfied
 ```
 
 ## Important Notes
