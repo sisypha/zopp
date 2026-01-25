@@ -1328,7 +1328,7 @@ mod handler_tests {
         let server = create_test_server_with_verification().await;
 
         // Create verified user to set up workspace/project/env
-        let (user_id, owner_principal_id, _) =
+        let (user_id, _owner_principal_id, _) =
             create_test_user(&server, "owner@example.com", "owner-laptop").await;
         server.store.mark_user_verified(&user_id).await.unwrap();
 

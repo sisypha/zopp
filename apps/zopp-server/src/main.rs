@@ -309,8 +309,10 @@ async fn cmd_serve_with_ready(
         .map_err(|e| format!("Failed to load server configuration: {}", e))?;
 
     // Create email provider if configured
-    let email_provider: Option<Arc<dyn email::EmailProvider>> = if server_config.email.is_some() {
-        match email::create_provider(server_config.email.as_ref().unwrap()) {
+    let email_provider: Option<Arc<dyn email::EmailProvider>> = if let Some(ref email_config) =
+        server_config.email
+    {
+        match email::create_provider(email_config) {
             Ok(provider) => {
                 println!("Email verification enabled");
                 Some(Arc::from(provider))

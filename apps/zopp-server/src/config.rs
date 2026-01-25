@@ -51,6 +51,7 @@ pub enum EmailProviderConfig {
     /// Resend email provider
     Resend {
         /// Resend API key
+        #[allow(dead_code)] // Used when email-resend feature is enabled
         api_key: String,
     },
     /// SMTP email provider

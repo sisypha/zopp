@@ -8,6 +8,7 @@ use crate::state::auth::use_auth;
 
 /// State for pending verification
 #[derive(Clone)]
+#[allow(dead_code)] // Fields used conditionally in wasm32 target
 struct PendingVerification {
     result: JoinResult,
     email: String,
@@ -110,6 +111,7 @@ pub fn RegisterPage() -> impl IntoView {
             return;
         }
 
+        #[allow(unused_variables)] // Used in wasm32 target
         let pending = match pending_verification.get() {
             Some(p) => p,
             None => return,
@@ -182,6 +184,7 @@ pub fn RegisterPage() -> impl IntoView {
     };
 
     let on_resend = move |_| {
+        #[allow(unused_variables)] // Used in wasm32 target
         let pending = match pending_verification.get() {
             Some(p) => p,
             None => return,
