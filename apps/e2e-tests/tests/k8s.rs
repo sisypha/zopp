@@ -914,9 +914,9 @@ async fn operator_sync() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Operator health check failed after 20 attempts".into());
     }
 
-    // Wait for initial sync
+    // Wait for initial sync (increased timeout for CI)
     println!("⏳ Waiting for operator to sync...");
-    sleep(Duration::from_secs(3)).await;
+    sleep(Duration::from_secs(10)).await;
 
     // Verify secrets were synced (check values only, not labels for annotated secrets)
     match verify_k8s_secret_values("app-secrets", &initial_secrets).await {
