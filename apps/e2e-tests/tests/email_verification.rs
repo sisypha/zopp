@@ -74,7 +74,7 @@ async fn run_test_invalid_verification_code(
         "--principal",
         &alice.principal(),
         "--verification-code",
-        "000000", // Invalid code
+        "XXXXXX", // Non-numeric code - guaranteed to be invalid
     ]);
 
     // Join should fail because verification code is invalid

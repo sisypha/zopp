@@ -232,8 +232,7 @@ impl TestHarness {
     }
 
     /// Create a new test harness with email verification enabled.
-    /// Uses MailHog if available (via docker-compose.test.yaml), otherwise falls back
-    /// to built-in mock SMTP server.
+    /// Requires MailHog to be running (via docker-compose.test.yaml).
     /// Use `get_verification_code_from_email()` to retrieve codes from captured emails.
     pub async fn new_with_verification(
         test_name: &str,
