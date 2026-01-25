@@ -148,7 +148,7 @@ export async function setupVerificationTest(): Promise<VerificationTestContext> 
 
   return {
     serverUrl: `http://127.0.0.1:${serverPort}`,
-    grpcWebUrl: `http://127.0.0.1:${envoyPort}`, // Would be Envoy port if running
+    grpcWebUrl: `http://127.0.0.1:${serverPort}`, // Use server port directly since Envoy isn't running
     testDir,
     inviteToken,
     mockSmtp,

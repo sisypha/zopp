@@ -110,21 +110,9 @@ pub async fn join(
             // Generate verification code
             let code = generate_verification_code();
 
-            // Store verification record (expires in 15 minutes)
-            // This upserts - if there's an existing verification for this email, it's replaced
-            let expires_at = Utc::now() + chrono::Duration::minutes(15);
-            server
-                .store
-                .create_email_verification(&CreateEmailVerificationParams {
-                    email: email.clone(),
-                    code: code.clone(),
-                    invite_token: req.invite_token.clone(),
-                    expires_at,
-                })
-                .await
-                .map_err(|e| Status::internal(format!("Failed to create verification: {}", e)))?;
-
-            // Send verification email - fail if email cannot be sent
+            // Send verification email FIRST before storing record
+            // This ensures we don't store a record if the email fails to send,
+            // which would prevent retries from resending the email
             if let Some(ref provider) = server.email_provider {
                 let email_config = server.config.email.as_ref().unwrap();
                 provider
@@ -139,6 +127,20 @@ pub async fn join(
                         Status::internal(format!("Failed to send verification email: {}", e))
                     })?;
             }
+
+            // Email sent successfully - now store verification record (expires in 15 minutes)
+            // This upserts - if there's an existing verification for this email, it's replaced
+            let expires_at = Utc::now() + chrono::Duration::minutes(15);
+            server
+                .store
+                .create_email_verification(&CreateEmailVerificationParams {
+                    email: email.clone(),
+                    code: code.clone(),
+                    invite_token: req.invite_token.clone(),
+                    expires_at,
+                })
+                .await
+                .map_err(|e| Status::internal(format!("Failed to create verification: {}", e)))?;
         }
 
         // Return without principal_id - it will be created at verification

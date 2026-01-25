@@ -294,14 +294,16 @@ When creating PRs and working through CI:
 
 ### Cubic Review Workflow
 
-1. **Initial full review**: When PR is created, Cubic does a full review
+1. **Initial full review**: When PR is created, Cubic does a full review of all changes
 2. **Address issues**: Fix any issues Cubic identifies, commit and push
-3. **Incremental review**: Cubic automatically reviews only the new changes
-   - Check the CI check output: "AI review completed with X review. Y issues found across Z files"
-   - If issues found, fix them and push again
-   - If 0 issues found, the incremental changes are good
+3. **Incremental review**: Cubic automatically reviews only the new changes (not the whole PR)
+   - Check the CI check output: "AI review completed with X review. Y issues found across Z files (changes from recent commits)"
+   - If issues found in the incremental review, fix them and push again
+   - If 0 issues found, your fixes are good - but this only covers the recent changes
 4. **Request full re-review**: Once incremental reviews pass, comment `@cubic-dev-ai Please do a full re-review of the PR.`
-5. **Iterate**: Repeat until full review passes with 0 issues or acceptable issues
+5. **Wait for full review**: The full re-review examines the entire PR again and may find new issues
+6. **Iterate**: Repeat steps 2-5 until full review passes with 0 issues or only acceptable minor issues
+7. **Merge**: Only merge after the full re-review completes successfully - never merge while it's pending
 
 ### Reading Cubic Results
 
