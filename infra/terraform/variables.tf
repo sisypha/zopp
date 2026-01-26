@@ -55,9 +55,9 @@ variable "eks_node_desired_size" {
 }
 
 variable "eks_public_access_cidrs" {
-  description = "CIDR blocks allowed to access EKS cluster public endpoint. Set to specific IPs/ranges for production security."
+  description = "CIDR blocks allowed to access EKS cluster public endpoint. Must be explicitly configured - no default to prevent accidental public exposure."
   type        = list(string)
-  default     = ["0.0.0.0/0"]  # Override in production with specific CIDRs
+  # No default - must be explicitly set to prevent accidental public exposure
 }
 
 # RDS Configuration
