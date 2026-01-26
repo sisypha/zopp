@@ -497,18 +497,6 @@ pub struct Subscription {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Real-time quota counters
-#[derive(Clone, Debug)]
-pub struct OrganizationQuota {
-    pub organization_id: OrganizationId,
-    pub current_users: i32,
-    pub current_workspaces: i32,
-    pub current_secrets: i32,
-    pub api_calls_this_month: i64,
-    pub api_calls_reset_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 /// Parameters for creating an organization
 #[derive(Clone, Debug)]
 pub struct CreateOrganizationParams {

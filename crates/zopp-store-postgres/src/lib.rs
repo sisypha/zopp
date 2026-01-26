@@ -2531,6 +2531,162 @@ impl Store for PostgresStore {
 
         Ok(())
     }
+
+    // ────────────────────────────────────── Organizations ──────────────────────────────────────
+    // Stub implementations - will be completed in a follow-up PR
+
+    async fn create_organization(
+        &self,
+        _params: &zopp_storage::CreateOrganizationParams,
+    ) -> Result<zopp_storage::OrganizationId, StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn get_organization(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+    ) -> Result<zopp_storage::Organization, StoreError> {
+        Err(StoreError::NotFound)
+    }
+
+    async fn get_organization_by_slug(
+        &self,
+        _slug: &str,
+    ) -> Result<zopp_storage::Organization, StoreError> {
+        Err(StoreError::NotFound)
+    }
+
+    async fn list_user_organizations(
+        &self,
+        _user_id: &UserId,
+    ) -> Result<Vec<zopp_storage::Organization>, StoreError> {
+        Ok(vec![])
+    }
+
+    async fn update_organization(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _name: Option<String>,
+        _slug: Option<String>,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn set_organization_stripe_customer(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _stripe_customer_id: &str,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn set_organization_plan(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _plan: zopp_storage::Plan,
+        _seat_limit: i32,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn delete_organization(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn add_organization_member(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _user_id: &UserId,
+        _role: zopp_storage::OrganizationRole,
+        _invited_by: Option<UserId>,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn get_organization_member(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _user_id: &UserId,
+    ) -> Result<zopp_storage::OrganizationMember, StoreError> {
+        Err(StoreError::NotFound)
+    }
+
+    async fn list_organization_members(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+    ) -> Result<Vec<zopp_storage::OrganizationMember>, StoreError> {
+        Ok(vec![])
+    }
+
+    async fn update_organization_member_role(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _user_id: &UserId,
+        _role: zopp_storage::OrganizationRole,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn remove_organization_member(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+        _user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn count_organization_members(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+    ) -> Result<i32, StoreError> {
+        Ok(0)
+    }
+
+    async fn create_organization_invite(
+        &self,
+        _params: &zopp_storage::CreateOrganizationInviteParams,
+    ) -> Result<zopp_storage::OrganizationInvite, StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn get_organization_invite_by_token(
+        &self,
+        _token_hash: &str,
+    ) -> Result<zopp_storage::OrganizationInvite, StoreError> {
+        Err(StoreError::NotFound)
+    }
+
+    async fn list_organization_invites(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+    ) -> Result<Vec<zopp_storage::OrganizationInvite>, StoreError> {
+        Ok(vec![])
+    }
+
+    async fn delete_organization_invite(
+        &self,
+        _invite_id: &zopp_storage::OrganizationInviteId,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn set_workspace_organization(
+        &self,
+        _workspace_id: &WorkspaceId,
+        _org_id: Option<zopp_storage::OrganizationId>,
+    ) -> Result<(), StoreError> {
+        Err(StoreError::Backend("not implemented".into()))
+    }
+
+    async fn list_organization_workspaces(
+        &self,
+        _org_id: &zopp_storage::OrganizationId,
+    ) -> Result<Vec<Workspace>, StoreError> {
+        Ok(vec![])
+    }
 }
 
 // ────────────────────────────────────── Audit Log ──────────────────────────────────────
