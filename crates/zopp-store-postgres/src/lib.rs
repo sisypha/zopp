@@ -2968,6 +2968,35 @@ impl Store for PostgresStore {
         })
     }
 
+    async fn get_organization_invite(
+        &self,
+        invite_id: &zopp_storage::OrganizationInviteId,
+    ) -> Result<zopp_storage::OrganizationInvite, StoreError> {
+        let row = sqlx::query!(
+            r#"SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, created_at
+               FROM organization_invites
+               WHERE id = $1"#,
+            invite_id.0
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        Ok(zopp_storage::OrganizationInvite {
+            id: zopp_storage::OrganizationInviteId(row.id),
+            organization_id: zopp_storage::OrganizationId(row.organization_id),
+            email: row.email,
+            role: row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?,
+            token_hash: row.token_hash,
+            invited_by: UserId(row.invited_by),
+            expires_at: row.expires_at,
+            created_at: row.created_at,
+        })
+    }
+
     async fn get_organization_invite_by_token(
         &self,
         token_hash: &str,

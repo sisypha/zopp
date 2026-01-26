@@ -1359,6 +1359,12 @@ pub trait Store: Send + Sync {
         params: &CreateOrganizationInviteParams,
     ) -> Result<OrganizationInvite, StoreError>;
 
+    /// Get an organization invite by ID.
+    async fn get_organization_invite(
+        &self,
+        invite_id: &OrganizationInviteId,
+    ) -> Result<OrganizationInvite, StoreError>;
+
     /// Get an organization invite by token hash.
     async fn get_organization_invite_by_token(
         &self,
@@ -2251,6 +2257,13 @@ mod tests {
                 expires_at: params.expires_at,
                 created_at: Utc::now(),
             })
+        }
+
+        async fn get_organization_invite(
+            &self,
+            _invite_id: &OrganizationInviteId,
+        ) -> Result<OrganizationInvite, StoreError> {
+            Err(StoreError::NotFound)
         }
 
         async fn get_organization_invite_by_token(

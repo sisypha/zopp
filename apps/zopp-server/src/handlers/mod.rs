@@ -21,6 +21,7 @@ pub mod environments;
 pub mod group_permissions;
 pub mod groups;
 pub mod invites;
+pub mod organizations;
 pub mod permissions;
 pub mod principals;
 pub mod projects;
@@ -654,170 +655,134 @@ impl ZoppService for ZoppServer {
 
     async fn create_organization(
         &self,
-        _request: Request<CreateOrganizationRequest>,
+        request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<Organization>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::create_organization(self, request).await
     }
 
     async fn get_organization(
         &self,
-        _request: Request<GetOrganizationRequest>,
+        request: Request<GetOrganizationRequest>,
     ) -> Result<Response<Organization>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::get_organization(self, request).await
     }
 
     async fn list_user_organizations(
         &self,
-        _request: Request<Empty>,
+        request: Request<Empty>,
     ) -> Result<Response<OrganizationList>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::list_user_organizations(self, request).await
     }
 
     async fn update_organization(
         &self,
-        _request: Request<UpdateOrganizationRequest>,
+        request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<Organization>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::update_organization(self, request).await
     }
 
     async fn delete_organization(
         &self,
-        _request: Request<DeleteOrganizationRequest>,
+        request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::delete_organization(self, request).await
     }
 
     // ───────────────────────────────────── Organization Members ─────────────────────────────────────
 
     async fn add_organization_member(
         &self,
-        _request: Request<AddOrganizationMemberRequest>,
+        request: Request<AddOrganizationMemberRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::add_organization_member(self, request).await
     }
 
     async fn get_organization_member(
         &self,
-        _request: Request<GetOrganizationMemberRequest>,
+        request: Request<GetOrganizationMemberRequest>,
     ) -> Result<Response<OrganizationMember>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::get_organization_member(self, request).await
     }
 
     async fn list_organization_members(
         &self,
-        _request: Request<ListOrganizationMembersRequest>,
+        request: Request<ListOrganizationMembersRequest>,
     ) -> Result<Response<OrganizationMemberList>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::list_organization_members(self, request).await
     }
 
     async fn update_organization_member_role(
         &self,
-        _request: Request<UpdateOrganizationMemberRoleRequest>,
+        request: Request<UpdateOrganizationMemberRoleRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::update_organization_member_role(self, request).await
     }
 
     async fn remove_organization_member(
         &self,
-        _request: Request<RemoveOrganizationMemberRequest>,
+        request: Request<RemoveOrganizationMemberRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::remove_organization_member(self, request).await
     }
 
     // ───────────────────────────────────── Organization Invites ─────────────────────────────────────
 
     async fn create_organization_invite(
         &self,
-        _request: Request<CreateOrganizationInviteRequest>,
+        request: Request<CreateOrganizationInviteRequest>,
     ) -> Result<Response<OrganizationInvite>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::create_organization_invite(self, request).await
     }
 
     async fn get_organization_invite(
         &self,
-        _request: Request<GetOrganizationInviteRequest>,
+        request: Request<GetOrganizationInviteRequest>,
     ) -> Result<Response<OrganizationInvite>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::get_organization_invite(self, request).await
     }
 
     async fn list_organization_invites(
         &self,
-        _request: Request<ListOrganizationInvitesRequest>,
+        request: Request<ListOrganizationInvitesRequest>,
     ) -> Result<Response<OrganizationInviteList>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::list_organization_invites(self, request).await
     }
 
     async fn accept_organization_invite(
         &self,
-        _request: Request<AcceptOrganizationInviteRequest>,
+        request: Request<AcceptOrganizationInviteRequest>,
     ) -> Result<Response<OrganizationMember>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::accept_organization_invite(self, request).await
     }
 
     async fn delete_organization_invite(
         &self,
-        _request: Request<DeleteOrganizationInviteRequest>,
+        request: Request<DeleteOrganizationInviteRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::delete_organization_invite(self, request).await
     }
 
     // ───────────────────────────────────── Organization Workspaces ─────────────────────────────────────
 
     async fn link_workspace_to_organization(
         &self,
-        _request: Request<LinkWorkspaceToOrganizationRequest>,
+        request: Request<LinkWorkspaceToOrganizationRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::link_workspace_to_organization(self, request).await
     }
 
     async fn unlink_workspace_from_organization(
         &self,
-        _request: Request<UnlinkWorkspaceFromOrganizationRequest>,
+        request: Request<UnlinkWorkspaceFromOrganizationRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::unlink_workspace_from_organization(self, request).await
     }
 
     async fn list_organization_workspaces(
         &self,
-        _request: Request<ListOrganizationWorkspacesRequest>,
+        request: Request<ListOrganizationWorkspacesRequest>,
     ) -> Result<Response<WorkspaceList>, Status> {
-        Err(Status::unimplemented(
-            "Organization support not yet implemented",
-        ))
+        organizations::list_organization_workspaces(self, request).await
     }
 
     // ───────────────────────────────────── Billing ─────────────────────────────────────

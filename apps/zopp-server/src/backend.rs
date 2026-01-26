@@ -1311,6 +1311,16 @@ impl Store for StoreBackend {
         }
     }
 
+    async fn get_organization_invite(
+        &self,
+        invite_id: &OrganizationInviteId,
+    ) -> Result<OrganizationInvite, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_organization_invite(invite_id).await,
+            StoreBackend::Postgres(s) => s.get_organization_invite(invite_id).await,
+        }
+    }
+
     async fn get_organization_invite_by_token(
         &self,
         token_hash: &str,
