@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE organizations SET stripe_customer_id = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f93f6680e0a7f7a81ec2d62c3435cb2c6d3a8015d8071335b0d5c92765266198"
+}

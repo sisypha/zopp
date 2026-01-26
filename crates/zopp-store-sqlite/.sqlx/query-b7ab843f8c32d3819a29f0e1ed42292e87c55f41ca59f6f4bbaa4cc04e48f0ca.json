@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, owner_user_id, kdf_salt, kdf_m_cost_kib, kdf_t_cost, kdf_p_cost,\n                      created_at, updated_at\n               FROM workspaces\n               WHERE organization_id = ?\n               ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "owner_user_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "kdf_salt",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kdf_m_cost_kib",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kdf_t_cost",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kdf_p_cost",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b7ab843f8c32d3819a29f0e1ed42292e87c55f41ca59f6f4bbaa4cc04e48f0ca"
+}

@@ -3085,159 +3085,662 @@ impl Store for SqliteStore {
     }
 
     // ────────────────────────────────────── Organizations ──────────────────────────────────────
-    // Stub implementations - will be completed in a follow-up PR
 
     async fn create_organization(
         &self,
-        _params: &zopp_storage::CreateOrganizationParams,
+        params: &zopp_storage::CreateOrganizationParams,
     ) -> Result<zopp_storage::OrganizationId, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id = zopp_storage::OrganizationId(Uuid::now_v7());
+        let org_id_str = org_id.0.to_string();
+        let owner_id_str = params.owner_user_id.0.to_string();
+        let seat_limit = params.plan.default_seat_limit();
+        let plan_str = params.plan.as_str();
+
+        // Use a transaction to ensure atomicity - both org and owner membership must succeed
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        sqlx::query!(
+            r#"INSERT INTO organizations (id, name, slug, plan, seat_limit)
+               VALUES (?, ?, ?, ?, ?)"#,
+            org_id_str,
+            params.name,
+            params.slug,
+            plan_str,
+            seat_limit
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(ref db_err)
+                if db_err.message().contains("UNIQUE constraint failed") =>
+            {
+                StoreError::AlreadyExists
+            }
+            e => StoreError::Backend(e.to_string()),
+        })?;
+
+        // Add the owner as a member
+        sqlx::query!(
+            r#"INSERT INTO organization_members (organization_id, user_id, role)
+               VALUES (?, ?, 'owner')"#,
+            org_id_str,
+            owner_id_str
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(org_id)
     }
 
     async fn get_organization(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
+        org_id: &zopp_storage::OrganizationId,
     ) -> Result<zopp_storage::Organization, StoreError> {
-        Err(StoreError::NotFound)
+        let org_id_str = org_id.0.to_string();
+        let row = sqlx::query!(
+            r#"SELECT id, name, slug, stripe_customer_id, stripe_subscription_id,
+                      plan, seat_limit, trial_ends_at, created_at, updated_at
+               FROM organizations WHERE id = ?"#,
+            org_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        let plan = row
+            .plan
+            .parse()
+            .map_err(|_| StoreError::Backend(format!("invalid plan in database: {}", row.plan)))?;
+
+        Ok(zopp_storage::Organization {
+            id: zopp_storage::OrganizationId(Uuid::parse_str(&row.id).unwrap()),
+            name: row.name,
+            slug: row.slug,
+            stripe_customer_id: row.stripe_customer_id,
+            stripe_subscription_id: row.stripe_subscription_id,
+            plan,
+            seat_limit: row.seat_limit as i32,
+            trial_ends_at: row.trial_ends_at.map(|t| {
+                DateTime::parse_from_rfc3339(&t)
+                    .unwrap()
+                    .with_timezone(&Utc)
+            }),
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
     }
 
     async fn get_organization_by_slug(
         &self,
-        _slug: &str,
+        slug: &str,
     ) -> Result<zopp_storage::Organization, StoreError> {
-        Err(StoreError::NotFound)
+        let row = sqlx::query!(
+            r#"SELECT id, name, slug, stripe_customer_id, stripe_subscription_id,
+                      plan, seat_limit, trial_ends_at, created_at, updated_at
+               FROM organizations WHERE slug = ?"#,
+            slug
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        let plan = row
+            .plan
+            .parse()
+            .map_err(|_| StoreError::Backend(format!("invalid plan in database: {}", row.plan)))?;
+
+        Ok(zopp_storage::Organization {
+            id: zopp_storage::OrganizationId(Uuid::parse_str(&row.id).unwrap()),
+            name: row.name,
+            slug: row.slug,
+            stripe_customer_id: row.stripe_customer_id,
+            stripe_subscription_id: row.stripe_subscription_id,
+            plan,
+            seat_limit: row.seat_limit as i32,
+            trial_ends_at: row.trial_ends_at.map(|t| {
+                DateTime::parse_from_rfc3339(&t)
+                    .unwrap()
+                    .with_timezone(&Utc)
+            }),
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
     }
 
     async fn list_user_organizations(
         &self,
-        _user_id: &UserId,
+        user_id: &UserId,
     ) -> Result<Vec<zopp_storage::Organization>, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let user_id_str = user_id.0.to_string();
+        let rows = sqlx::query!(
+            r#"SELECT o.id, o.name, o.slug, o.stripe_customer_id, o.stripe_subscription_id,
+                      o.plan, o.seat_limit, o.trial_ends_at, o.created_at, o.updated_at
+               FROM organizations o
+               INNER JOIN organization_members m ON o.id = m.organization_id
+               WHERE m.user_id = ?
+               ORDER BY o.name"#,
+            user_id_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut orgs = Vec::with_capacity(rows.len());
+        for row in rows {
+            let plan = row.plan.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid plan in database: {}", row.plan))
+            })?;
+            orgs.push(zopp_storage::Organization {
+                id: zopp_storage::OrganizationId(Uuid::parse_str(&row.id).unwrap()),
+                name: row.name,
+                slug: row.slug,
+                stripe_customer_id: row.stripe_customer_id,
+                stripe_subscription_id: row.stripe_subscription_id,
+                plan,
+                seat_limit: row.seat_limit as i32,
+                trial_ends_at: row.trial_ends_at.map(|t| {
+                    DateTime::parse_from_rfc3339(&t)
+                        .unwrap()
+                        .with_timezone(&Utc)
+                }),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            });
+        }
+        Ok(orgs)
     }
 
     async fn update_organization(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _name: Option<String>,
-        _slug: Option<String>,
+        org_id: &zopp_storage::OrganizationId,
+        name: Option<String>,
+        slug: Option<String>,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let result = sqlx::query!(
+            r#"UPDATE organizations
+               SET name = COALESCE(?, name),
+                   slug = COALESCE(?, slug)
+               WHERE id = ?"#,
+            name,
+            slug,
+            org_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(ref db_err)
+                if db_err.message().contains("UNIQUE constraint failed") =>
+            {
+                StoreError::AlreadyExists
+            }
+            e => StoreError::Backend(e.to_string()),
+        })?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn set_organization_stripe_customer(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _stripe_customer_id: &str,
+        org_id: &zopp_storage::OrganizationId,
+        stripe_customer_id: &str,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let result = sqlx::query!(
+            r#"UPDATE organizations SET stripe_customer_id = ? WHERE id = ?"#,
+            stripe_customer_id,
+            org_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn set_organization_plan(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _plan: zopp_storage::Plan,
-        _seat_limit: i32,
+        org_id: &zopp_storage::OrganizationId,
+        plan: zopp_storage::Plan,
+        seat_limit: i32,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let plan_str = plan.as_str();
+        let result = sqlx::query!(
+            r#"UPDATE organizations SET plan = ?, seat_limit = ? WHERE id = ?"#,
+            plan_str,
+            seat_limit,
+            org_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn delete_organization(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
+        org_id: &zopp_storage::OrganizationId,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let result = sqlx::query!(r#"DELETE FROM organizations WHERE id = ?"#, org_id_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn add_organization_member(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _user_id: &UserId,
-        _role: zopp_storage::OrganizationRole,
-        _invited_by: Option<UserId>,
+        org_id: &zopp_storage::OrganizationId,
+        user_id: &UserId,
+        role: zopp_storage::OrganizationRole,
+        invited_by: Option<UserId>,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let user_id_str = user_id.0.to_string();
+        let role_str = role.as_str();
+        let invited_by_str = invited_by.map(|u| u.0.to_string());
+
+        sqlx::query!(
+            r#"INSERT INTO organization_members (organization_id, user_id, role, invited_by)
+               VALUES (?, ?, ?, ?)"#,
+            org_id_str,
+            user_id_str,
+            role_str,
+            invited_by_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(ref db_err)
+                if db_err.message().contains("UNIQUE constraint failed") =>
+            {
+                StoreError::AlreadyExists
+            }
+            e => StoreError::Backend(e.to_string()),
+        })?;
+
+        Ok(())
     }
 
     async fn get_organization_member(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _user_id: &UserId,
+        org_id: &zopp_storage::OrganizationId,
+        user_id: &UserId,
     ) -> Result<zopp_storage::OrganizationMember, StoreError> {
-        Err(StoreError::NotFound)
+        let org_id_str = org_id.0.to_string();
+        let user_id_str = user_id.0.to_string();
+        let row = sqlx::query!(
+            r#"SELECT organization_id, user_id, role, invited_by, joined_at
+               FROM organization_members
+               WHERE organization_id = ? AND user_id = ?"#,
+            org_id_str,
+            user_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        let role = row
+            .role
+            .parse()
+            .map_err(|_| StoreError::Backend(format!("invalid role in database: {}", row.role)))?;
+
+        Ok(zopp_storage::OrganizationMember {
+            organization_id: zopp_storage::OrganizationId(
+                Uuid::parse_str(&row.organization_id).unwrap(),
+            ),
+            user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
+            role,
+            invited_by: row.invited_by.map(|u| UserId(Uuid::parse_str(&u).unwrap())),
+            joined_at: DateTime::parse_from_rfc3339(&row.joined_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
     }
 
     async fn list_organization_members(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
+        org_id: &zopp_storage::OrganizationId,
     ) -> Result<Vec<zopp_storage::OrganizationMember>, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let rows = sqlx::query!(
+            r#"SELECT organization_id, user_id, role, invited_by, joined_at
+               FROM organization_members
+               WHERE organization_id = ?
+               ORDER BY joined_at"#,
+            org_id_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut members = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            members.push(zopp_storage::OrganizationMember {
+                organization_id: zopp_storage::OrganizationId(
+                    Uuid::parse_str(&row.organization_id).unwrap(),
+                ),
+                user_id: UserId(Uuid::parse_str(&row.user_id).unwrap()),
+                role,
+                invited_by: row.invited_by.map(|u| UserId(Uuid::parse_str(&u).unwrap())),
+                joined_at: DateTime::parse_from_rfc3339(&row.joined_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            });
+        }
+        Ok(members)
     }
 
     async fn update_organization_member_role(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _user_id: &UserId,
-        _role: zopp_storage::OrganizationRole,
+        org_id: &zopp_storage::OrganizationId,
+        user_id: &UserId,
+        role: zopp_storage::OrganizationRole,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let user_id_str = user_id.0.to_string();
+        let role_str = role.as_str();
+        let result = sqlx::query!(
+            r#"UPDATE organization_members SET role = ?
+               WHERE organization_id = ? AND user_id = ?"#,
+            role_str,
+            org_id_str,
+            user_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn remove_organization_member(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
-        _user_id: &UserId,
+        org_id: &zopp_storage::OrganizationId,
+        user_id: &UserId,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let user_id_str = user_id.0.to_string();
+        let result = sqlx::query!(
+            r#"DELETE FROM organization_members
+               WHERE organization_id = ? AND user_id = ?"#,
+            org_id_str,
+            user_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn count_organization_members(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
+        org_id: &zopp_storage::OrganizationId,
     ) -> Result<i32, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let row = sqlx::query!(
+            r#"SELECT COUNT(*) as count FROM organization_members
+               WHERE organization_id = ?"#,
+            org_id_str
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(row.count as i32)
     }
 
     async fn create_organization_invite(
         &self,
-        _params: &zopp_storage::CreateOrganizationInviteParams,
+        params: &zopp_storage::CreateOrganizationInviteParams,
     ) -> Result<zopp_storage::OrganizationInvite, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let invite_id = zopp_storage::OrganizationInviteId(Uuid::now_v7());
+        let invite_id_str = invite_id.0.to_string();
+        let org_id_str = params.organization_id.0.to_string();
+        let invited_by_str = params.invited_by.0.to_string();
+        let role_str = params.role.as_str();
+        let expires_at_str = params.expires_at.to_rfc3339();
+
+        sqlx::query!(
+            r#"INSERT INTO organization_invites
+               (id, organization_id, email, role, token_hash, invited_by, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+            invite_id_str,
+            org_id_str,
+            params.email,
+            role_str,
+            params.token_hash,
+            invited_by_str,
+            expires_at_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(ref db_err)
+                if db_err.message().contains("UNIQUE constraint failed") =>
+            {
+                StoreError::AlreadyExists
+            }
+            e => StoreError::Backend(e.to_string()),
+        })?;
+
+        Ok(zopp_storage::OrganizationInvite {
+            id: invite_id,
+            organization_id: zopp_storage::OrganizationId(params.organization_id.0),
+            email: params.email.clone(),
+            role: params.role,
+            token_hash: params.token_hash.clone(),
+            invited_by: UserId(params.invited_by.0),
+            expires_at: params.expires_at,
+            created_at: chrono::Utc::now(),
+        })
     }
 
     async fn get_organization_invite_by_token(
         &self,
-        _token_hash: &str,
+        token_hash: &str,
     ) -> Result<zopp_storage::OrganizationInvite, StoreError> {
-        Err(StoreError::NotFound)
+        let row = sqlx::query!(
+            r#"SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, created_at
+               FROM organization_invites
+               WHERE token_hash = ?"#,
+            token_hash
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        let role = row
+            .role
+            .parse()
+            .map_err(|_| StoreError::Backend(format!("invalid role in database: {}", row.role)))?;
+
+        Ok(zopp_storage::OrganizationInvite {
+            id: zopp_storage::OrganizationInviteId(Uuid::parse_str(&row.id).unwrap()),
+            organization_id: zopp_storage::OrganizationId(
+                Uuid::parse_str(&row.organization_id).unwrap(),
+            ),
+            email: row.email,
+            role,
+            token_hash: row.token_hash,
+            invited_by: UserId(Uuid::parse_str(&row.invited_by).unwrap()),
+            expires_at: DateTime::parse_from_rfc3339(&row.expires_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
     }
 
     async fn list_organization_invites(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
+        org_id: &zopp_storage::OrganizationId,
     ) -> Result<Vec<zopp_storage::OrganizationInvite>, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let rows = sqlx::query!(
+            r#"SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, created_at
+               FROM organization_invites
+               WHERE organization_id = ?
+               ORDER BY created_at DESC"#,
+            org_id_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        let mut invites = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            invites.push(zopp_storage::OrganizationInvite {
+                id: zopp_storage::OrganizationInviteId(Uuid::parse_str(&row.id).unwrap()),
+                organization_id: zopp_storage::OrganizationId(
+                    Uuid::parse_str(&row.organization_id).unwrap(),
+                ),
+                email: row.email,
+                role,
+                token_hash: row.token_hash,
+                invited_by: UserId(Uuid::parse_str(&row.invited_by).unwrap()),
+                expires_at: DateTime::parse_from_rfc3339(&row.expires_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            });
+        }
+        Ok(invites)
     }
 
     async fn delete_organization_invite(
         &self,
-        _invite_id: &zopp_storage::OrganizationInviteId,
+        invite_id: &zopp_storage::OrganizationInviteId,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let invite_id_str = invite_id.0.to_string();
+        let result = sqlx::query!(
+            r#"DELETE FROM organization_invites WHERE id = ?"#,
+            invite_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn set_workspace_organization(
         &self,
-        _workspace_id: &WorkspaceId,
-        _org_id: Option<zopp_storage::OrganizationId>,
+        workspace_id: &WorkspaceId,
+        org_id: Option<zopp_storage::OrganizationId>,
     ) -> Result<(), StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let ws_id_str = workspace_id.0.to_string();
+        let org_id_str = org_id.map(|o| o.0.to_string());
+        let result = sqlx::query!(
+            r#"UPDATE workspaces SET organization_id = ? WHERE id = ?"#,
+            org_id_str,
+            ws_id_str
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        if result.rows_affected() == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn list_organization_workspaces(
         &self,
-        _org_id: &zopp_storage::OrganizationId,
+        org_id: &zopp_storage::OrganizationId,
     ) -> Result<Vec<Workspace>, StoreError> {
-        Err(StoreError::Backend("not implemented".into()))
+        let org_id_str = org_id.0.to_string();
+        let rows = sqlx::query!(
+            r#"SELECT id, name, owner_user_id, kdf_salt, kdf_m_cost_kib, kdf_t_cost, kdf_p_cost,
+                      created_at, updated_at
+               FROM workspaces
+               WHERE organization_id = ?
+               ORDER BY name"#,
+            org_id_str
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| Workspace {
+                id: WorkspaceId(Uuid::parse_str(&row.id).unwrap()),
+                name: row.name,
+                owner_user_id: UserId(Uuid::parse_str(&row.owner_user_id).unwrap()),
+                kdf_salt: row.kdf_salt,
+                m_cost_kib: row.kdf_m_cost_kib as u32,
+                t_cost: row.kdf_t_cost as u32,
+                p_cost: row.kdf_p_cost as u32,
+                created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+                updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
+                    .unwrap()
+                    .with_timezone(&Utc),
+            })
+            .collect())
     }
 }
 

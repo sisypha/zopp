@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE organizations\n               SET name = COALESCE(?, name),\n                   slug = COALESCE(?, slug)\n               WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a6d1f898c2b47c66f22b91cce12ee0f6a50cef08c900d4b70e31bf35f14f26d6"
+}
