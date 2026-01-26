@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
+use crate::pages::cloud_landing::CloudLandingPage;
+use crate::services::config::is_cloud_deployment;
 use crate::state::auth::use_auth;
 use crate::state::workspace::use_workspace;
 
@@ -26,6 +28,23 @@ pub fn LandingPage() -> impl IntoView {
         }
     });
 
+    // Show marketing page for cloud (zopp.dev), simple entry for self-hosted
+    let is_cloud = is_cloud_deployment();
+
+    view! {
+        <Show
+            when=move || is_cloud
+            fallback=|| view! { <SelfHostedLanding /> }
+        >
+            <CloudLandingPage />
+        </Show>
+    }
+}
+
+/// Simple landing page for self-hosted deployments.
+/// No marketing content - just login/signup for the instance.
+#[component]
+fn SelfHostedLanding() -> impl IntoView {
     view! {
         <div class="min-h-screen flex items-center justify-center bg-vault-base">
             <div class="bg-vault-100 border border-terminal-border rounded-md p-8 w-96">
