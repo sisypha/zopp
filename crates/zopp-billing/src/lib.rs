@@ -101,11 +101,17 @@ impl BillingConfig {
                         "BILLING_ENTERPRISE_PRICE_ID or STRIPE_ENTERPRISE_PRICE_ID not set".into(),
                     )
                 })?,
-            trial_days: std::env::var("BILLING_TRIAL_DAYS")
+            trial_days: match std::env::var("BILLING_TRIAL_DAYS")
                 .or_else(|_| std::env::var("STRIPE_TRIAL_DAYS"))
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(14),
+            {
+                Ok(v) => v.parse().map_err(|_| {
+                    BillingError::Config(format!(
+                        "Invalid BILLING_TRIAL_DAYS value '{}': expected a number",
+                        v
+                    ))
+                })?,
+                Err(_) => 14, // Default to 14 days if not set
+            },
         })
     }
 

@@ -262,16 +262,33 @@ impl<S: Store + Send + Sync + 'static> WebhookHandler for DefaultWebhookHandler<
 ///
 /// # Arguments
 /// * `payload` - Raw webhook body
-/// * `signature` - Webhook signature header value
+/// * `signature` - Webhook signature header value (e.g., Stripe-Signature header)
 /// * `webhook_secret` - Your webhook endpoint secret
 ///
 /// # Returns
 /// Parsed event or error
+///
+/// # Security
+/// This function currently does NOT verify webhook signatures.
+/// Before using in production, you MUST implement HMAC signature verification
+/// to prevent attackers from forging billing events.
 pub fn parse_webhook_event(
     payload: &str,
-    _signature: &str,
-    _webhook_secret: &str,
+    signature: &str,
+    webhook_secret: &str,
 ) -> Result<BillingWebhookEvent, BillingError> {
+    // SECURITY: Verify webhook signature before trusting event data
+    // This prevents attackers from forging billing events
+    if !signature.is_empty() && !webhook_secret.is_empty() {
+        // TODO: Implement proper HMAC-SHA256 signature verification
+        // For Stripe: verify using stripe-rust or manual HMAC verification
+        // For now, log a warning that verification is not implemented
+        warn!(
+            "Webhook signature verification not implemented - \
+             this is a security risk in production"
+        );
+    }
+
     // Parse JSON payload
     let value: serde_json::Value =
         serde_json::from_str(payload).map_err(|e| BillingError::Provider(e.to_string()))?;
@@ -279,9 +296,6 @@ pub fn parse_webhook_event(
     let event_type = value["type"]
         .as_str()
         .ok_or_else(|| BillingError::Provider("Missing event type".into()))?;
-
-    // Note: In production, you should verify the webhook signature.
-    // This is critical for security.
 
     match event_type {
         "customer.subscription.created" => {
@@ -367,14 +381,24 @@ fn parse_subscription_status(status: &str) -> SubscriptionStatus {
         "canceled" => SubscriptionStatus::Canceled,
         "unpaid" => SubscriptionStatus::Unpaid,
         "incomplete" => SubscriptionStatus::Incomplete,
-        _ => SubscriptionStatus::Active,
+        // Default to Incomplete for unknown statuses to avoid granting unintended access
+        unknown => {
+            warn!(%unknown, "Unknown subscription status, defaulting to Incomplete");
+            SubscriptionStatus::Incomplete
+        }
     }
 }
 
-fn parse_plan_from_price(_price_id: &str) -> Plan {
-    // In a real implementation, you'd match against your known price IDs
-    // For now, default to Pro
-    Plan::Pro
+fn parse_plan_from_price(price_id: &str) -> Plan {
+    // TODO: In production, implement proper price ID to Plan mapping using BillingConfig
+    // For now, default to Free to avoid granting unintended paid features
+    if !price_id.is_empty() {
+        warn!(
+            %price_id,
+            "Price ID to Plan mapping not implemented, defaulting to Free plan"
+        );
+    }
+    Plan::Free
 }
 
 #[cfg(test)]
