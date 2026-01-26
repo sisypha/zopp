@@ -3608,19 +3608,26 @@ impl Store for SqliteStore {
             .map_err(|_| StoreError::Backend(format!("invalid role in database: {}", row.role)))?;
 
         Ok(zopp_storage::OrganizationInvite {
-            id: zopp_storage::OrganizationInviteId(Uuid::parse_str(&row.id).unwrap()),
+            id: zopp_storage::OrganizationInviteId(
+                Uuid::parse_str(&row.id)
+                    .map_err(|e| StoreError::Backend(format!("invalid invite id: {}", e)))?,
+            ),
             organization_id: zopp_storage::OrganizationId(
-                Uuid::parse_str(&row.organization_id).unwrap(),
+                Uuid::parse_str(&row.organization_id)
+                    .map_err(|e| StoreError::Backend(format!("invalid organization_id: {}", e)))?,
             ),
             email: row.email,
             role,
             token_hash: row.token_hash,
-            invited_by: UserId(Uuid::parse_str(&row.invited_by).unwrap()),
+            invited_by: UserId(
+                Uuid::parse_str(&row.invited_by)
+                    .map_err(|e| StoreError::Backend(format!("invalid invited_by: {}", e)))?,
+            ),
             expires_at: DateTime::parse_from_rfc3339(&row.expires_at)
-                .unwrap()
+                .map_err(|e| StoreError::Backend(format!("invalid expires_at: {}", e)))?
                 .with_timezone(&Utc),
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                .unwrap()
+                .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                 .with_timezone(&Utc),
         })
     }
@@ -3646,19 +3653,26 @@ impl Store for SqliteStore {
             .map_err(|_| StoreError::Backend(format!("invalid role in database: {}", row.role)))?;
 
         Ok(zopp_storage::OrganizationInvite {
-            id: zopp_storage::OrganizationInviteId(Uuid::parse_str(&row.id).unwrap()),
+            id: zopp_storage::OrganizationInviteId(
+                Uuid::parse_str(&row.id)
+                    .map_err(|e| StoreError::Backend(format!("invalid invite id: {}", e)))?,
+            ),
             organization_id: zopp_storage::OrganizationId(
-                Uuid::parse_str(&row.organization_id).unwrap(),
+                Uuid::parse_str(&row.organization_id)
+                    .map_err(|e| StoreError::Backend(format!("invalid organization_id: {}", e)))?,
             ),
             email: row.email,
             role,
             token_hash: row.token_hash,
-            invited_by: UserId(Uuid::parse_str(&row.invited_by).unwrap()),
+            invited_by: UserId(
+                Uuid::parse_str(&row.invited_by)
+                    .map_err(|e| StoreError::Backend(format!("invalid invited_by: {}", e)))?,
+            ),
             expires_at: DateTime::parse_from_rfc3339(&row.expires_at)
-                .unwrap()
+                .map_err(|e| StoreError::Backend(format!("invalid expires_at: {}", e)))?
                 .with_timezone(&Utc),
             created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                .unwrap()
+                .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                 .with_timezone(&Utc),
         })
     }
@@ -3685,19 +3699,26 @@ impl Store for SqliteStore {
                 StoreError::Backend(format!("invalid role in database: {}", row.role))
             })?;
             invites.push(zopp_storage::OrganizationInvite {
-                id: zopp_storage::OrganizationInviteId(Uuid::parse_str(&row.id).unwrap()),
+                id: zopp_storage::OrganizationInviteId(
+                    Uuid::parse_str(&row.id)
+                        .map_err(|e| StoreError::Backend(format!("invalid invite id: {}", e)))?,
+                ),
                 organization_id: zopp_storage::OrganizationId(
-                    Uuid::parse_str(&row.organization_id).unwrap(),
+                    Uuid::parse_str(&row.organization_id)
+                        .map_err(|e| StoreError::Backend(format!("invalid organization_id: {}", e)))?,
                 ),
                 email: row.email,
                 role,
                 token_hash: row.token_hash,
-                invited_by: UserId(Uuid::parse_str(&row.invited_by).unwrap()),
+                invited_by: UserId(
+                    Uuid::parse_str(&row.invited_by)
+                        .map_err(|e| StoreError::Backend(format!("invalid invited_by: {}", e)))?,
+                ),
                 expires_at: DateTime::parse_from_rfc3339(&row.expires_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid expires_at: {}", e)))?
                     .with_timezone(&Utc),
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
             });
         }
@@ -3762,24 +3783,31 @@ impl Store for SqliteStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| Workspace {
-                id: WorkspaceId(Uuid::parse_str(&row.id).unwrap()),
+        let mut workspaces = Vec::with_capacity(rows.len());
+        for row in rows {
+            workspaces.push(Workspace {
+                id: WorkspaceId(
+                    Uuid::parse_str(&row.id)
+                        .map_err(|e| StoreError::Backend(format!("invalid workspace id: {}", e)))?,
+                ),
                 name: row.name,
-                owner_user_id: UserId(Uuid::parse_str(&row.owner_user_id).unwrap()),
+                owner_user_id: UserId(
+                    Uuid::parse_str(&row.owner_user_id)
+                        .map_err(|e| StoreError::Backend(format!("invalid owner_user_id: {}", e)))?,
+                ),
                 kdf_salt: row.kdf_salt,
                 m_cost_kib: row.kdf_m_cost_kib as u32,
                 t_cost: row.kdf_t_cost as u32,
                 p_cost: row.kdf_p_cost as u32,
                 created_at: DateTime::parse_from_rfc3339(&row.created_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid created_at: {}", e)))?
                     .with_timezone(&Utc),
                 updated_at: DateTime::parse_from_rfc3339(&row.updated_at)
-                    .unwrap()
+                    .map_err(|e| StoreError::Backend(format!("invalid updated_at: {}", e)))?
                     .with_timezone(&Utc),
-            })
-            .collect())
+            });
+        }
+        Ok(workspaces)
     }
 }
 
