@@ -1,0 +1,19 @@
+{{- if .Values.podDisruptionBudget.server.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "zopp.fullname" . }}-server
+  labels:
+    {{- include "zopp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  {{- if .Values.podDisruptionBudget.server.minAvailable }}
+  minAvailable: {{ .Values.podDisruptionBudget.server.minAvailable }}
+  {{- else if .Values.podDisruptionBudget.server.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.server.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "zopp.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+{{- end }}

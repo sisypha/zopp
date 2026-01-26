@@ -1,0 +1,33 @@
+{{- if .Values.autoscaling.server.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "zopp.fullname" . }}-server
+  labels:
+    {{- include "zopp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "zopp.fullname" . }}-server
+  minReplicas: {{ .Values.autoscaling.server.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.server.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.server.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.server.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.server.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.server.targetMemoryUtilizationPercentage }}
+    {{- end }}
+{{- end }}
