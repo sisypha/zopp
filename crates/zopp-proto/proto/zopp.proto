@@ -125,6 +125,38 @@ service ZoppService {
   rpc ListAuditLogs(ListAuditLogsRequest) returns (AuditLogList);
   rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogEntry);
   rpc CountAuditLogs(CountAuditLogsRequest) returns (CountAuditLogsResponse);
+
+  // Organizations (SaaS cloud feature)
+  rpc CreateOrganization(CreateOrganizationRequest) returns (Organization);
+  rpc GetOrganization(GetOrganizationRequest) returns (Organization);
+  rpc ListUserOrganizations(Empty) returns (OrganizationList);
+  rpc UpdateOrganization(UpdateOrganizationRequest) returns (Organization);
+  rpc DeleteOrganization(DeleteOrganizationRequest) returns (Empty);
+
+  // Organization members
+  rpc AddOrganizationMember(AddOrganizationMemberRequest) returns (Empty);
+  rpc GetOrganizationMember(GetOrganizationMemberRequest) returns (OrganizationMember);
+  rpc ListOrganizationMembers(ListOrganizationMembersRequest) returns (OrganizationMemberList);
+  rpc UpdateOrganizationMemberRole(UpdateOrganizationMemberRoleRequest) returns (Empty);
+  rpc RemoveOrganizationMember(RemoveOrganizationMemberRequest) returns (Empty);
+
+  // Organization invites
+  rpc CreateOrganizationInvite(CreateOrganizationInviteRequest) returns (OrganizationInvite);
+  rpc GetOrganizationInvite(GetOrganizationInviteRequest) returns (OrganizationInvite);
+  rpc ListOrganizationInvites(ListOrganizationInvitesRequest) returns (OrganizationInviteList);
+  rpc AcceptOrganizationInvite(AcceptOrganizationInviteRequest) returns (OrganizationMember);
+  rpc DeleteOrganizationInvite(DeleteOrganizationInviteRequest) returns (Empty);
+
+  // Organization workspaces
+  rpc LinkWorkspaceToOrganization(LinkWorkspaceToOrganizationRequest) returns (Empty);
+  rpc UnlinkWorkspaceFromOrganization(UnlinkWorkspaceFromOrganizationRequest) returns (Empty);
+  rpc ListOrganizationWorkspaces(ListOrganizationWorkspacesRequest) returns (WorkspaceList);
+
+  // Billing (SaaS cloud feature)
+  rpc GetSubscription(GetSubscriptionRequest) returns (Subscription);
+  rpc ListPayments(ListPaymentsRequest) returns (PaymentList);
+  rpc CreateCheckoutSession(CreateCheckoutSessionRequest) returns (CheckoutSession);
+  rpc CreateBillingPortalSession(CreateBillingPortalSessionRequest) returns (BillingPortalSession);
 }
 
 message Empty {}
@@ -935,4 +967,230 @@ message CountAuditLogsRequest {
 
 message CountAuditLogsResponse {
   uint64 count = 1;
+}
+
+// Organization messages (SaaS cloud feature)
+enum OrganizationRole {
+  ORGANIZATION_ROLE_UNSPECIFIED = 0;
+  ORGANIZATION_OWNER = 1;   // Full control, billing, can delete org
+  ORGANIZATION_ADMIN = 2;   // Manage members, settings, but not billing
+  ORGANIZATION_MEMBER = 3;  // Access to org workspaces based on permissions
+}
+
+enum Plan {
+  PLAN_UNSPECIFIED = 0;
+  PLAN_FREE = 1;
+  PLAN_PRO = 2;
+  PLAN_ENTERPRISE = 3;
+}
+
+message Organization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  Plan plan = 4;
+  int32 seat_limit = 5;
+  int32 member_count = 6;
+  optional string stripe_customer_id = 7;
+  optional string trial_ends_at = 8;  // ISO8601 timestamp
+  string created_at = 9;
+  string updated_at = 10;
+}
+
+message OrganizationList {
+  repeated Organization organizations = 1;
+}
+
+message CreateOrganizationRequest {
+  string name = 1;
+  string slug = 2;  // URL-friendly identifier
+}
+
+message GetOrganizationRequest {
+  oneof identifier {
+    string id = 1;
+    string slug = 2;
+  }
+}
+
+message UpdateOrganizationRequest {
+  string organization_id = 1;
+  optional string name = 2;
+  optional string slug = 3;
+}
+
+message DeleteOrganizationRequest {
+  string organization_id = 1;
+}
+
+// Organization member messages
+message OrganizationMember {
+  string user_id = 1;
+  string email = 2;
+  OrganizationRole role = 3;
+  optional string invited_by = 4;  // User ID of inviter
+  string joined_at = 5;  // ISO8601 timestamp
+}
+
+message OrganizationMemberList {
+  repeated OrganizationMember members = 1;
+}
+
+message AddOrganizationMemberRequest {
+  string organization_id = 1;
+  string user_id = 2;
+  OrganizationRole role = 3;
+}
+
+message GetOrganizationMemberRequest {
+  string organization_id = 1;
+  string user_id = 2;
+}
+
+message ListOrganizationMembersRequest {
+  string organization_id = 1;
+}
+
+message UpdateOrganizationMemberRoleRequest {
+  string organization_id = 1;
+  string user_id = 2;
+  OrganizationRole role = 3;
+}
+
+message RemoveOrganizationMemberRequest {
+  string organization_id = 1;
+  string user_id = 2;
+}
+
+// Organization invite messages
+message OrganizationInvite {
+  string id = 1;
+  string organization_id = 2;
+  string email = 3;
+  OrganizationRole role = 4;
+  string invited_by = 5;  // User ID of inviter
+  string expires_at = 6;  // ISO8601 timestamp
+  string created_at = 7;
+  // Token only returned on create
+  optional string token = 8;
+}
+
+message OrganizationInviteList {
+  repeated OrganizationInvite invites = 1;
+}
+
+message CreateOrganizationInviteRequest {
+  string organization_id = 1;
+  string email = 2;
+  OrganizationRole role = 3;
+  optional int64 expires_in_hours = 4;  // Default 72 hours
+}
+
+message GetOrganizationInviteRequest {
+  string token = 1;  // Invite token for lookup
+}
+
+message ListOrganizationInvitesRequest {
+  string organization_id = 1;
+}
+
+message AcceptOrganizationInviteRequest {
+  string token = 1;
+}
+
+message DeleteOrganizationInviteRequest {
+  string invite_id = 1;
+}
+
+// Organization workspace messages
+message LinkWorkspaceToOrganizationRequest {
+  string organization_id = 1;
+  string workspace_id = 2;
+}
+
+message UnlinkWorkspaceFromOrganizationRequest {
+  string workspace_id = 1;
+}
+
+message ListOrganizationWorkspacesRequest {
+  string organization_id = 1;
+}
+
+// Billing messages (SaaS cloud feature)
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  SUBSCRIPTION_ACTIVE = 1;
+  SUBSCRIPTION_PAST_DUE = 2;
+  SUBSCRIPTION_CANCELED = 3;
+  SUBSCRIPTION_TRIALING = 4;
+  SUBSCRIPTION_INCOMPLETE = 5;
+}
+
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+  PAYMENT_SUCCEEDED = 1;
+  PAYMENT_PENDING = 2;
+  PAYMENT_FAILED = 3;
+  PAYMENT_REFUNDED = 4;
+}
+
+message Subscription {
+  string id = 1;
+  string organization_id = 2;
+  string stripe_subscription_id = 3;
+  string stripe_price_id = 4;
+  Plan plan = 5;
+  SubscriptionStatus status = 6;
+  string current_period_start = 7;  // ISO8601 timestamp
+  string current_period_end = 8;    // ISO8601 timestamp
+  bool cancel_at_period_end = 9;
+  optional string canceled_at = 10; // ISO8601 timestamp
+  string created_at = 11;
+  string updated_at = 12;
+}
+
+message GetSubscriptionRequest {
+  string organization_id = 1;
+}
+
+message Payment {
+  string id = 1;
+  string organization_id = 2;
+  optional string stripe_payment_intent_id = 3;
+  optional string stripe_invoice_id = 4;
+  int64 amount_cents = 5;
+  string currency = 6;
+  PaymentStatus status = 7;
+  optional string description = 8;
+  string created_at = 9;
+}
+
+message PaymentList {
+  repeated Payment payments = 1;
+}
+
+message ListPaymentsRequest {
+  string organization_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message CheckoutSession {
+  string url = 1;  // Stripe Checkout URL
+}
+
+message CreateCheckoutSessionRequest {
+  string organization_id = 1;
+  Plan plan = 2;
+  string success_url = 3;  // Redirect URL on success
+  string cancel_url = 4;   // Redirect URL on cancel
+}
+
+message BillingPortalSession {
+  string url = 1;  // Stripe Billing Portal URL
+}
+
+message CreateBillingPortalSessionRequest {
+  string organization_id = 1;
+  string return_url = 2;  // URL to return to after portal session
 }
