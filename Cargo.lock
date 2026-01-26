@@ -6299,6 +6299,7 @@ dependencies = [
  "uuid",
  "x25519-dalek",
  "zopp-audit",
+ "zopp-billing",
  "zopp-crypto",
  "zopp-events",
  "zopp-events-memory",
