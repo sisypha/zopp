@@ -25,13 +25,12 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(page.getByRole('heading', { name: /Permissions & Groups/i })).toBeVisible();
 
     // Should show tabs (use .tabs locator to be specific)
-    const tabs = page.locator('.tabs');
+    const tabs = page.locator('[data-testid="tabs"]');
     await expect(tabs.getByText('Permissions', { exact: true })).toBeVisible();
     await expect(tabs.getByText('Groups', { exact: true })).toBeVisible();
 
-    // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    // Should show breadcrumb with workspace link and Permissions label
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText('Permissions')).toBeVisible();
   });
@@ -44,7 +43,7 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(page.getByRole('heading', { name: /Permissions & Groups/i })).toBeVisible();
 
     // Click on Groups tab (use exact match to avoid matching heading)
-    await page.locator('.tabs').getByText('Groups', { exact: true }).click();
+    await page.locator('[data-testid="tabs"]').getByText('Groups', { exact: true }).click();
 
     // Wait for content to load
     await page.waitForTimeout(500);
@@ -53,7 +52,7 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(page.getByRole('button', { name: /Create Group/i })).toBeVisible();
 
     // Click back to Permissions tab
-    await page.locator('.tabs').getByText('Permissions', { exact: true }).click();
+    await page.locator('[data-testid="tabs"]').getByText('Permissions', { exact: true }).click();
 
     // Should no longer show Create Group button (it's only on groups tab)
     await page.waitForTimeout(500);
@@ -86,7 +85,7 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(page.getByRole('heading', { name: /Permissions & Groups/i })).toBeVisible();
 
     // Switch to groups tab (use exact match to avoid matching heading)
-    await page.locator('.tabs').getByText('Groups', { exact: true }).click();
+    await page.locator('[data-testid="tabs"]').getByText('Groups', { exact: true }).click();
     await page.waitForTimeout(500);
 
     // Click create group button
@@ -109,7 +108,7 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(page.getByRole('heading', { name: /Permissions & Groups/i })).toBeVisible();
 
     // Switch to groups tab (use exact match to avoid matching heading)
-    await page.locator('.tabs').getByText('Groups', { exact: true }).click();
+    await page.locator('[data-testid="tabs"]').getByText('Groups', { exact: true }).click();
     await page.waitForTimeout(500);
 
     // Open modal
@@ -132,7 +131,7 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(page.getByRole('heading', { name: /Permissions & Groups/i })).toBeVisible();
 
     // Switch to groups tab (use exact match to avoid matching heading)
-    await page.locator('.tabs').getByText('Groups', { exact: true }).click();
+    await page.locator('[data-testid="tabs"]').getByText('Groups', { exact: true }).click();
     await page.waitForTimeout(500);
 
     // Open modal
@@ -176,7 +175,7 @@ test.describe('Permissions Page - Navigation', () => {
     await expect(page.getByRole('heading', { name: /Permissions & Groups/i })).toBeVisible();
 
     // Click workspace in breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await breadcrumb.getByRole('link', { name: workspaceName }).click();
 
     // Should be on projects page

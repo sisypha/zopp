@@ -187,7 +187,7 @@ test.describe('Secrets Page - Authenticated', () => {
     await page.getByPlaceholder('Enter secret value').fill('new-secret-value');
 
     // Click the submit button inside the modal form
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Modal should close
     await expect(page.getByRole('heading', { name: 'Add Secret' })).not.toBeVisible({ timeout: 10000 });
@@ -207,7 +207,7 @@ test.describe('Secrets Page - Authenticated', () => {
     await page.locator('button:has-text("Add Secret")').first().click();
     await page.getByPlaceholder('DATABASE_URL').fill('TO_DELETE');
     await page.getByPlaceholder('Enter secret value').fill('delete-me');
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
     await expect(page.getByRole('heading', { name: 'Add Secret' })).not.toBeVisible({ timeout: 10000 });
 
     // Verify it was added
@@ -232,8 +232,7 @@ test.describe('Secrets Page - Navigation', () => {
 
     // Should show breadcrumb with workspace, project, and environment
     // Use the breadcrumb nav specifically to avoid matching sidebar
-    const breadcrumb = page.locator('.breadcrumbs');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: projectName })).toBeVisible();
     await expect(breadcrumb.getByText(environmentName)).toBeVisible();
@@ -247,7 +246,7 @@ test.describe('Secrets Page - Navigation', () => {
     await expect(page.getByRole('heading', { name: 'Secrets', exact: true })).toBeVisible();
 
     // Click on project in breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await breadcrumb.getByRole('link', { name: projectName }).click();
 
     // Should be on environments page

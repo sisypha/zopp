@@ -190,7 +190,7 @@ test.describe('Join with Email Verification', () => {
     await page.goto('/invite');
 
     // Fill in the form
-    await page.getByPlaceholder(/zopp-invite/i).fill(inviteToken);
+    await page.getByPlaceholder(/inv_/i).fill(inviteToken);
     await page.getByPlaceholder(/you@example.com/i).fill(testEmail);
     await page.getByPlaceholder(/My Laptop/i).fill(deviceName);
 
@@ -211,7 +211,7 @@ test.describe('Join with Email Verification', () => {
     await page.goto('/invite');
 
     // Fill in the form
-    await page.getByPlaceholder(/zopp-invite/i).fill(inviteToken);
+    await page.getByPlaceholder(/inv_/i).fill(inviteToken);
     await page.getByPlaceholder(/you@example.com/i).fill(testEmail);
     await page.getByPlaceholder(/My Laptop/i).fill(deviceName);
 
@@ -232,7 +232,7 @@ test.describe('Join with Email Verification', () => {
     await page.getByRole('button', { name: /Verify/i }).click();
 
     // Should redirect to workspaces page on success
-    await expect(page).toHaveURL(/\/workspaces/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/settings/, { timeout: 10000 });
   });
 
   test('should show error for invalid verification code', async ({ page }) => {
@@ -244,7 +244,7 @@ test.describe('Join with Email Verification', () => {
     await page.goto('/invite');
 
     // Fill in the form
-    await page.getByPlaceholder(/zopp-invite/i).fill(inviteToken);
+    await page.getByPlaceholder(/inv_/i).fill(inviteToken);
     await page.getByPlaceholder(/you@example.com/i).fill(testEmail);
     await page.getByPlaceholder(/My Laptop/i).fill(deviceName);
 
@@ -276,7 +276,7 @@ test.describe('Join with Email Verification', () => {
     await page.goto('/invite');
 
     // Fill in the form
-    await page.getByPlaceholder(/zopp-invite/i).fill(inviteToken);
+    await page.getByPlaceholder(/inv_/i).fill(inviteToken);
     await page.getByPlaceholder(/you@example.com/i).fill(testEmail);
     await page.getByPlaceholder(/My Laptop/i).fill(deviceName);
 
@@ -304,6 +304,6 @@ test.describe('Join with Email Verification', () => {
     await page.getByRole('button', { name: /Verify/i }).click();
 
     // Should redirect to workspaces page on success
-    await expect(page).toHaveURL(/\/workspaces/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/settings/, { timeout: 10000 });
   });
 });

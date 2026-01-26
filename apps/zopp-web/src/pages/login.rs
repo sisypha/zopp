@@ -141,27 +141,32 @@ pub fn LoginPage() -> impl IntoView {
     let _ = navigate_for_effect; // Suppress unused warning
 
     view! {
-        <div class="min-h-screen flex items-center justify-center bg-base-200">
-            <div class="card w-96 bg-base-100 shadow-xl">
-                <div class="card-body">
-                    <h2 class="card-title text-2xl font-bold text-center">"Import Principal"</h2>
-                    <p class="text-base-content/70 text-sm">
+        <div class="min-h-screen flex items-center justify-center bg-vault-base">
+            <div class="bg-vault-100 border border-terminal-border rounded-md p-6 w-96">
+                <div class="space-y-4">
+                    <h2 class="text-2xl font-bold text-cipher-text">"Import principal"</h2>
+                    <p class="text-cipher-secondary text-sm">
                         "Enter your export code and passphrase from the CLI."
                     </p>
 
                     // Show consume warning with continue button
                     <Show when=move || consume_warning.get().is_some()>
                         <div class="space-y-4 mt-4">
-                            <div class="alert alert-warning">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-warning-muted bg-warning-muted text-warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
                                 <div>
-                                    <h3 class="font-bold">"Import Succeeded with Warning"</h3>
-                                    <p class="text-sm">{move || consume_warning.get().unwrap_or_default()}</p>
+                                    <h3 class="font-bold">"Import succeeded with warning"</h3>
+                                    <p class="text-sm mt-1">{move || consume_warning.get().unwrap_or_default()}</p>
                                 </div>
                             </div>
-                            <a href="/workspaces" class="btn btn-primary w-full">"Continue to Workspaces"</a>
+                            <a
+                                href="/"
+                                class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors"
+                            >
+                                "Continue"
+                            </a>
                         </div>
                     </Show>
 
@@ -169,35 +174,31 @@ pub fn LoginPage() -> impl IntoView {
                     <div class:hidden=move || consume_warning.get().is_some()>
                         <form on:submit=on_submit class="space-y-4 mt-4">
                             <Show when=move || error.get().is_some()>
-                                <div class="alert alert-error">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                <div class="flex items-start gap-3 p-4 rounded-md text-sm border border-error-muted bg-error-muted text-error">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span>{move || error.get().unwrap_or_default()}</span>
                                 </div>
                             </Show>
 
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text">"Export Code"</span>
-                                </label>
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Export code"</label>
                                 <input
                                     type="text"
                                     placeholder="Enter export code"
-                                    class="input input-bordered"
+                                    class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
                                     prop:value=move || export_code.get()
                                     on:input=move |ev| set_export_code.set(event_target_value(&ev))
                                 />
                             </div>
 
-                            <div class="form-control">
-                                <label class="label">
-                                    <span class="label-text">"Passphrase"</span>
-                                </label>
+                            <div class="space-y-1.5">
+                                <label class="block text-sm font-medium text-cipher-text">"Passphrase"</label>
                                 <input
                                     type="password"
                                     placeholder="Enter passphrase"
-                                    class="input input-bordered"
+                                    class="w-full px-3 py-2.5 text-sm rounded-sm bg-control-bg border border-control-border text-cipher-text placeholder:text-cipher-muted focus:outline-none focus:border-amber focus:ring-2 focus:ring-amber/30 transition-colors"
                                     prop:value=move || passphrase.get()
                                     on:input=move |ev| set_passphrase.set(event_target_value(&ev))
                                 />
@@ -205,20 +206,27 @@ pub fn LoginPage() -> impl IntoView {
 
                             <button
                                 type="submit"
-                                class="btn btn-primary w-full"
+                                class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 disabled=move || loading.get()
                             >
                                 <Show when=move || loading.get()>
-                                    <span class="loading loading-spinner"></span>
+                                    <span class="inline-block w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white"></span>
                                 </Show>
                                 "Import"
                             </button>
                         </form>
 
-                        <div class="divider">"OR"</div>
+                        <div class="my-6 flex items-center gap-4">
+                            <div class="flex-1 border-t border-terminal-border"></div>
+                            <span class="text-cipher-muted text-sm">"or"</span>
+                            <div class="flex-1 border-t border-terminal-border"></div>
+                        </div>
 
-                        <a href="/invite" class="btn btn-outline w-full">
-                            "Join with Invite Token"
+                        <a
+                            href="/invite"
+                            class="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-200 transition-colors"
+                        >
+                            "Join with invite token"
                         </a>
                     </div>
                 </div>

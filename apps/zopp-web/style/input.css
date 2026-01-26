@@ -2,54 +2,148 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   SECTION 1: CSS Custom Properties (Tokens)
+   ============================================ */
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Base surfaces - cool slate whites */
+    --vault-base: #f8fafc;
+    --vault-surface-100: #ffffff;
+    --vault-surface-200: #ffffff;
+    --vault-surface-300: #ffffff;
+    --vault-inset: #f1f5f9;
+
+    /* Text hierarchy - slate grays */
+    --cipher-text: #1e293b;
+    --cipher-text-secondary: #64748b;
+    --cipher-text-muted: #94a3b8;
+    --cipher-text-faint: #cbd5e1;
+
+    /* Borders - subtle definition */
+    --terminal-border: rgba(0, 0, 0, 0.08);
+    --terminal-border-subtle: rgba(0, 0, 0, 0.05);
+    --terminal-border-strong: rgba(0, 0, 0, 0.12);
+    --terminal-border-focus: rgba(217, 119, 6, 0.4);
+
+    /* Amber accent - deeper for light backgrounds */
+    --amber: #d97706;
+    --amber-hover: #b45309;
+    --amber-muted: rgba(217, 119, 6, 0.1);
+    --amber-text: #92400e;
+
+    /* Semantic */
+    --success: #059669;
+    --success-muted: rgba(5, 150, 105, 0.1);
+    --warning: #d97706;
+    --warning-muted: rgba(217, 119, 6, 0.1);
+    --error: #dc2626;
+    --error-muted: rgba(220, 38, 38, 0.1);
+    --info: #2563eb;
+    --info-muted: rgba(37, 99, 235, 0.1);
+
+    /* Controls */
+    --control-bg: #ffffff;
+    --control-border: rgba(0, 0, 0, 0.1);
+    --control-focus: rgba(217, 119, 6, 0.3);
+
+    /* Transitions */
+    --transition-fast: 150ms ease-out;
+    --transition-normal: 200ms ease-out;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Base surfaces - cold slate, not warm */
+    --vault-base: #0f1114;
+    --vault-surface-100: #16191d;
+    --vault-surface-200: #1c2027;
+    --vault-surface-300: #242830;
+    --vault-inset: #0a0c0e;
+
+    /* Text hierarchy - cool grays */
+    --cipher-text: #e8eaed;
+    --cipher-text-secondary: #9aa0a6;
+    --cipher-text-muted: #5f6368;
+    --cipher-text-faint: #3c4043;
+
+    /* Borders - subtle definition */
+    --terminal-border: rgba(255, 255, 255, 0.06);
+    --terminal-border-subtle: rgba(255, 255, 255, 0.04);
+    --terminal-border-strong: rgba(255, 255, 255, 0.10);
+    --terminal-border-focus: rgba(251, 146, 60, 0.5);
+
+    /* Amber accent - brighter for dark backgrounds */
+    --amber: #f59e0b;
+    --amber-hover: #fbbf24;
+    --amber-muted: rgba(245, 158, 11, 0.15);
+    --amber-text: #fcd34d;
+
+    /* Semantic - slightly desaturated for dark */
+    --success: #34d399;
+    --success-muted: rgba(52, 211, 153, 0.15);
+    --warning: #fbbf24;
+    --warning-muted: rgba(251, 191, 36, 0.15);
+    --error: #f87171;
+    --error-muted: rgba(248, 113, 113, 0.15);
+    --info: #60a5fa;
+    --info-muted: rgba(96, 165, 250, 0.15);
+
+    /* Controls */
+    --control-bg: #1c2027;
+    --control-border: rgba(255, 255, 255, 0.08);
+    --control-focus: rgba(245, 158, 11, 0.4);
+
+    /* Transitions */
+    --transition-fast: 150ms ease-out;
+    --transition-normal: 200ms ease-out;
+  }
+}
+
+/* ============================================
+   SECTION 2: Base Styles
+   ============================================ */
+
 @layer base {
-  /* Apply Inter font to body */
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    color: var(--cipher-text);
+    background: var(--vault-base);
   }
 
-  /* Monospace elements */
   code, kbd, pre, samp {
     font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, Consolas, monospace;
   }
 
-  /* Better heading styles */
   h1, h2, h3, h4, h5, h6 {
     letter-spacing: -0.02em;
+    color: var(--cipher-text);
   }
 
-  /* Selection color matching theme */
   ::selection {
-    background: rgba(249, 115, 22, 0.25);
+    background: var(--amber-muted);
+  }
+
+  /* Focus visible for accessibility */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--terminal-border-focus);
   }
 }
 
-@layer components {
-  /* Button hover effect like docs */
-  .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
-  }
-
-  /* Card hover effect */
-  .card:hover {
-    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.12);
-  }
-
-  /* Code styling */
-  code:not(pre code) {
-    @apply px-1.5 py-0.5 rounded text-sm;
-    background: rgba(249, 115, 22, 0.08);
-    color: #ea580c;
-  }
-
-  [data-theme="zopp-dark"] code:not(pre code) {
-    background: rgba(251, 146, 60, 0.12);
-    color: #fdba74;
-  }
-}
+/* ============================================
+   SECTION 4: Utilities
+   ============================================ */
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
@@ -62,10 +156,30 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(249, 115, 22, 0.3);
+  background: var(--terminal-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #f97316;
+  background: var(--terminal-border-strong);
+}
+
+/* Tabular numbers for data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Truncate with ellipsis */
+.truncate {
+  @apply overflow-hidden text-ellipsis whitespace-nowrap;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

@@ -1,36 +1,29 @@
 /**
  * E2E tests for workspaces, projects, and environments management.
  * Uses the authenticated fixture for full integration testing.
+ *
+ * Note: The workspaces listing page was removed. Workspace creation is now
+ * done via the sidebar dropdown. Tests navigate directly to workspace URLs.
  */
 
 import { test, expect } from './fixtures/test-setup';
 
-test.describe('Workspaces Page', () => {
-  test('should show workspaces page with existing workspace', async ({ authenticatedPage, testContext }) => {
+test.describe('Workspace Creation (via Sidebar)', () => {
+  test('should create a new workspace from sidebar dropdown', async ({ authenticatedPage, testContext }) => {
     const page = authenticatedPage;
     const { workspaceName } = testContext;
-
-    await page.goto('/workspaces');
-
-    // Should show the workspaces heading
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
-
-    // Should have create workspace button
-    await expect(page.getByRole('button', { name: /Create Workspace/i })).toBeVisible();
-
-    // Should show our test workspace
-    await expect(page.getByText(workspaceName)).toBeVisible({ timeout: 10000 });
-  });
-
-  test('should create a new workspace', async ({ authenticatedPage }) => {
-    const page = authenticatedPage;
     const newWorkspaceName = `new-ws-${Date.now()}`;
 
-    await page.goto('/workspaces');
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+    // Navigate to existing workspace (projects page)
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
-    // Click create workspace button
-    await page.getByRole('button', { name: /Create Workspace/i }).click();
+    // Open the workspace dropdown in sidebar
+    const sidebar = page.locator('aside');
+    await sidebar.getByText(workspaceName).click();
+
+    // Click "Create Workspace" in dropdown
+    await sidebar.getByText('Create Workspace').click();
 
     // Modal should appear
     await expect(page.getByRole('heading', { name: /Create Workspace/i })).toBeVisible();
@@ -39,21 +32,20 @@ test.describe('Workspaces Page', () => {
     await page.getByPlaceholder(/my-workspace/i).fill(newWorkspaceName);
 
     // Submit
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button').filter({ hasText: 'Create' }).click();
 
-    // Modal should close
-    await expect(page.getByRole('heading', { name: /Create Workspace/i })).not.toBeVisible({ timeout: 10000 });
-
-    // New workspace should appear in the list
-    await expect(page.getByText(newWorkspaceName)).toBeVisible({ timeout: 10000 });
+    // Should navigate to the new workspace
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${newWorkspaceName}`));
   });
 
-  test('should create workspace, project, environment, and secret from web UI', async ({ authenticatedPage }) => {
+  test('should create workspace, project, environment, and secret from web UI', async ({ authenticatedPage, testContext }) => {
     // This test verifies the full flow using only web UI operations.
     // It specifically tests that KEK wrapping/unwrapping works correctly
     // (regression test for AAD mismatch bug where workspace name was used
     // during wrap but workspace ID was used during unwrap).
     const page = authenticatedPage;
+    const { workspaceName } = testContext;
     const testId = Date.now();
     const wsName = `web-ws-${testId}`;
     const projName = `web-proj-${testId}`;
@@ -61,22 +53,29 @@ test.describe('Workspaces Page', () => {
     const secretKey = `WEB_SECRET_${testId}`;
     const secretValue = `secret-value-${testId}`;
 
-    // Step 1: Create workspace from web UI
-    await page.goto('/workspaces');
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: /Create Workspace/i }).click();
+    // Step 1: Create workspace from sidebar dropdown
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+
+    // Open workspace dropdown
+    const sidebar = page.locator('aside');
+    await sidebar.getByText(workspaceName).click();
+    await sidebar.getByText('Create Workspace').click();
+
+    // Fill in and create workspace
     await expect(page.getByRole('heading', { name: /Create Workspace/i })).toBeVisible();
     await page.getByPlaceholder(/my-workspace/i).fill(wsName);
-    await page.locator('.modal-box button[type="submit"]').click();
-    await expect(page.getByText(wsName)).toBeVisible({ timeout: 15000 });
+    await page.locator('[data-testid="modal-content"] button').filter({ hasText: 'Create' }).click();
 
-    // Step 2: Navigate to workspace and create project
-    await page.getByRole('link', { name: wsName }).click();
+    // Should navigate to new workspace projects page
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${wsName}`), { timeout: 15000 });
     await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+
+    // Step 2: Create project
     await page.getByRole('button', { name: /Create Project/i }).click();
     await expect(page.getByRole('heading', { name: /Create Project/i })).toBeVisible();
     await page.getByPlaceholder(/my-project/i).fill(projName);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
     await expect(page.getByText(projName)).toBeVisible({ timeout: 15000 });
 
     // Step 3: Navigate to project and create environment
@@ -86,10 +85,10 @@ test.describe('Workspaces Page', () => {
     await page.getByRole('button', { name: /Create Environment/i }).click();
     await expect(page.getByRole('heading', { name: /Create Environment/i })).toBeVisible();
     await page.getByPlaceholder(/production/i).fill(envName);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Verify no error appears and environment is created
-    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="error-alert"]')).not.toBeVisible({ timeout: 5000 });
     await expect(page.getByText(envName)).toBeVisible({ timeout: 15000 });
 
     // Step 4: Navigate to environment and create a secret
@@ -100,10 +99,10 @@ test.describe('Workspaces Page', () => {
     await expect(page.getByRole('heading', { name: /Add Secret/i })).toBeVisible();
     await page.getByPlaceholder(/DATABASE_URL/i).fill(secretKey);
     await page.getByPlaceholder(/Enter secret value/i).fill(secretValue);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Verify no error and secret appears
-    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="error-alert"]')).not.toBeVisible({ timeout: 5000 });
     await expect(page.getByText(secretKey)).toBeVisible({ timeout: 15000 });
 
     // Step 5: Verify we can read the secret back (tests decryption)
@@ -111,22 +110,31 @@ test.describe('Workspaces Page', () => {
     await expect(page.getByText(secretValue)).toBeVisible({ timeout: 5000 });
   });
 
-  test('should navigate to projects page when clicking workspace', async ({ authenticatedPage, testContext }) => {
+  test('should switch between workspaces via dropdown', async ({ authenticatedPage, testContext }) => {
     const page = authenticatedPage;
     const { workspaceName } = testContext;
+    const newWorkspaceName = `switch-ws-${Date.now()}`;
 
-    await page.goto('/workspaces');
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
-
-    // Wait for workspace to appear
-    await expect(page.getByText(workspaceName)).toBeVisible({ timeout: 10000 });
-
-    // Click on workspace card/link
-    await page.getByRole('link', { name: workspaceName }).click();
-
-    // Should be on projects page
+    // Navigate to existing workspace
+    await page.goto(`/workspaces/${workspaceName}`);
     await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`/workspaces/${workspaceName}`));
+
+    // Create a second workspace
+    const sidebar = page.locator('aside');
+    await sidebar.getByText(workspaceName).click();
+    await sidebar.getByText('Create Workspace').click();
+    await page.getByPlaceholder(/my-workspace/i).fill(newWorkspaceName);
+    await page.locator('[data-testid="modal-content"] button').filter({ hasText: 'Create' }).click();
+
+    // Should be on new workspace now
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${newWorkspaceName}`), { timeout: 10000 });
+
+    // Open dropdown and switch back to original workspace
+    await sidebar.getByText(newWorkspaceName).click();
+    await sidebar.getByRole('button', { name: workspaceName }).click();
+
+    // Should navigate to original workspace
+    await expect(page).toHaveURL(new RegExp(`/workspaces/${workspaceName}`), { timeout: 10000 });
   });
 });
 
@@ -143,9 +151,8 @@ test.describe('Projects Page', () => {
     // Should have create project button
     await expect(page.getByRole('button', { name: /Create Project/i })).toBeVisible();
 
-    // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    // Should show breadcrumb with workspace name
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByText(workspaceName)).toBeVisible();
 
     // Should show our test project
@@ -170,7 +177,7 @@ test.describe('Projects Page', () => {
     await page.getByPlaceholder(/my-project/i).fill(newProjectName);
 
     // Submit
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Modal should close
     await expect(page.getByRole('heading', { name: /Create Project/i })).not.toBeVisible({ timeout: 10000 });
@@ -203,11 +210,11 @@ test.describe('Projects Page', () => {
     await page.goto(`/workspaces/${workspaceName}`);
     await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
-    // Should have invite button
-    await expect(page.getByRole('link', { name: /Invite/i })).toBeVisible();
+    // Should have invite button (use exact match to avoid matching sidebar "Invites")
+    await expect(page.getByRole('link', { name: 'Invite', exact: true })).toBeVisible();
 
-    // Should have permissions button
-    await expect(page.getByRole('link', { name: /Permissions/i })).toBeVisible();
+    // Should have permissions button (use exact match to avoid matching sidebar)
+    await expect(page.getByRole('link', { name: 'Permissions', exact: true })).toBeVisible();
   });
 });
 
@@ -224,9 +231,8 @@ test.describe('Environments Page', () => {
     // Should have create environment button
     await expect(page.getByRole('button', { name: /Create Environment/i })).toBeVisible();
 
-    // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    // Should show breadcrumb with workspace link and project name
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText(projectName)).toBeVisible();
 
@@ -252,7 +258,7 @@ test.describe('Environments Page', () => {
     await page.getByPlaceholder(/production/i).fill(newEnvName);
 
     // Submit
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Modal should close
     await expect(page.getByRole('heading', { name: /Create Environment/i })).not.toBeVisible({ timeout: 10000 });
@@ -280,26 +286,30 @@ test.describe('Environments Page', () => {
 });
 
 test.describe('Dashboard Navigation', () => {
-  test('should have working sidebar navigation', async ({ authenticatedPage }) => {
+  test('should have working sidebar navigation', async ({ authenticatedPage, testContext }) => {
     const page = authenticatedPage;
+    const { workspaceName } = testContext;
 
-    await page.goto('/workspaces');
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
     // Sidebar should have key links
-    const sidebar = page.locator('aside, .drawer-side');
-    await expect(sidebar.getByRole('link', { name: /Workspaces/i })).toBeVisible();
+    const sidebar = page.locator('aside');
+    await expect(sidebar.getByRole('link', { name: /Projects/i })).toBeVisible();
     await expect(sidebar.getByRole('link', { name: /Settings/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /Permissions/i })).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: /Invites/i })).toBeVisible();
   });
 
-  test('should navigate to settings from sidebar', async ({ authenticatedPage }) => {
+  test('should navigate to settings from sidebar', async ({ authenticatedPage, testContext }) => {
     const page = authenticatedPage;
+    const { workspaceName } = testContext;
 
-    await page.goto('/workspaces');
-    await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+    await page.goto(`/workspaces/${workspaceName}`);
+    await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
     // Click settings in sidebar
-    const sidebar = page.locator('aside, .drawer-side');
+    const sidebar = page.locator('aside');
     await sidebar.getByRole('link', { name: /Settings/i }).click();
 
     // Should be on settings page

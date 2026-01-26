@@ -27,9 +27,8 @@ test.describe('Invites Page - Authenticated', () => {
     // Should have create invite button
     await expect(page.getByRole('button', { name: /Create Invite/i })).toBeVisible();
 
-    // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
+    // Should show breadcrumb with workspace link and Invites label
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText('Invites')).toBeVisible();
   });
@@ -82,7 +81,7 @@ test.describe('Invites Page - Authenticated', () => {
     await expect(page.getByText(/This code will only be shown once/i)).toBeVisible();
 
     // Should have copy button
-    await expect(page.getByRole('button').filter({ has: page.locator('svg') })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Copy to clipboard' })).toBeVisible();
   });
 
   test('should be able to create multiple invites', async ({ authenticatedPage, testContext }) => {
@@ -119,8 +118,8 @@ test.describe('Invites Page - Navigation', () => {
     await page.goto(`/workspaces/${workspaceName}`);
     await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
-    // Click invite link
-    await page.getByRole('link', { name: /Invite/i }).click();
+    // Click invite link (use exact match to avoid matching sidebar "Invites")
+    await page.getByRole('link', { name: 'Invite', exact: true }).click();
 
     // Should be on invites page
     await expect(page.getByRole('heading', { name: /Workspace Invites/i })).toBeVisible();
@@ -134,7 +133,7 @@ test.describe('Invites Page - Navigation', () => {
     await expect(page.getByRole('heading', { name: /Workspace Invites/i })).toBeVisible();
 
     // Click workspace in breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await breadcrumb.getByRole('link', { name: workspaceName }).click();
 
     // Should be on projects page
