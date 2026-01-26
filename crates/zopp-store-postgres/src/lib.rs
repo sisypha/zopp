@@ -2542,6 +2542,13 @@ impl Store for PostgresStore {
         let seat_limit = params.plan.default_seat_limit();
         let plan_str = params.plan.as_str();
 
+        // Use a transaction to ensure atomicity - both org and owner membership must succeed
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
+
         sqlx::query!(
             r#"INSERT INTO organizations (id, name, slug, plan, seat_limit)
                VALUES ($1, $2, $3, $4, $5)"#,
@@ -2551,7 +2558,7 @@ impl Store for PostgresStore {
             plan_str,
             seat_limit
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| match e {
             sqlx::Error::Database(ref db_err) if db_err.is_unique_violation() => {
@@ -2567,9 +2574,13 @@ impl Store for PostgresStore {
             org_id.0,
             params.owner_user_id.0
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StoreError::Backend(e.to_string()))?;
 
         Ok(org_id)
     }
@@ -2595,7 +2606,9 @@ impl Store for PostgresStore {
             slug: row.slug,
             stripe_customer_id: row.stripe_customer_id,
             stripe_subscription_id: row.stripe_subscription_id,
-            plan: row.plan.parse().unwrap_or(zopp_storage::Plan::Free),
+            plan: row.plan.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid plan in database: {}", row.plan))
+            })?,
             seat_limit: row.seat_limit,
             trial_ends_at: row.trial_ends_at,
             created_at: row.created_at,
@@ -2624,7 +2637,9 @@ impl Store for PostgresStore {
             slug: row.slug,
             stripe_customer_id: row.stripe_customer_id,
             stripe_subscription_id: row.stripe_subscription_id,
-            plan: row.plan.parse().unwrap_or(zopp_storage::Plan::Free),
+            plan: row.plan.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid plan in database: {}", row.plan))
+            })?,
             seat_limit: row.seat_limit,
             trial_ends_at: row.trial_ends_at,
             created_at: row.created_at,
@@ -2649,21 +2664,25 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::Organization {
+        let mut orgs = Vec::with_capacity(rows.len());
+        for row in rows {
+            let plan = row.plan.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid plan in database: {}", row.plan))
+            })?;
+            orgs.push(zopp_storage::Organization {
                 id: zopp_storage::OrganizationId(row.id),
                 name: row.name,
                 slug: row.slug,
                 stripe_customer_id: row.stripe_customer_id,
                 stripe_subscription_id: row.stripe_subscription_id,
-                plan: row.plan.parse().unwrap_or(zopp_storage::Plan::Free),
+                plan,
                 seat_limit: row.seat_limit,
                 trial_ends_at: row.trial_ends_at,
                 created_at: row.created_at,
                 updated_at: row.updated_at,
-            })
-            .collect())
+            });
+        }
+        Ok(orgs)
     }
 
     async fn update_organization(
@@ -2809,10 +2828,9 @@ impl Store for PostgresStore {
         Ok(zopp_storage::OrganizationMember {
             organization_id: zopp_storage::OrganizationId(row.organization_id),
             user_id: UserId(row.user_id),
-            role: row
-                .role
-                .parse()
-                .unwrap_or(zopp_storage::OrganizationRole::Member),
+            role: row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?,
             invited_by: row.invited_by.map(UserId),
             joined_at: row.joined_at,
         })
@@ -2833,19 +2851,20 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::OrganizationMember {
+        let mut members = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            members.push(zopp_storage::OrganizationMember {
                 organization_id: zopp_storage::OrganizationId(row.organization_id),
                 user_id: UserId(row.user_id),
-                role: row
-                    .role
-                    .parse()
-                    .unwrap_or(zopp_storage::OrganizationRole::Member),
+                role,
                 invited_by: row.invited_by.map(UserId),
                 joined_at: row.joined_at,
-            })
-            .collect())
+            });
+        }
+        Ok(members)
     }
 
     async fn update_organization_member_role(
@@ -2968,10 +2987,9 @@ impl Store for PostgresStore {
             id: zopp_storage::OrganizationInviteId(row.id),
             organization_id: zopp_storage::OrganizationId(row.organization_id),
             email: row.email,
-            role: row
-                .role
-                .parse()
-                .unwrap_or(zopp_storage::OrganizationRole::Member),
+            role: row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?,
             token_hash: row.token_hash,
             invited_by: UserId(row.invited_by),
             expires_at: row.expires_at,
@@ -2994,22 +3012,23 @@ impl Store for PostgresStore {
         .await
         .map_err(|e| StoreError::Backend(e.to_string()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(|row| zopp_storage::OrganizationInvite {
+        let mut invites = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role = row.role.parse().map_err(|_| {
+                StoreError::Backend(format!("invalid role in database: {}", row.role))
+            })?;
+            invites.push(zopp_storage::OrganizationInvite {
                 id: zopp_storage::OrganizationInviteId(row.id),
                 organization_id: zopp_storage::OrganizationId(row.organization_id),
                 email: row.email,
-                role: row
-                    .role
-                    .parse()
-                    .unwrap_or(zopp_storage::OrganizationRole::Member),
+                role,
                 token_hash: row.token_hash,
                 invited_by: UserId(row.invited_by),
                 expires_at: row.expires_at,
                 created_at: row.created_at,
-            })
-            .collect())
+            });
+        }
+        Ok(invites)
     }
 
     async fn delete_organization_invite(
