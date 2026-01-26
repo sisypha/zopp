@@ -2560,7 +2560,7 @@ impl Store for PostgresStore {
         &self,
         _user_id: &UserId,
     ) -> Result<Vec<zopp_storage::Organization>, StoreError> {
-        Ok(vec![])
+        Err(StoreError::Backend("not implemented".into()))
     }
 
     async fn update_organization(
@@ -2618,7 +2618,7 @@ impl Store for PostgresStore {
         &self,
         _org_id: &zopp_storage::OrganizationId,
     ) -> Result<Vec<zopp_storage::OrganizationMember>, StoreError> {
-        Ok(vec![])
+        Err(StoreError::Backend("not implemented".into()))
     }
 
     async fn update_organization_member_role(
@@ -2642,7 +2642,7 @@ impl Store for PostgresStore {
         &self,
         _org_id: &zopp_storage::OrganizationId,
     ) -> Result<i32, StoreError> {
-        Ok(0)
+        Err(StoreError::Backend("not implemented".into()))
     }
 
     async fn create_organization_invite(
@@ -2663,7 +2663,7 @@ impl Store for PostgresStore {
         &self,
         _org_id: &zopp_storage::OrganizationId,
     ) -> Result<Vec<zopp_storage::OrganizationInvite>, StoreError> {
-        Ok(vec![])
+        Err(StoreError::Backend("not implemented".into()))
     }
 
     async fn delete_organization_invite(
@@ -2685,7 +2685,7 @@ impl Store for PostgresStore {
         &self,
         _org_id: &zopp_storage::OrganizationId,
     ) -> Result<Vec<Workspace>, StoreError> {
-        Ok(vec![])
+        Err(StoreError::Backend("not implemented".into()))
     }
 }
 
