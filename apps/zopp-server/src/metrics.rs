@@ -33,6 +33,7 @@ pub fn init_metrics() -> PrometheusHandle {
 }
 
 /// Record a successful gRPC request.
+#[allow(dead_code)]
 pub fn record_grpc_request(method: &'static str, duration: std::time::Duration) {
     counter!("zopp_grpc_requests_total", "method" => method, "status" => "ok").increment(1);
     histogram!("zopp_grpc_request_duration_seconds", "method" => method)
@@ -40,17 +41,20 @@ pub fn record_grpc_request(method: &'static str, duration: std::time::Duration) 
 }
 
 /// Record a failed gRPC request.
+#[allow(dead_code)]
 pub fn record_grpc_error(method: &'static str, status_code: &'static str) {
     counter!("zopp_grpc_requests_total", "method" => method, "status" => "error").increment(1);
     counter!("zopp_grpc_errors_total", "method" => method, "code" => status_code).increment(1);
 }
 
 /// A helper to time a request and record metrics on completion.
+#[allow(dead_code)]
 pub struct RequestTimer {
     method: &'static str,
     start: Instant,
 }
 
+#[allow(dead_code)]
 impl RequestTimer {
     /// Start timing a request.
     pub fn new(method: &'static str) -> Self {
