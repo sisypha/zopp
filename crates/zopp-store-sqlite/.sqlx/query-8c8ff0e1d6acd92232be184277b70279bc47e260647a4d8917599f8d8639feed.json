@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, created_at\n               FROM organization_invites\n               WHERE token_hash = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "organization_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "email",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "role",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "token_hash",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "invited_by",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "expires_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8c8ff0e1d6acd92232be184277b70279bc47e260647a4d8917599f8d8639feed"
+}

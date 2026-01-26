@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, slug, stripe_customer_id, stripe_subscription_id,\n                      plan, seat_limit, trial_ends_at, created_at, updated_at\n               FROM organizations WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "slug",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_customer_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_subscription_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "plan",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "seat_limit",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "trial_ends_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0dbb693ba593b161cf0668134e7db40c6c412f2b30a1adfc0930531c971773c4"
+}
