@@ -282,11 +282,15 @@ pub fn parse_webhook_event(
     if !signature.is_empty() && !webhook_secret.is_empty() {
         // TODO: Implement proper HMAC-SHA256 signature verification
         // For Stripe: verify using stripe-rust or manual HMAC verification
-        // For now, log a warning that verification is not implemented
-        warn!(
-            "Webhook signature verification not implemented - \
-             this is a security risk in production"
-        );
+        //
+        // Fail closed: reject events when signature verification is not implemented
+        // but credentials are provided (indicates production use)
+        return Err(BillingError::Provider(
+            "Webhook signature verification not implemented. \
+             Remove signature/webhook_secret for development, \
+             or implement HMAC verification for production."
+                .into(),
+        ));
     }
 
     // Parse JSON payload
