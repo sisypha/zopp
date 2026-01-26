@@ -263,23 +263,36 @@ impl<S: Store + Send + Sync + 'static> WebhookHandler for DefaultWebhookHandler<
 /// # Arguments
 /// * `payload` - Raw webhook body
 /// * `signature` - Webhook signature header value (e.g., Stripe-Signature header)
-/// * `webhook_secret` - Your webhook endpoint secret
+/// * `webhook_secret` - Your webhook endpoint secret (empty string to disable verification)
 ///
 /// # Returns
 /// Parsed event or error
 ///
 /// # Security
-/// This function currently does NOT verify webhook signatures.
-/// Before using in production, you MUST implement HMAC signature verification
-/// to prevent attackers from forging billing events.
+/// When `webhook_secret` is configured, this function REQUIRES a valid signature.
+/// Signature verification is not yet implemented, so providing a webhook_secret
+/// will cause all requests to fail (fail-closed behavior for security).
+///
+/// For development/testing, pass an empty `webhook_secret` to skip verification.
 pub fn parse_webhook_event(
     payload: &str,
     signature: &str,
     webhook_secret: &str,
 ) -> Result<BillingWebhookEvent, BillingError> {
-    // SECURITY: Verify webhook signature before trusting event data
-    // This prevents attackers from forging billing events
-    if !signature.is_empty() && !webhook_secret.is_empty() {
+    // SECURITY: When webhook_secret is configured, we MUST verify signatures.
+    // This prevents attackers from forging billing events.
+    if !webhook_secret.is_empty() {
+        // Webhook secret is configured - signature verification is REQUIRED
+        if signature.is_empty() {
+            // CRITICAL: Reject requests with missing signature when secret is configured.
+            // An attacker could bypass verification by omitting the signature header.
+            return Err(BillingError::Provider(
+                "Missing webhook signature. Signature verification is required when \
+                 webhook_secret is configured."
+                    .into(),
+            ));
+        }
+
         // TODO: Implement proper HMAC-SHA256 signature verification
         // For Stripe: verify using stripe-rust or manual HMAC verification
         //
@@ -287,7 +300,7 @@ pub fn parse_webhook_event(
         // but credentials are provided (indicates production use)
         return Err(BillingError::Provider(
             "Webhook signature verification not implemented. \
-             Remove signature/webhook_secret for development, \
+             Remove webhook_secret for development, \
              or implement HMAC verification for production."
                 .into(),
         ));
@@ -459,5 +472,47 @@ mod tests {
             }
             _ => panic!("Expected Unknown event"),
         }
+    }
+
+    #[test]
+    fn test_missing_signature_with_secret_configured_is_rejected() {
+        // SECURITY: When webhook_secret is configured, missing signature MUST be rejected
+        // to prevent attackers from bypassing signature verification
+        let payload = r#"{"type": "customer.subscription.created", "data": {"object": {}}}"#;
+        let result = parse_webhook_event(payload, "", "whsec_test_secret");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("Missing webhook signature"),
+            "Expected 'Missing webhook signature' error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_signature_verification_not_implemented_error() {
+        // When both signature and secret are provided, we should get "not implemented" error
+        // (until proper HMAC verification is added)
+        let payload = r#"{"type": "customer.subscription.created", "data": {"object": {}}}"#;
+        let result = parse_webhook_event(payload, "t=123,v1=abc", "whsec_test_secret");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("not implemented"),
+            "Expected 'not implemented' error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_no_secret_skips_verification() {
+        // When no webhook_secret is configured (development mode), verification is skipped
+        let payload = r#"{"type": "customer.subscription.created", "data": {"object": {"id": "sub_1", "customer": "cus_1", "status": "active", "items": {"data": [{"price": {"id": "p"}, "quantity": 1}]}}}}"#;
+        let result = parse_webhook_event(payload, "", "");
+        assert!(
+            result.is_ok(),
+            "Expected success in dev mode, got: {:?}",
+            result
+        );
     }
 }

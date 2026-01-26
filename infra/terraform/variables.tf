@@ -54,6 +54,12 @@ variable "eks_node_desired_size" {
   default     = 2
 }
 
+variable "eks_public_access_cidrs" {
+  description = "CIDR blocks allowed to access EKS cluster public endpoint. Set to specific IPs/ranges for production security."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]  # Override in production with specific CIDRs
+}
+
 # RDS Configuration
 variable "db_instance_class" {
   description = "RDS instance class"

@@ -12,6 +12,9 @@ eks_node_instance_types = ["t3.large", "t3.xlarge"]
 eks_node_min_size       = 3
 eks_node_max_size       = 10
 eks_node_desired_size   = 3
+# SECURITY: Configure with your VPN/office/CI runner IP ranges before deployment
+# Example: ["10.0.0.0/8", "203.0.113.0/24"]
+# eks_public_access_cidrs = ["0.0.0.0/0"]  # TODO: Replace with actual CIDRs
 
 # RDS - production-grade
 db_instance_class          = "db.t3.medium"

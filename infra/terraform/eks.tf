@@ -13,8 +13,11 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   # Cluster endpoint access
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
+  # Public access is enabled for CI/CD and remote management
+  # SECURITY: In production, restrict to specific CIDRs (VPN, CI runners, etc.)
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = var.eks_public_access_cidrs
 
   # IRSA (IAM Roles for Service Accounts)
   enable_irsa = true

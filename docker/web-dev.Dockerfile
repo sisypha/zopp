@@ -21,15 +21,17 @@ WORKDIR /app
 # Expose the trunk dev server port
 EXPOSE 3000
 
-# Create startup script
-RUN echo '#!/bin/bash\n\
-set -e\n\
-cd /app/apps/zopp-web && npm install\n\
-cd /app/crates/zopp-crypto-wasm && wasm-pack build --target web --dev --out-dir /app/apps/zopp-web/pkg\n\
-cd /app/apps/zopp-web\n\
-npx tailwindcss -i ./style/input.css -o ./style/output.css\n\
-npx tailwindcss -i ./style/input.css -o ./style/output.css --watch &\n\
-exec trunk serve --address 0.0.0.0 --port 3000\n\
-' > /start.sh && chmod +x /start.sh
+# Create startup script using heredoc for proper newlines
+RUN cat > /start.sh << 'EOF'
+#!/bin/bash
+set -e
+cd /app/apps/zopp-web && npm install
+cd /app/crates/zopp-crypto-wasm && wasm-pack build --target web --dev --out-dir /app/apps/zopp-web/pkg
+cd /app/apps/zopp-web
+npx tailwindcss -i ./style/input.css -o ./style/output.css
+npx tailwindcss -i ./style/input.css -o ./style/output.css --watch &
+exec trunk serve --address 0.0.0.0 --port 3000
+EOF
+RUN chmod +x /start.sh
 
 CMD ["/start.sh"]
