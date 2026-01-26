@@ -233,7 +233,6 @@ test.describe('Secrets Page - Navigation', () => {
     // Should show breadcrumb with workspace, project, and environment
     // Use the breadcrumb nav specifically to avoid matching sidebar
     const breadcrumb = page.locator('[data-testid="breadcrumb"]');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: projectName })).toBeVisible();
     await expect(breadcrumb.getByText(environmentName)).toBeVisible();

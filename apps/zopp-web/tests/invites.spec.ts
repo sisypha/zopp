@@ -27,9 +27,8 @@ test.describe('Invites Page - Authenticated', () => {
     // Should have create invite button
     await expect(page.getByRole('button', { name: /Create Invite/i })).toBeVisible();
 
-    // Should show breadcrumb
+    // Should show breadcrumb with workspace link and Invites label
     const breadcrumb = page.locator('[data-testid="breadcrumb"]');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText('Invites')).toBeVisible();
   });

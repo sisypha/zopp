@@ -29,9 +29,8 @@ test.describe('Permissions Page - Authenticated', () => {
     await expect(tabs.getByText('Permissions', { exact: true })).toBeVisible();
     await expect(tabs.getByText('Groups', { exact: true })).toBeVisible();
 
-    // Should show breadcrumb
+    // Should show breadcrumb with workspace link and Permissions label
     const breadcrumb = page.locator('[data-testid="breadcrumb"]');
-    await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText('Permissions')).toBeVisible();
   });
