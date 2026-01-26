@@ -99,7 +99,7 @@ resource "aws_iam_role" "github_actions" {
           }
           # Only allow deployments from main branch and release tags
           # This prevents untrusted feature branches from deploying
-          ForAnyValue:StringLike = {
+          "ForAnyValue:StringLike" = {
             "token.actions.githubusercontent.com:sub" = [
               "repo:faiscadev/zopp:ref:refs/heads/main",
               "repo:faiscadev/zopp:ref:refs/tags/v*"
