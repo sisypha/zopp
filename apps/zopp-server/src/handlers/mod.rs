@@ -17,6 +17,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod billing;
 pub mod environments;
 pub mod group_permissions;
 pub mod groups;
@@ -789,29 +790,29 @@ impl ZoppService for ZoppServer {
 
     async fn get_subscription(
         &self,
-        _request: Request<GetSubscriptionRequest>,
+        request: Request<GetSubscriptionRequest>,
     ) -> Result<Response<Subscription>, Status> {
-        Err(Status::unimplemented("Billing support not yet implemented"))
+        billing::get_subscription(self, request).await
     }
 
     async fn list_payments(
         &self,
-        _request: Request<ListPaymentsRequest>,
+        request: Request<ListPaymentsRequest>,
     ) -> Result<Response<PaymentList>, Status> {
-        Err(Status::unimplemented("Billing support not yet implemented"))
+        billing::list_payments(self, request).await
     }
 
     async fn create_checkout_session(
         &self,
-        _request: Request<CreateCheckoutSessionRequest>,
+        request: Request<CreateCheckoutSessionRequest>,
     ) -> Result<Response<CheckoutSession>, Status> {
-        Err(Status::unimplemented("Billing support not yet implemented"))
+        billing::create_checkout_session(self, request).await
     }
 
     async fn create_billing_portal_session(
         &self,
-        _request: Request<CreateBillingPortalSessionRequest>,
+        request: Request<CreateBillingPortalSessionRequest>,
     ) -> Result<Response<BillingPortalSession>, Status> {
-        Err(Status::unimplemented("Billing support not yet implemented"))
+        billing::create_billing_portal_session(self, request).await
     }
 }
