@@ -210,11 +210,11 @@ test.describe('Projects Page', () => {
     await page.goto(`/workspaces/${workspaceName}`);
     await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
 
-    // Should have invite button
-    await expect(page.getByRole('link', { name: /Invite/i })).toBeVisible();
+    // Should have invite button (use exact match to avoid matching sidebar "Invites")
+    await expect(page.getByRole('link', { name: 'Invite', exact: true })).toBeVisible();
 
-    // Should have permissions button
-    await expect(page.getByRole('link', { name: /Permissions/i })).toBeVisible();
+    // Should have permissions button (use exact match to avoid matching sidebar)
+    await expect(page.getByRole('link', { name: 'Permissions', exact: true })).toBeVisible();
   });
 });
 

@@ -127,6 +127,7 @@ pub fn InvitesPage() -> impl IntoView {
                                         {move || invite_code.get().unwrap_or_default()}
                                     </code>
                                     <button
+                                        title="Copy to clipboard"
                                         class="p-2 rounded-sm border border-terminal-border hover:bg-vault-200 transition-colors"
                                         on:click=copy_to_clipboard
                                     >

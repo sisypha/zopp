@@ -89,7 +89,7 @@ pub fn RegisterPage() -> impl IntoView {
                             // Navigate on success - use window.location for simplicity
                             #[cfg(target_arch = "wasm32")]
                             if let Some(window) = web_sys::window() {
-                                let _ = window.location().set_href("/workspaces");
+                                let _ = window.location().set_href("/settings");
                             }
                         }
                     }
@@ -149,7 +149,7 @@ pub fn RegisterPage() -> impl IntoView {
                             {
                                 // Navigate on success
                                 if let Some(window) = web_sys::window() {
-                                    let _ = window.location().set_href("/workspaces");
+                                    let _ = window.location().set_href("/settings");
                                 }
                             }
                             // Note: complete_registration_impl sets error and loading state on failure

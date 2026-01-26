@@ -26,7 +26,7 @@ test.describe('Authentication - Unauthenticated', () => {
     await expect(page.getByRole('heading', { name: /Join Workspace/i })).toBeVisible();
 
     // Should have invite token, email, and device name inputs
-    await expect(page.getByPlaceholder(/zopp-invite/i)).toBeVisible();
+    await expect(page.getByPlaceholder(/inv_/i)).toBeVisible();
     await expect(page.getByPlaceholder(/you@example.com/i)).toBeVisible();
     await expect(page.getByPlaceholder(/My Laptop/i)).toBeVisible();
 
@@ -72,8 +72,8 @@ test.describe('Authentication - Unauthenticated', () => {
   });
 
   test('should redirect unauthenticated user from protected routes', async ({ page }) => {
-    // Try to access workspaces page without being authenticated
-    await page.goto('/workspaces');
+    // Try to access settings page without being authenticated
+    await page.goto('/settings');
 
     // Should be redirected to import
     await expect(page).toHaveURL(/\/import/);
