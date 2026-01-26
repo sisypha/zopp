@@ -23,6 +23,7 @@ pub fn Modal(
                     on:click=move |_| on_close.run(())
                 >
                     <div
+                        data-testid="modal-content"
                         class=format!("relative w-full rounded-lg bg-vault-100 border border-terminal-border p-6 {}", max_w)
                         on:click=move |e| e.stop_propagation()
                     >

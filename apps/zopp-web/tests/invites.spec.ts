@@ -28,7 +28,7 @@ test.describe('Invites Page - Authenticated', () => {
     await expect(page.getByRole('button', { name: /Create Invite/i })).toBeVisible();
 
     // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText('Invites')).toBeVisible();
@@ -134,7 +134,7 @@ test.describe('Invites Page - Navigation', () => {
     await expect(page.getByRole('heading', { name: /Workspace Invites/i })).toBeVisible();
 
     // Click workspace in breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await breadcrumb.getByRole('link', { name: workspaceName }).click();
 
     // Should be on projects page

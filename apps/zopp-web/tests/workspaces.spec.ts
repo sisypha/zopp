@@ -39,7 +39,7 @@ test.describe('Workspaces Page', () => {
     await page.getByPlaceholder(/my-workspace/i).fill(newWorkspaceName);
 
     // Submit
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Modal should close
     await expect(page.getByRole('heading', { name: /Create Workspace/i })).not.toBeVisible({ timeout: 10000 });
@@ -67,7 +67,7 @@ test.describe('Workspaces Page', () => {
     await page.getByRole('button', { name: /Create Workspace/i }).click();
     await expect(page.getByRole('heading', { name: /Create Workspace/i })).toBeVisible();
     await page.getByPlaceholder(/my-workspace/i).fill(wsName);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
     await expect(page.getByText(wsName)).toBeVisible({ timeout: 15000 });
 
     // Step 2: Navigate to workspace and create project
@@ -76,7 +76,7 @@ test.describe('Workspaces Page', () => {
     await page.getByRole('button', { name: /Create Project/i }).click();
     await expect(page.getByRole('heading', { name: /Create Project/i })).toBeVisible();
     await page.getByPlaceholder(/my-project/i).fill(projName);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
     await expect(page.getByText(projName)).toBeVisible({ timeout: 15000 });
 
     // Step 3: Navigate to project and create environment
@@ -86,10 +86,10 @@ test.describe('Workspaces Page', () => {
     await page.getByRole('button', { name: /Create Environment/i }).click();
     await expect(page.getByRole('heading', { name: /Create Environment/i })).toBeVisible();
     await page.getByPlaceholder(/production/i).fill(envName);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Verify no error appears and environment is created
-    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="error-alert"]')).not.toBeVisible({ timeout: 5000 });
     await expect(page.getByText(envName)).toBeVisible({ timeout: 15000 });
 
     // Step 4: Navigate to environment and create a secret
@@ -100,10 +100,10 @@ test.describe('Workspaces Page', () => {
     await expect(page.getByRole('heading', { name: /Add Secret/i })).toBeVisible();
     await page.getByPlaceholder(/DATABASE_URL/i).fill(secretKey);
     await page.getByPlaceholder(/Enter secret value/i).fill(secretValue);
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Verify no error and secret appears
-    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="error-alert"]')).not.toBeVisible({ timeout: 5000 });
     await expect(page.getByText(secretKey)).toBeVisible({ timeout: 15000 });
 
     // Step 5: Verify we can read the secret back (tests decryption)
@@ -144,7 +144,7 @@ test.describe('Projects Page', () => {
     await expect(page.getByRole('button', { name: /Create Project/i })).toBeVisible();
 
     // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
     await expect(breadcrumb.getByText(workspaceName)).toBeVisible();
 
@@ -170,7 +170,7 @@ test.describe('Projects Page', () => {
     await page.getByPlaceholder(/my-project/i).fill(newProjectName);
 
     // Submit
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Modal should close
     await expect(page.getByRole('heading', { name: /Create Project/i })).not.toBeVisible({ timeout: 10000 });
@@ -225,7 +225,7 @@ test.describe('Environments Page', () => {
     await expect(page.getByRole('button', { name: /Create Environment/i })).toBeVisible();
 
     // Should show breadcrumb
-    const breadcrumb = page.locator('.breadcrumbs');
+    const breadcrumb = page.locator('[data-testid="breadcrumb"]');
     await expect(breadcrumb.getByRole('link', { name: 'Workspaces' })).toBeVisible();
     await expect(breadcrumb.getByRole('link', { name: workspaceName })).toBeVisible();
     await expect(breadcrumb.getByText(projectName)).toBeVisible();
@@ -252,7 +252,7 @@ test.describe('Environments Page', () => {
     await page.getByPlaceholder(/production/i).fill(newEnvName);
 
     // Submit
-    await page.locator('.modal-box button[type="submit"]').click();
+    await page.locator('[data-testid="modal-content"] button[type="submit"]').click();
 
     // Modal should close
     await expect(page.getByRole('heading', { name: /Create Environment/i })).not.toBeVisible({ timeout: 10000 });
