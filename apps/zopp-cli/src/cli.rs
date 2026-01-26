@@ -95,6 +95,11 @@ pub enum Command {
         #[command(subcommand)]
         audit_cmd: AuditCommand,
     },
+    /// Organization commands (SaaS cloud)
+    Org {
+        #[command(subcommand)]
+        org_cmd: OrganizationCommand,
+    },
     /// Run a command with secrets injected as environment variables
     Run {
         /// Workspace name (defaults from zopp.toml)
@@ -1038,5 +1043,114 @@ pub enum AuditCommand {
         /// Filter by result
         #[arg(long)]
         result: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum OrganizationCommand {
+    /// List organizations you belong to
+    List,
+    /// Create a new organization
+    Create {
+        /// Organization name
+        name: String,
+        /// Organization slug (URL-friendly identifier)
+        #[arg(long)]
+        slug: Option<String>,
+    },
+    /// Get organization details
+    Get {
+        /// Organization ID or slug
+        org: String,
+    },
+    /// Update organization settings
+    Update {
+        /// Organization ID or slug
+        org: String,
+        /// New name
+        #[arg(long)]
+        name: Option<String>,
+        /// New slug
+        #[arg(long)]
+        slug: Option<String>,
+    },
+    /// List organization members
+    Members {
+        /// Organization ID or slug
+        org: String,
+    },
+    /// Add a member to the organization
+    AddMember {
+        /// Organization ID or slug
+        org: String,
+        /// User ID (UUID)
+        #[arg(long)]
+        user_id: String,
+        /// Role: owner, admin, or member
+        #[arg(long, default_value = "member")]
+        role: String,
+    },
+    /// Remove a member from the organization
+    RemoveMember {
+        /// Organization ID or slug
+        org: String,
+        /// User ID (UUID)
+        #[arg(long)]
+        user_id: String,
+    },
+    /// Set a member's role
+    SetRole {
+        /// Organization ID or slug
+        org: String,
+        /// User ID (UUID)
+        #[arg(long)]
+        user_id: String,
+        /// Role: owner, admin, or member
+        #[arg(long)]
+        role: String,
+    },
+    /// Create an organization invite
+    Invite {
+        /// Organization ID or slug
+        org: String,
+        /// Invite email
+        #[arg(long)]
+        email: String,
+        /// Role for invited user: owner, admin, or member
+        #[arg(long, default_value = "member")]
+        role: String,
+    },
+    /// List organization invites
+    Invites {
+        /// Organization ID or slug
+        org: String,
+    },
+    /// Revoke an organization invite
+    RevokeInvite {
+        /// Organization ID or slug
+        org: String,
+        /// Invite ID
+        invite_id: String,
+    },
+    /// Link a workspace to an organization
+    LinkWorkspace {
+        /// Organization ID or slug
+        org: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+    },
+    /// Unlink a workspace from an organization
+    UnlinkWorkspace {
+        /// Organization ID or slug
+        org: String,
+        /// Workspace name
+        #[arg(long, short = 'w')]
+        workspace: String,
+    },
+    /// List workspaces in an organization
+    Workspaces {
+        /// Organization ID or slug
+        org: String,
     },
 }

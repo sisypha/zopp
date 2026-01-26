@@ -10,8 +10,8 @@ mod passphrase;
 
 use cli::{
     AuditCommand, Cli, Command, DiffCommand, EnvironmentCommand, GroupCommand, InviteCommand,
-    PermissionCommand, PrincipalCommand, ProjectCommand, SecretCommand, SyncCommand,
-    WorkspaceCommand,
+    OrganizationCommand, PermissionCommand, PrincipalCommand, ProjectCommand, SecretCommand,
+    SyncCommand, WorkspaceCommand,
 };
 use commands::*;
 use config::{resolve_context, resolve_workspace, resolve_workspace_project};
@@ -995,6 +995,82 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     result.as_deref(),
                 )
                 .await?;
+            }
+        },
+        Command::Org { org_cmd } => match org_cmd {
+            OrganizationCommand::List => {
+                cmd_org_list(&cli.server, cli.tls_ca_cert.as_deref()).await?;
+            }
+            OrganizationCommand::Create { name, slug } => {
+                cmd_org_create(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &name,
+                    slug.as_deref(),
+                )
+                .await?;
+            }
+            OrganizationCommand::Get { org } => {
+                cmd_org_get(&cli.server, cli.tls_ca_cert.as_deref(), &org).await?;
+            }
+            OrganizationCommand::Update { org, name, slug } => {
+                cmd_org_update(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &org,
+                    name.as_deref(),
+                    slug.as_deref(),
+                )
+                .await?;
+            }
+            OrganizationCommand::Members { org } => {
+                cmd_org_members(&cli.server, cli.tls_ca_cert.as_deref(), &org).await?;
+            }
+            OrganizationCommand::AddMember { org, user_id, role } => {
+                cmd_org_add_member(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &org,
+                    &user_id,
+                    &role,
+                )
+                .await?;
+            }
+            OrganizationCommand::RemoveMember { org, user_id } => {
+                cmd_org_remove_member(&cli.server, cli.tls_ca_cert.as_deref(), &org, &user_id)
+                    .await?;
+            }
+            OrganizationCommand::SetRole { org, user_id, role } => {
+                cmd_org_set_role(
+                    &cli.server,
+                    cli.tls_ca_cert.as_deref(),
+                    &org,
+                    &user_id,
+                    &role,
+                )
+                .await?;
+            }
+            OrganizationCommand::Invite { org, email, role } => {
+                cmd_org_invite(&cli.server, cli.tls_ca_cert.as_deref(), &org, &email, &role)
+                    .await?;
+            }
+            OrganizationCommand::Invites { org } => {
+                cmd_org_invites(&cli.server, cli.tls_ca_cert.as_deref(), &org).await?;
+            }
+            OrganizationCommand::RevokeInvite { org, invite_id } => {
+                cmd_org_revoke_invite(&cli.server, cli.tls_ca_cert.as_deref(), &org, &invite_id)
+                    .await?;
+            }
+            OrganizationCommand::LinkWorkspace { org, workspace } => {
+                cmd_org_link_workspace(&cli.server, cli.tls_ca_cert.as_deref(), &org, &workspace)
+                    .await?;
+            }
+            OrganizationCommand::UnlinkWorkspace { org, workspace } => {
+                cmd_org_unlink_workspace(&cli.server, cli.tls_ca_cert.as_deref(), &org, &workspace)
+                    .await?;
+            }
+            OrganizationCommand::Workspaces { org } => {
+                cmd_org_workspaces(&cli.server, cli.tls_ca_cert.as_deref(), &org).await?;
             }
         },
         Command::Diff { diff_cmd } => match diff_cmd {
