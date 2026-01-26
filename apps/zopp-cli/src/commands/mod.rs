@@ -4,6 +4,7 @@ pub mod environment;
 pub mod group;
 pub mod invite;
 pub mod join;
+pub mod organization;
 pub mod permission;
 pub mod principal;
 pub mod project;
@@ -27,6 +28,12 @@ pub use group::{
 };
 pub use invite::{cmd_invite_create, cmd_invite_list, cmd_invite_revoke};
 pub use join::cmd_join;
+pub use organization::{
+    cmd_org_add_member, cmd_org_create, cmd_org_get, cmd_org_invite, cmd_org_invites,
+    cmd_org_link_workspace, cmd_org_list, cmd_org_members, cmd_org_remove_member,
+    cmd_org_revoke_invite, cmd_org_set_role, cmd_org_unlink_workspace, cmd_org_update,
+    cmd_org_workspaces,
+};
 pub use permission::{
     cmd_permission_effective, cmd_permission_get, cmd_permission_list, cmd_permission_remove,
     cmd_permission_set, cmd_user_permission_get, cmd_user_permission_list,
