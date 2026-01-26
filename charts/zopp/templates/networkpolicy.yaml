@@ -1,0 +1,62 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "zopp.fullname" . }}
+  labels:
+    {{- include "zopp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "zopp.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from pods in the same namespace
+    - from:
+        - podSelector: {}
+    {{- if .Values.networkPolicy.ingressNamespaceSelector }}
+    # Allow traffic from specified namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 14 }}
+    {{- end }}
+    {{- if .Values.networkPolicy.ingressPodSelector }}
+    # Allow traffic from specified pods
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressPodSelector | nindent 14 }}
+    {{- end }}
+  egress:
+    # Allow DNS resolution (restricted to kube-system namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow traffic to pods in the same namespace
+    - to:
+        - podSelector: {}
+    {{- if .Values.networkPolicy.egressCIDRs }}
+    # Allow traffic to external CIDRs (e.g., database)
+    - to:
+        {{- range .Values.networkPolicy.egressCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      {{- if .Values.networkPolicy.egressPorts }}
+      ports:
+        {{- toYaml .Values.networkPolicy.egressPorts | nindent 8 }}
+      {{- end }}
+    {{- end }}
+{{- end }}

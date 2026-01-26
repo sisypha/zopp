@@ -1,0 +1,33 @@
+{{- if .Values.autoscaling.operator.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "zopp.fullname" . }}-operator
+  labels:
+    {{- include "zopp.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "zopp.fullname" . }}-operator
+  minReplicas: {{ .Values.autoscaling.operator.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.operator.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.operator.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.operator.targetCPUUtilizationPercentage }}
+    {{- else }}
+    # Default to CPU-based scaling if no metrics specified
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    {{- end }}
+{{- end }}
