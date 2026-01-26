@@ -3704,8 +3704,9 @@ impl Store for SqliteStore {
                         .map_err(|e| StoreError::Backend(format!("invalid invite id: {}", e)))?,
                 ),
                 organization_id: zopp_storage::OrganizationId(
-                    Uuid::parse_str(&row.organization_id)
-                        .map_err(|e| StoreError::Backend(format!("invalid organization_id: {}", e)))?,
+                    Uuid::parse_str(&row.organization_id).map_err(|e| {
+                        StoreError::Backend(format!("invalid organization_id: {}", e))
+                    })?,
                 ),
                 email: row.email,
                 role,
@@ -3792,8 +3793,9 @@ impl Store for SqliteStore {
                 ),
                 name: row.name,
                 owner_user_id: UserId(
-                    Uuid::parse_str(&row.owner_user_id)
-                        .map_err(|e| StoreError::Backend(format!("invalid owner_user_id: {}", e)))?,
+                    Uuid::parse_str(&row.owner_user_id).map_err(|e| {
+                        StoreError::Backend(format!("invalid owner_user_id: {}", e))
+                    })?,
                 ),
                 kdf_salt: row.kdf_salt,
                 m_cost_kib: row.kdf_m_cost_kib as u32,
