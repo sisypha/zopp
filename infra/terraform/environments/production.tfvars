@@ -23,7 +23,7 @@ db_deletion_protection     = true
 
 # DNS - configure your domain
 create_dns  = true
-domain_name = "zopp.cloud"  # Update with your domain
+domain_name = "zopp.dev"
 
 # Monitoring
 enable_monitoring  = true
