@@ -2,6 +2,7 @@ mod backend;
 mod config;
 mod email;
 mod handlers;
+mod metrics;
 mod server;
 
 use chrono::Utc;
@@ -235,6 +236,9 @@ async fn cmd_serve_with_ready(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use axum::{routing::get, Router};
 
+    // Initialize Prometheus metrics
+    let metrics_handle = metrics::init_metrics();
+
     let addr: std::net::SocketAddr = addr.parse()?;
     let health_addr: std::net::SocketAddr = health_addr.parse()?;
 
@@ -357,15 +361,17 @@ async fn cmd_serve_with_ready(
 
     // Create a channel for HTTP readiness probe signaling
     let (readiness_tx, readiness_rx) = tokio::sync::watch::channel(false);
-    let readiness_check = ReadinessCheck::new(readiness_rx);
+    let health_state = HealthState::new(readiness_rx, metrics_handle);
 
     // Create HTTP health check server for Kubernetes liveness/readiness probes
     // /healthz - simple liveness check (always returns OK)
     // /readyz - readiness check (returns OK once gRPC listener is bound and ready)
+    // /metrics - Prometheus metrics endpoint
     let health_router = Router::new()
         .route("/healthz", get(health_handler))
         .route("/readyz", get(readiness_handler))
-        .with_state(readiness_check);
+        .route("/metrics", get(metrics_handler))
+        .with_state(health_state);
 
     // Bind listeners to get actual addresses
     let grpc_listener = tokio::net::TcpListener::bind(addr).await?;
@@ -445,13 +451,17 @@ async fn cmd_serve_with_ready(
 }
 
 #[derive(Clone)]
-struct ReadinessCheck {
+struct HealthState {
     ready: tokio::sync::watch::Receiver<bool>,
+    metrics: metrics_exporter_prometheus::PrometheusHandle,
 }
 
-impl ReadinessCheck {
-    fn new(ready: tokio::sync::watch::Receiver<bool>) -> Self {
-        Self { ready }
+impl HealthState {
+    fn new(
+        ready: tokio::sync::watch::Receiver<bool>,
+        metrics: metrics_exporter_prometheus::PrometheusHandle,
+    ) -> Self {
+        Self { ready, metrics }
     }
 }
 
@@ -460,14 +470,18 @@ async fn health_handler() -> &'static str {
 }
 
 async fn readiness_handler(
-    axum::extract::State(check): axum::extract::State<ReadinessCheck>,
+    axum::extract::State(state): axum::extract::State<HealthState>,
 ) -> Result<&'static str, axum::http::StatusCode> {
     // Check if gRPC server is ready
-    if *check.ready.borrow() {
+    if *state.ready.borrow() {
         Ok("ok")
     } else {
         Err(axum::http::StatusCode::SERVICE_UNAVAILABLE)
     }
+}
+
+async fn metrics_handler(axum::extract::State(state): axum::extract::State<HealthState>) -> String {
+    state.metrics.render()
 }
 
 async fn shutdown_signal(readiness_tx: Option<tokio::sync::watch::Sender<bool>>) {
