@@ -9,6 +9,7 @@ use crate::pages::{
     environments::EnvironmentsPage, invites::InvitesPage, landing::LandingPage, login::LoginPage,
     not_found::NotFoundPage, permissions::PermissionsPage, projects::ProjectsPage,
     register::RegisterPage, secrets::SecretsPage, settings::SettingsPage,
+    workspaces::WorkspacesPage,
 };
 use crate::state::auth::AuthProvider;
 use crate::state::workspace::WorkspaceProvider;
@@ -35,6 +36,7 @@ pub fn App() -> impl IntoView {
                             <Route path=path!("/register") view=RegisterPage/>
                             <Route path=path!("/invite") view=RegisterPage/>
                             <Route path=path!("/settings") view=SettingsPage/>
+                            <Route path=path!("/workspaces") view=WorkspacesPage/>
                             <Route path=path!("/workspaces/:workspace") view=ProjectsPage/>
                             <Route path=path!("/workspaces/:workspace/invites") view=InvitesPage/>
                             <Route path=path!("/workspaces/:workspace/permissions") view=PermissionsPage/>

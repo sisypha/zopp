@@ -8,3 +8,4 @@ pub mod projects;
 pub mod register;
 pub mod secrets;
 pub mod settings;
+pub mod workspaces;
