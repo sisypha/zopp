@@ -25,6 +25,8 @@ pub enum EmailError {
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
 
+    // Used when email features are disabled at compile time
+    #[allow(dead_code)]
     #[error("Provider not available: {0}")]
     ProviderNotAvailable(String),
 }

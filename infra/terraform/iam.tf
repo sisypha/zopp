@@ -79,6 +79,8 @@ resource "aws_iam_role_policy" "zopp_operator_secrets" {
 }
 
 # CI/CD Role for GitHub Actions
+# SECURITY: Restricted to trusted refs (main branch, release tags) to prevent
+# untrusted branches from gaining deployment permissions
 resource "aws_iam_role" "github_actions" {
   name = "${local.name_prefix}-github-actions"
 
@@ -95,8 +97,13 @@ resource "aws_iam_role" "github_actions" {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:faiscadev/zopp:*"
+          # Only allow deployments from main branch and release tags
+          # This prevents untrusted feature branches from deploying
+          ForAnyValue:StringLike = {
+            "token.actions.githubusercontent.com:sub" = [
+              "repo:faiscadev/zopp:ref:refs/heads/main",
+              "repo:faiscadev/zopp:ref:refs/tags/v*"
+            ]
           }
         }
       }
@@ -114,10 +121,16 @@ resource "aws_iam_role_policy" "github_actions" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      # GetAuthorizationToken requires "*" resource - it's account-level
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      # Scope image operations to zopp repositories only
       {
         Effect = "Allow"
         Action = [
-          "ecr:GetAuthorizationToken",
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage",
@@ -126,7 +139,9 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = "*"
+        Resource = [
+          "arn:aws:ecr:${var.aws_region}:${data.aws_caller_identity.current.account_id}:repository/${local.name_prefix}-*"
+        ]
       },
       {
         Effect = "Allow"

@@ -6428,6 +6428,7 @@ dependencies = [
  "tonic-health",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
  "x25519-dalek",
  "zopp-audit",

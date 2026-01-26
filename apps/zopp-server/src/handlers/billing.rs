@@ -3,6 +3,7 @@
 //! These handlers manage billing operations for organizations.
 
 use tonic::{Request, Response, Status};
+use url::Url;
 use uuid::Uuid;
 use zopp_proto::{
     BillingPortalSession, CheckoutSession, CreateBillingPortalSessionRequest,
@@ -12,6 +13,53 @@ use zopp_proto::{
 use zopp_storage::{OrganizationId, Store};
 
 use crate::server::{extract_signature, ZoppServer};
+
+/// Validate that a redirect URL belongs to a trusted domain.
+///
+/// SECURITY: This prevents open redirect attacks where an attacker could
+/// redirect users to a malicious site after billing operations.
+fn validate_redirect_url(url_str: &str) -> Result<Url, Status> {
+    let url = Url::parse(url_str).map_err(|_| Status::invalid_argument("Invalid URL format"))?;
+
+    // Only allow HTTPS URLs (except localhost for development)
+    let scheme = url.scheme();
+    if scheme != "https" && !(scheme == "http" && is_localhost(&url)) {
+        return Err(Status::invalid_argument("Only HTTPS URLs are allowed"));
+    }
+
+    // Validate against trusted domains
+    // In production, this should be configurable via environment variable
+    let trusted_domains = ["app.zopp.dev", "zopp.dev", "localhost", "127.0.0.1"];
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| Status::invalid_argument("URL must have a host"))?;
+
+    // Check if host matches or is a subdomain of a trusted domain
+    let is_trusted = trusted_domains
+        .iter()
+        .any(|&domain| host == domain || host.ends_with(&format!(".{}", domain)));
+
+    if !is_trusted {
+        return Err(Status::invalid_argument(
+            "Redirect URL must point to a trusted domain",
+        ));
+    }
+
+    Ok(url)
+}
+
+/// Check if URL points to localhost (for development)
+fn is_localhost(url: &Url) -> bool {
+    matches!(url.host_str(), Some("localhost") | Some("127.0.0.1"))
+}
+
+/// Append a query parameter to a URL, handling existing query strings correctly.
+fn append_query_param(url: &Url, key: &str, value: &str) -> String {
+    let mut url = url.clone();
+    url.query_pairs_mut().append_pair(key, value);
+    url.to_string()
+}
 
 /// Get subscription for an organization
 pub async fn get_subscription(
@@ -197,10 +245,13 @@ pub async fn create_checkout_session(
         ));
     }
 
+    // SECURITY: Validate success_url to prevent open redirect attacks
+    let success_url = validate_redirect_url(&req.success_url)?;
+
     // TODO: Integrate with billing service to create actual Stripe checkout session
     // For now, return a mock URL for development
     let session_id = format!("cs_mock_{}", uuid::Uuid::new_v4());
-    let checkout_url = format!("{}?session_id={}", req.success_url.as_str(), session_id);
+    let checkout_url = append_query_param(&success_url, "session_id", &session_id);
 
     Ok(Response::new(CheckoutSession { url: checkout_url }))
 }
@@ -264,9 +315,12 @@ pub async fn create_billing_portal_session(
         ));
     }
 
+    // SECURITY: Validate return_url to prevent open redirect attacks
+    let return_url = validate_redirect_url(&req.return_url)?;
+
     // TODO: Integrate with billing service to create actual Stripe portal session
-    // For now, return the return URL for development
+    // For now, return the validated return URL for development
     Ok(Response::new(BillingPortalSession {
-        url: req.return_url,
+        url: return_url.to_string(),
     }))
 }
