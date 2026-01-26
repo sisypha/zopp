@@ -656,35 +656,45 @@ impl ZoppService for ZoppServer {
         &self,
         _request: Request<CreateOrganizationRequest>,
     ) -> Result<Response<Organization>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn get_organization(
         &self,
         _request: Request<GetOrganizationRequest>,
     ) -> Result<Response<Organization>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn list_user_organizations(
         &self,
         _request: Request<Empty>,
     ) -> Result<Response<OrganizationList>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn update_organization(
         &self,
         _request: Request<UpdateOrganizationRequest>,
     ) -> Result<Response<Organization>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn delete_organization(
         &self,
         _request: Request<DeleteOrganizationRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     // ───────────────────────────────────── Organization Members ─────────────────────────────────────
@@ -693,35 +703,45 @@ impl ZoppService for ZoppServer {
         &self,
         _request: Request<AddOrganizationMemberRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn get_organization_member(
         &self,
         _request: Request<GetOrganizationMemberRequest>,
     ) -> Result<Response<OrganizationMember>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn list_organization_members(
         &self,
         _request: Request<ListOrganizationMembersRequest>,
     ) -> Result<Response<OrganizationMemberList>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn update_organization_member_role(
         &self,
         _request: Request<UpdateOrganizationMemberRoleRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn remove_organization_member(
         &self,
         _request: Request<RemoveOrganizationMemberRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     // ───────────────────────────────────── Organization Invites ─────────────────────────────────────
@@ -730,35 +750,45 @@ impl ZoppService for ZoppServer {
         &self,
         _request: Request<CreateOrganizationInviteRequest>,
     ) -> Result<Response<OrganizationInvite>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn get_organization_invite(
         &self,
         _request: Request<GetOrganizationInviteRequest>,
     ) -> Result<Response<OrganizationInvite>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn list_organization_invites(
         &self,
         _request: Request<ListOrganizationInvitesRequest>,
     ) -> Result<Response<OrganizationInviteList>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn accept_organization_invite(
         &self,
         _request: Request<AcceptOrganizationInviteRequest>,
     ) -> Result<Response<OrganizationMember>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn delete_organization_invite(
         &self,
         _request: Request<DeleteOrganizationInviteRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     // ───────────────────────────────────── Organization Workspaces ─────────────────────────────────────
@@ -767,21 +797,27 @@ impl ZoppService for ZoppServer {
         &self,
         _request: Request<LinkWorkspaceToOrganizationRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn unlink_workspace_from_organization(
         &self,
         _request: Request<UnlinkWorkspaceFromOrganizationRequest>,
     ) -> Result<Response<Empty>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     async fn list_organization_workspaces(
         &self,
         _request: Request<ListOrganizationWorkspacesRequest>,
     ) -> Result<Response<WorkspaceList>, Status> {
-        Err(Status::unimplemented("Organization support not yet implemented"))
+        Err(Status::unimplemented(
+            "Organization support not yet implemented",
+        ))
     }
 
     // ───────────────────────────────────── Billing ─────────────────────────────────────
