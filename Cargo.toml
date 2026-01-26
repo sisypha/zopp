@@ -6,6 +6,7 @@ members = [
     "apps/zopp-server",
     "apps/zopp-web",
     "crates/zopp-audit",
+    "crates/zopp-billing",
     "crates/zopp-config",
     "crates/zopp-crypto",
     "crates/zopp-crypto-wasm",
