@@ -7,10 +7,12 @@ metadata:
     {{- include "zopp.labels" . | nindent 4 }}
     app.kubernetes.io/component: server
 spec:
-  {{- if .Values.podDisruptionBudget.server.minAvailable }}
+  {{- if not (kindIs "invalid" .Values.podDisruptionBudget.server.minAvailable) }}
   minAvailable: {{ .Values.podDisruptionBudget.server.minAvailable }}
-  {{- else if .Values.podDisruptionBudget.server.maxUnavailable }}
+  {{- else if not (kindIs "invalid" .Values.podDisruptionBudget.server.maxUnavailable) }}
   maxUnavailable: {{ .Values.podDisruptionBudget.server.maxUnavailable }}
+  {{- else }}
+  minAvailable: 1
   {{- end }}
   selector:
     matchLabels:

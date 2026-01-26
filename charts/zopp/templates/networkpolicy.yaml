@@ -31,9 +31,11 @@ spec:
               {{- toYaml .Values.networkPolicy.ingressPodSelector | nindent 14 }}
     {{- end }}
   egress:
-    # Allow DNS resolution
+    # Allow DNS resolution (restricted to kube-system namespace)
     - to:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
           podSelector:
             matchLabels:
               k8s-app: kube-dns

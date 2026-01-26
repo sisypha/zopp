@@ -21,5 +21,13 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.operator.targetCPUUtilizationPercentage }}
+    {{- else }}
+    # Default to CPU-based scaling if no metrics specified
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
     {{- end }}
 {{- end }}
