@@ -26,28 +26,3 @@ pub fn get_server_url() -> String {
 pub fn get_server_url() -> String {
     "http://localhost:8080".to_string()
 }
-
-/// Check if this is a cloud deployment (zopp.dev domain).
-///
-/// Returns true if the app is running on the official cloud service,
-/// false for self-hosted deployments. This is used to show/hide
-/// marketing content that isn't relevant for self-hosted users.
-#[cfg(target_arch = "wasm32")]
-pub fn is_cloud_deployment() -> bool {
-    use web_sys::window;
-
-    let host = window()
-        .and_then(|w| w.location().host().ok())
-        .unwrap_or_default();
-
-    // Check for official cloud domains
-    host == "zopp.dev"
-        || host.ends_with(".zopp.dev")
-        || host == "app.zopp.dev"
-        || host == "localhost:3000" // Show cloud UI in development for testing
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn is_cloud_deployment() -> bool {
-    false
-}

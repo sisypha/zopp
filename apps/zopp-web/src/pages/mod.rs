@@ -1,4 +1,3 @@
-pub mod cloud_landing;
 pub mod environments;
 pub mod invites;
 pub mod landing;
