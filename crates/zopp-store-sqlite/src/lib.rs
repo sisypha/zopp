@@ -3586,6 +3586,45 @@ impl Store for SqliteStore {
         })
     }
 
+    async fn get_organization_invite(
+        &self,
+        invite_id: &zopp_storage::OrganizationInviteId,
+    ) -> Result<zopp_storage::OrganizationInvite, StoreError> {
+        let invite_id_str = invite_id.0.to_string();
+        let row = sqlx::query!(
+            r#"SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, created_at
+               FROM organization_invites
+               WHERE id = ?"#,
+            invite_id_str
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Backend(e.to_string()))?
+        .ok_or(StoreError::NotFound)?;
+
+        let role = row
+            .role
+            .parse()
+            .map_err(|_| StoreError::Backend(format!("invalid role in database: {}", row.role)))?;
+
+        Ok(zopp_storage::OrganizationInvite {
+            id: zopp_storage::OrganizationInviteId(Uuid::parse_str(&row.id).unwrap()),
+            organization_id: zopp_storage::OrganizationId(
+                Uuid::parse_str(&row.organization_id).unwrap(),
+            ),
+            email: row.email,
+            role,
+            token_hash: row.token_hash,
+            invited_by: UserId(Uuid::parse_str(&row.invited_by).unwrap()),
+            expires_at: DateTime::parse_from_rfc3339(&row.expires_at)
+                .unwrap()
+                .with_timezone(&Utc),
+            created_at: DateTime::parse_from_rfc3339(&row.created_at)
+                .unwrap()
+                .with_timezone(&Utc),
+        })
+    }
+
     async fn get_organization_invite_by_token(
         &self,
         token_hash: &str,
