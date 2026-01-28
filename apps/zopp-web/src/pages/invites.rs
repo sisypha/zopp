@@ -83,7 +83,7 @@ pub fn InvitesPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <nav data-testid="breadcrumb" class="flex items-center gap-2 text-sm">
+                <nav class="breadcrumbs flex items-center gap-2 text-sm">
                     <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
                     <span class="text-cipher-muted">"/"</span>
                     <span class="text-cipher-text">"Invites"</span>
@@ -127,7 +127,6 @@ pub fn InvitesPage() -> impl IntoView {
                                         {move || invite_code.get().unwrap_or_default()}
                                     </code>
                                     <button
-                                        title="Copy to clipboard"
                                         class="p-2 rounded-sm border border-terminal-border hover:bg-vault-200 transition-colors"
                                         on:click=copy_to_clipboard
                                     >

@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT o.id, o.name, o.slug, o.stripe_customer_id, o.stripe_subscription_id,\n                      o.plan, o.seat_limit, o.trial_ends_at, o.created_at, o.updated_at\n               FROM organizations o\n               INNER JOIN organization_members m ON o.id = m.organization_id\n               WHERE m.user_id = ?\n               ORDER BY o.name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "slug",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_customer_id",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "stripe_subscription_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "plan",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "seat_limit",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "trial_ends_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "4bce265d78122889745e155285b494f5c33ac2379059d8bb83a5ec9353e2791b"
+}

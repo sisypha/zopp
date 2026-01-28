@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.id, o.name, o.slug, o.stripe_customer_id, o.stripe_subscription_id,\n                      o.plan, o.seat_limit, o.trial_ends_at, o.created_at, o.updated_at\n               FROM organizations o\n               INNER JOIN organization_members m ON o.id = m.organization_id\n               WHERE m.user_id = $1\n               ORDER BY o.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "stripe_customer_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "stripe_subscription_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "plan",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "seat_limit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "trial_ends_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "5d3f3262271112bf7c32cce870a7d91ab0f410c09c1e8235a77e2a5992a37610"
+}

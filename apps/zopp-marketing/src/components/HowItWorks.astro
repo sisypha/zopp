@@ -1,0 +1,63 @@
+---
+const steps = [
+  {
+    number: '1',
+    title: 'Create a workspace',
+    description: 'Sign up and create your first workspace. Invite your team members with secure invite links.',
+  },
+  {
+    number: '2',
+    title: 'Add your secrets',
+    description: "Use the CLI or web UI to add secrets. They're encrypted before leaving your device.",
+  },
+  {
+    number: '3',
+    title: 'Use everywhere',
+    description: 'Inject secrets into your apps, sync to Kubernetes, or export to .env files.',
+  },
+];
+---
+
+<section id="how-it-works" class="py-20 px-6">
+  <div class="max-w-6xl mx-auto">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl md:text-4xl font-bold text-cipher-text mb-4">Get started in minutes</h2>
+      <p class="text-lg text-cipher-secondary max-w-2xl mx-auto">No complex setup. No vendor lock-in. Just secure secrets management.</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-8">
+      {steps.map((step) => (
+        <div class="text-center">
+          <div class="w-12 h-12 flex items-center justify-center rounded-full bg-amber text-white text-xl font-bold mx-auto mb-4">
+            {step.number}
+          </div>
+          <h3 class="text-lg font-semibold text-cipher-text mb-2">{step.title}</h3>
+          <p class="text-sm text-cipher-secondary">{step.description}</p>
+        </div>
+      ))}
+    </div>
+
+    <!-- Code example -->
+    <div class="mt-16 max-w-3xl mx-auto">
+      <div class="bg-vault-inset border border-terminal-border rounded-md overflow-hidden">
+        <div class="flex items-center gap-2 px-4 py-2 bg-vault-100 border-b border-terminal-border">
+          <div class="w-3 h-3 rounded-full bg-error/50"></div>
+          <div class="w-3 h-3 rounded-full bg-warning/50"></div>
+          <div class="w-3 h-3 rounded-full bg-success/50"></div>
+          <span class="ml-2 text-xs text-cipher-muted font-mono">terminal</span>
+        </div>
+        <pre class="p-4 text-sm font-mono text-cipher-text overflow-x-auto"><code><span class="text-cipher-muted"># Install the CLI</span>
+<span class="text-success">$</span> brew install faiscadev/tap/zopp
+
+<span class="text-cipher-muted"># Join your workspace</span>
+<span class="text-success">$</span> zopp join inv_abc123 alice@company.com
+
+<span class="text-cipher-muted"># Add a secret</span>
+<span class="text-success">$</span> zopp secret set DATABASE_URL postgres://...
+
+<span class="text-cipher-muted"># Run with secrets injected</span>
+<span class="text-success">$</span> zopp run -- npm start</code></pre>
+      </div>
+    </div>
+  </div>
+</section>

@@ -17,10 +17,12 @@
 
 pub mod audit;
 pub mod auth;
+pub mod billing;
 pub mod environments;
 pub mod group_permissions;
 pub mod groups;
 pub mod invites;
+pub mod organizations;
 pub mod permissions;
 pub mod principals;
 pub mod projects;
@@ -648,5 +650,169 @@ impl ZoppService for ZoppServer {
         request: Request<CountAuditLogsRequest>,
     ) -> Result<Response<CountAuditLogsResponse>, Status> {
         audit::count_audit_logs(self, request).await
+    }
+
+    // ───────────────────────────────────── Organizations ─────────────────────────────────────
+
+    async fn create_organization(
+        &self,
+        request: Request<CreateOrganizationRequest>,
+    ) -> Result<Response<Organization>, Status> {
+        organizations::create_organization(self, request).await
+    }
+
+    async fn get_organization(
+        &self,
+        request: Request<GetOrganizationRequest>,
+    ) -> Result<Response<Organization>, Status> {
+        organizations::get_organization(self, request).await
+    }
+
+    async fn list_user_organizations(
+        &self,
+        request: Request<Empty>,
+    ) -> Result<Response<OrganizationList>, Status> {
+        organizations::list_user_organizations(self, request).await
+    }
+
+    async fn update_organization(
+        &self,
+        request: Request<UpdateOrganizationRequest>,
+    ) -> Result<Response<Organization>, Status> {
+        organizations::update_organization(self, request).await
+    }
+
+    async fn delete_organization(
+        &self,
+        request: Request<DeleteOrganizationRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::delete_organization(self, request).await
+    }
+
+    // ───────────────────────────────────── Organization Members ─────────────────────────────────────
+
+    async fn add_organization_member(
+        &self,
+        request: Request<AddOrganizationMemberRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::add_organization_member(self, request).await
+    }
+
+    async fn get_organization_member(
+        &self,
+        request: Request<GetOrganizationMemberRequest>,
+    ) -> Result<Response<OrganizationMember>, Status> {
+        organizations::get_organization_member(self, request).await
+    }
+
+    async fn list_organization_members(
+        &self,
+        request: Request<ListOrganizationMembersRequest>,
+    ) -> Result<Response<OrganizationMemberList>, Status> {
+        organizations::list_organization_members(self, request).await
+    }
+
+    async fn update_organization_member_role(
+        &self,
+        request: Request<UpdateOrganizationMemberRoleRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::update_organization_member_role(self, request).await
+    }
+
+    async fn remove_organization_member(
+        &self,
+        request: Request<RemoveOrganizationMemberRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::remove_organization_member(self, request).await
+    }
+
+    // ───────────────────────────────────── Organization Invites ─────────────────────────────────────
+
+    async fn create_organization_invite(
+        &self,
+        request: Request<CreateOrganizationInviteRequest>,
+    ) -> Result<Response<OrganizationInvite>, Status> {
+        organizations::create_organization_invite(self, request).await
+    }
+
+    async fn get_organization_invite(
+        &self,
+        request: Request<GetOrganizationInviteRequest>,
+    ) -> Result<Response<OrganizationInvite>, Status> {
+        organizations::get_organization_invite(self, request).await
+    }
+
+    async fn list_organization_invites(
+        &self,
+        request: Request<ListOrganizationInvitesRequest>,
+    ) -> Result<Response<OrganizationInviteList>, Status> {
+        organizations::list_organization_invites(self, request).await
+    }
+
+    async fn accept_organization_invite(
+        &self,
+        request: Request<AcceptOrganizationInviteRequest>,
+    ) -> Result<Response<OrganizationMember>, Status> {
+        organizations::accept_organization_invite(self, request).await
+    }
+
+    async fn delete_organization_invite(
+        &self,
+        request: Request<DeleteOrganizationInviteRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::delete_organization_invite(self, request).await
+    }
+
+    // ───────────────────────────────────── Organization Workspaces ─────────────────────────────────────
+
+    async fn link_workspace_to_organization(
+        &self,
+        request: Request<LinkWorkspaceToOrganizationRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::link_workspace_to_organization(self, request).await
+    }
+
+    async fn unlink_workspace_from_organization(
+        &self,
+        request: Request<UnlinkWorkspaceFromOrganizationRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        organizations::unlink_workspace_from_organization(self, request).await
+    }
+
+    async fn list_organization_workspaces(
+        &self,
+        request: Request<ListOrganizationWorkspacesRequest>,
+    ) -> Result<Response<WorkspaceList>, Status> {
+        organizations::list_organization_workspaces(self, request).await
+    }
+
+    // ───────────────────────────────────── Billing ─────────────────────────────────────
+
+    async fn get_subscription(
+        &self,
+        request: Request<GetSubscriptionRequest>,
+    ) -> Result<Response<Subscription>, Status> {
+        billing::get_subscription(self, request).await
+    }
+
+    async fn list_payments(
+        &self,
+        request: Request<ListPaymentsRequest>,
+    ) -> Result<Response<PaymentList>, Status> {
+        billing::list_payments(self, request).await
+    }
+
+    async fn create_checkout_session(
+        &self,
+        request: Request<CreateCheckoutSessionRequest>,
+    ) -> Result<Response<CheckoutSession>, Status> {
+        billing::create_checkout_session(self, request).await
+    }
+
+    async fn create_billing_portal_session(
+        &self,
+        request: Request<CreateBillingPortalSessionRequest>,
+    ) -> Result<Response<BillingPortalSession>, Status> {
+        billing::create_billing_portal_session(self, request).await
     }
 }

@@ -175,3 +175,59 @@ fullnameOverride: ""
 podAnnotations: {}
 podSecurityContext: {}
 securityContext: {}
+
+# Autoscaling configuration (HPA)
+autoscaling:
+  server:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  operator:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  server:
+    enabled: false
+    # Either minAvailable or maxUnavailable (not both)
+    minAvailable: 1
+    # maxUnavailable: 1
+  operator:
+    enabled: false
+    minAvailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: false
+  # Allow ingress from these namespaces (labels)
+  # Empty means allow from same namespace only
+  ingressNamespaceSelector: {}
+  # Allow ingress from specific pod selectors
+  ingressPodSelector: {}
+  # Allow egress to specific CIDRs (for external database)
+  egressCIDRs: []
+  # Allow egress to specific ports (e.g., PostgreSQL)
+  egressPorts:
+    - port: 5432
+      protocol: TCP
+
+# Prometheus ServiceMonitor
+serviceMonitor:
+  enabled: false
+  # Namespace where Prometheus is deployed
+  namespace: ""
+  # Additional labels for ServiceMonitor
+  labels: {}
+  # Scrape interval
+  interval: 30s
+  # Scrape timeout
+  scrapeTimeout: 10s
+  # Path for metrics endpoint
+  path: /metrics
+  # Port name for metrics endpoint
+  port: http

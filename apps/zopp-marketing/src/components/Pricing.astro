@@ -1,0 +1,93 @@
+---
+const APP_URL = 'https://app.zopp.dev';
+const GITHUB_URL = 'https://github.com/faiscadev/zopp';
+
+const plans = [
+  {
+    name: 'Free',
+    price: '$0',
+    period: 'forever',
+    description: 'For individuals and small projects',
+    features: ['Up to 3 users', '1 workspace', '100 secrets', 'CLI & Web access', 'Community support'],
+    cta: 'Get Started',
+    href: `${APP_URL}/invite`,
+    highlighted: false,
+  },
+  {
+    name: 'Pro',
+    price: '$29',
+    period: '/user/month',
+    description: 'For growing teams',
+    features: ['Unlimited users', 'Unlimited workspaces', 'Unlimited secrets', 'RBAC permissions', 'Audit logs', 'Priority support'],
+    cta: 'Start Free Trial',
+    href: `${APP_URL}/invite`,
+    highlighted: true,
+  },
+  {
+    name: 'Self-Hosted',
+    price: 'Free',
+    period: 'AGPL license',
+    description: 'Run on your own infrastructure',
+    features: ['All features included', 'Your infrastructure', 'No usage limits', 'Community support', 'Source code access'],
+    cta: 'View on GitHub',
+    href: GITHUB_URL,
+    highlighted: false,
+  },
+];
+---
+
+<section id="pricing" class="py-20 px-6 bg-vault-100">
+  <div class="max-w-5xl mx-auto">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl md:text-4xl font-bold text-cipher-text mb-4">Simple, transparent pricing</h2>
+      <p class="text-lg text-cipher-secondary max-w-2xl mx-auto">Start free, scale as you grow. No surprises.</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      {plans.map((plan) => (
+        <div class={plan.highlighted
+          ? "p-6 bg-vault-200 border-2 border-amber rounded-md relative"
+          : "p-6 bg-vault-200 border border-terminal-border rounded-md"
+        }>
+          {plan.highlighted && (
+            <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 text-xs font-medium bg-amber text-white rounded-full">
+              Most Popular
+            </div>
+          )}
+
+          <div class="text-center mb-6">
+            <h3 class="text-lg font-semibold text-cipher-text mb-2">{plan.name}</h3>
+            <div class="flex items-baseline justify-center gap-1">
+              <span class="text-4xl font-bold text-cipher-text">{plan.price}</span>
+              <span class="text-sm text-cipher-muted">{plan.period}</span>
+            </div>
+            <p class="text-sm text-cipher-secondary mt-2">{plan.description}</p>
+          </div>
+
+          <ul class="space-y-3 mb-6">
+            {plan.features.map((feature) => (
+              <li class="flex items-center gap-2 text-sm text-cipher-secondary">
+                <svg class="w-4 h-4 text-success flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                {feature}
+              </li>
+            ))}
+          </ul>
+
+          <a
+            href={plan.href}
+            target={plan.href.startsWith('http') && !plan.href.includes('app.zopp.dev') ? '_blank' : undefined}
+            rel={plan.href.startsWith('http') && !plan.href.includes('app.zopp.dev') ? 'noopener' : undefined}
+            class={plan.highlighted
+              ? "block w-full px-4 py-2.5 text-sm font-medium rounded-sm bg-amber text-white hover:bg-amber-hover transition-colors text-center"
+              : "block w-full px-4 py-2.5 text-sm font-medium rounded-sm bg-transparent text-cipher-text border border-terminal-border hover:border-terminal-border-strong hover:bg-vault-100 transition-colors text-center"
+            }
+          >
+            {plan.cta}
+          </a>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE organizations SET plan = ?, seat_limit = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "0676e5e1e83b862473ecc43f1be1d941a9c9c19f64581ad380355812ca4f69bf"
+}

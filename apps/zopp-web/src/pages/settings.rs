@@ -182,7 +182,7 @@ pub fn SettingsPage() -> impl IntoView {
                 </Show>
 
                 // Current Principal Info
-                <div data-testid="current-principal-card" class="bg-vault-100 border border-terminal-border rounded-md">
+                <div class="bg-vault-100 border border-terminal-border rounded-md">
                     <div class="p-6">
                         <h2 class="flex items-center gap-2 text-base font-medium mb-2 text-cipher-text">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -271,7 +271,7 @@ pub fn SettingsPage() -> impl IntoView {
                                                         }
                                                     }
                                                 >
-                                                    <span data-testid="current-badge" class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-muted text-amber">"Current"</span>
+                                                    <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-muted text-amber">"Current"</span>
                                                 </Show>
                                             </div>
                                         }

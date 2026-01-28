@@ -6,6 +6,7 @@ members = [
     "apps/zopp-server",
     "apps/zopp-web",
     "crates/zopp-audit",
+    "crates/zopp-billing",
     "crates/zopp-config",
     "crates/zopp-crypto",
     "crates/zopp-crypto-wasm",
@@ -78,6 +79,8 @@ tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
 trybuild = "1"
 url = "2.5"
 uuid = { version = "1.18.1", features = ["v4", "v7", "fast-rng"] }

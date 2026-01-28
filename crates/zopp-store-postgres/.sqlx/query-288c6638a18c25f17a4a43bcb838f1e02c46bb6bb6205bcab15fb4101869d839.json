@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, slug, stripe_customer_id, stripe_subscription_id,\n                      plan, seat_limit, trial_ends_at, created_at, updated_at\n               FROM organizations WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "stripe_customer_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "stripe_subscription_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "plan",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "seat_limit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "trial_ends_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "288c6638a18c25f17a4a43bcb838f1e02c46bb6bb6205bcab15fb4101869d839"
+}

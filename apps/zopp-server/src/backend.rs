@@ -1138,6 +1138,242 @@ impl Store for StoreBackend {
             StoreBackend::Postgres(s) => s.mark_user_verified(user_id).await,
         }
     }
+
+    // Organization methods - delegate to underlying store
+    async fn create_organization(
+        &self,
+        params: &CreateOrganizationParams,
+    ) -> Result<OrganizationId, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.create_organization(params).await,
+            StoreBackend::Postgres(s) => s.create_organization(params).await,
+        }
+    }
+
+    async fn get_organization(&self, org_id: &OrganizationId) -> Result<Organization, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_organization(org_id).await,
+            StoreBackend::Postgres(s) => s.get_organization(org_id).await,
+        }
+    }
+
+    async fn get_organization_by_slug(&self, slug: &str) -> Result<Organization, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_organization_by_slug(slug).await,
+            StoreBackend::Postgres(s) => s.get_organization_by_slug(slug).await,
+        }
+    }
+
+    async fn list_user_organizations(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<Organization>, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.list_user_organizations(user_id).await,
+            StoreBackend::Postgres(s) => s.list_user_organizations(user_id).await,
+        }
+    }
+
+    async fn update_organization(
+        &self,
+        org_id: &OrganizationId,
+        name: Option<String>,
+        slug: Option<String>,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => {
+                s.update_organization(org_id, name.clone(), slug.clone())
+                    .await
+            }
+            StoreBackend::Postgres(s) => s.update_organization(org_id, name, slug).await,
+        }
+    }
+
+    async fn set_organization_stripe_customer(
+        &self,
+        org_id: &OrganizationId,
+        stripe_customer_id: &str,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => {
+                s.set_organization_stripe_customer(org_id, stripe_customer_id)
+                    .await
+            }
+            StoreBackend::Postgres(s) => {
+                s.set_organization_stripe_customer(org_id, stripe_customer_id)
+                    .await
+            }
+        }
+    }
+
+    async fn set_organization_plan(
+        &self,
+        org_id: &OrganizationId,
+        plan: Plan,
+        seat_limit: i32,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.set_organization_plan(org_id, plan, seat_limit).await,
+            StoreBackend::Postgres(s) => s.set_organization_plan(org_id, plan, seat_limit).await,
+        }
+    }
+
+    async fn delete_organization(&self, org_id: &OrganizationId) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.delete_organization(org_id).await,
+            StoreBackend::Postgres(s) => s.delete_organization(org_id).await,
+        }
+    }
+
+    async fn add_organization_member(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+        role: OrganizationRole,
+        invited_by: Option<UserId>,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => {
+                s.add_organization_member(org_id, user_id, role, invited_by.clone())
+                    .await
+            }
+            StoreBackend::Postgres(s) => {
+                s.add_organization_member(org_id, user_id, role, invited_by)
+                    .await
+            }
+        }
+    }
+
+    async fn get_organization_member(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+    ) -> Result<OrganizationMember, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_organization_member(org_id, user_id).await,
+            StoreBackend::Postgres(s) => s.get_organization_member(org_id, user_id).await,
+        }
+    }
+
+    async fn list_organization_members(
+        &self,
+        org_id: &OrganizationId,
+    ) -> Result<Vec<OrganizationMember>, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.list_organization_members(org_id).await,
+            StoreBackend::Postgres(s) => s.list_organization_members(org_id).await,
+        }
+    }
+
+    async fn update_organization_member_role(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+        role: OrganizationRole,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => {
+                s.update_organization_member_role(org_id, user_id, role)
+                    .await
+            }
+            StoreBackend::Postgres(s) => {
+                s.update_organization_member_role(org_id, user_id, role)
+                    .await
+            }
+        }
+    }
+
+    async fn remove_organization_member(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.remove_organization_member(org_id, user_id).await,
+            StoreBackend::Postgres(s) => s.remove_organization_member(org_id, user_id).await,
+        }
+    }
+
+    async fn count_organization_members(&self, org_id: &OrganizationId) -> Result<i32, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.count_organization_members(org_id).await,
+            StoreBackend::Postgres(s) => s.count_organization_members(org_id).await,
+        }
+    }
+
+    async fn create_organization_invite(
+        &self,
+        params: &CreateOrganizationInviteParams,
+    ) -> Result<OrganizationInvite, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.create_organization_invite(params).await,
+            StoreBackend::Postgres(s) => s.create_organization_invite(params).await,
+        }
+    }
+
+    async fn get_organization_invite(
+        &self,
+        invite_id: &OrganizationInviteId,
+    ) -> Result<OrganizationInvite, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_organization_invite(invite_id).await,
+            StoreBackend::Postgres(s) => s.get_organization_invite(invite_id).await,
+        }
+    }
+
+    async fn get_organization_invite_by_token(
+        &self,
+        token_hash: &str,
+    ) -> Result<OrganizationInvite, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.get_organization_invite_by_token(token_hash).await,
+            StoreBackend::Postgres(s) => s.get_organization_invite_by_token(token_hash).await,
+        }
+    }
+
+    async fn list_organization_invites(
+        &self,
+        org_id: &OrganizationId,
+    ) -> Result<Vec<OrganizationInvite>, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.list_organization_invites(org_id).await,
+            StoreBackend::Postgres(s) => s.list_organization_invites(org_id).await,
+        }
+    }
+
+    async fn delete_organization_invite(
+        &self,
+        invite_id: &OrganizationInviteId,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.delete_organization_invite(invite_id).await,
+            StoreBackend::Postgres(s) => s.delete_organization_invite(invite_id).await,
+        }
+    }
+
+    async fn set_workspace_organization(
+        &self,
+        workspace_id: &WorkspaceId,
+        org_id: Option<OrganizationId>,
+    ) -> Result<(), StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => {
+                s.set_workspace_organization(workspace_id, org_id.clone())
+                    .await
+            }
+            StoreBackend::Postgres(s) => s.set_workspace_organization(workspace_id, org_id).await,
+        }
+    }
+
+    async fn list_organization_workspaces(
+        &self,
+        org_id: &OrganizationId,
+    ) -> Result<Vec<Workspace>, StoreError> {
+        match self {
+            StoreBackend::Sqlite(s) => s.list_organization_workspaces(org_id).await,
+            StoreBackend::Postgres(s) => s.list_organization_workspaces(org_id).await,
+        }
+    }
 }
 
 #[async_trait::async_trait]

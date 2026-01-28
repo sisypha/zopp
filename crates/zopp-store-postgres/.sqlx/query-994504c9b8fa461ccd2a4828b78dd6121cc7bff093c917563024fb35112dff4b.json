@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, organization_id, email, role, token_hash, invited_by, expires_at, created_at\n               FROM organization_invites\n               WHERE token_hash = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "organization_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "role",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "token_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "invited_by",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "994504c9b8fa461ccd2a4828b78dd6121cc7bff093c917563024fb35112dff4b"
+}

@@ -55,6 +55,15 @@ pub struct PrincipalExportId(pub Uuid);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EmailVerificationId(pub Uuid);
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OrganizationId(pub Uuid);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OrganizationInviteId(pub Uuid);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SubscriptionId(pub Uuid);
+
 /// Role for RBAC permissions
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Role {
@@ -287,6 +296,225 @@ pub struct CreateEnvParams {
     pub name: String,
     pub dek_wrapped: Vec<u8>, // wrapped DEK
     pub dek_nonce: Vec<u8>,   // 24-byte nonce used in wrapping
+}
+
+// ───────────────────────────────────── Organization Types ─────────────────────────────────────
+
+/// Role within an organization
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum OrganizationRole {
+    Owner,  // Full control, billing, can delete org
+    Admin,  // Manage members, settings, but not billing
+    Member, // Access to org workspaces based on permissions
+}
+
+/// Error type for parsing OrganizationRole from string
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseOrganizationRoleError(pub String);
+
+impl std::fmt::Display for ParseOrganizationRoleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid organization role: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseOrganizationRoleError {}
+
+impl FromStr for OrganizationRole {
+    type Err = ParseOrganizationRoleError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "owner" => Ok(OrganizationRole::Owner),
+            "admin" => Ok(OrganizationRole::Admin),
+            "member" => Ok(OrganizationRole::Member),
+            _ => Err(ParseOrganizationRoleError(s.to_string())),
+        }
+    }
+}
+
+impl OrganizationRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OrganizationRole::Owner => "owner",
+            OrganizationRole::Admin => "admin",
+            OrganizationRole::Member => "member",
+        }
+    }
+
+    /// Check if this role has at least the permissions of another role
+    pub fn includes(&self, other: &OrganizationRole) -> bool {
+        match self {
+            OrganizationRole::Owner => true,
+            OrganizationRole::Admin => {
+                matches!(other, OrganizationRole::Admin | OrganizationRole::Member)
+            }
+            OrganizationRole::Member => matches!(other, OrganizationRole::Member),
+        }
+    }
+}
+
+/// Billing plan tier
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Plan {
+    Free,
+    Pro,
+    Enterprise,
+}
+
+impl FromStr for Plan {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "free" => Ok(Plan::Free),
+            "pro" => Ok(Plan::Pro),
+            "enterprise" => Ok(Plan::Enterprise),
+            _ => Err(format!("invalid plan: {}", s)),
+        }
+    }
+}
+
+impl Plan {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Plan::Free => "free",
+            Plan::Pro => "pro",
+            Plan::Enterprise => "enterprise",
+        }
+    }
+
+    /// Get the default seat limit for this plan
+    pub fn default_seat_limit(&self) -> i32 {
+        match self {
+            Plan::Free => 3,
+            Plan::Pro => i32::MAX, // Unlimited (billed per seat)
+            Plan::Enterprise => i32::MAX,
+        }
+    }
+}
+
+/// Organization record (billing unit)
+#[derive(Clone, Debug)]
+pub struct Organization {
+    pub id: OrganizationId,
+    pub name: String,
+    pub slug: String,
+    pub stripe_customer_id: Option<String>,
+    pub stripe_subscription_id: Option<String>,
+    pub plan: Plan,
+    pub seat_limit: i32,
+    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Organization member record
+#[derive(Clone, Debug)]
+pub struct OrganizationMember {
+    pub organization_id: OrganizationId,
+    pub user_id: UserId,
+    pub role: OrganizationRole,
+    pub invited_by: Option<UserId>,
+    pub joined_at: DateTime<Utc>,
+}
+
+/// Pending organization invite
+#[derive(Clone, Debug)]
+pub struct OrganizationInvite {
+    pub id: OrganizationInviteId,
+    pub organization_id: OrganizationId,
+    pub email: String,
+    pub role: OrganizationRole,
+    pub token_hash: String,
+    pub invited_by: UserId,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Organization settings
+#[derive(Clone, Debug)]
+pub struct OrganizationSettings {
+    pub organization_id: OrganizationId,
+    pub require_email_verification: bool,
+    pub require_2fa: bool,
+    pub allowed_email_domains: Option<Vec<String>>,
+    pub sso_config: Option<String>, // JSON string
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Subscription status
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SubscriptionStatus {
+    Active,
+    PastDue,
+    Canceled,
+    Trialing,
+    Incomplete,
+}
+
+impl FromStr for SubscriptionStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "active" => Ok(SubscriptionStatus::Active),
+            "past_due" => Ok(SubscriptionStatus::PastDue),
+            "canceled" => Ok(SubscriptionStatus::Canceled),
+            "trialing" => Ok(SubscriptionStatus::Trialing),
+            "incomplete" => Ok(SubscriptionStatus::Incomplete),
+            _ => Err(format!("invalid subscription status: {}", s)),
+        }
+    }
+}
+
+impl SubscriptionStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SubscriptionStatus::Active => "active",
+            SubscriptionStatus::PastDue => "past_due",
+            SubscriptionStatus::Canceled => "canceled",
+            SubscriptionStatus::Trialing => "trialing",
+            SubscriptionStatus::Incomplete => "incomplete",
+        }
+    }
+}
+
+/// Subscription record
+#[derive(Clone, Debug)]
+pub struct Subscription {
+    pub id: SubscriptionId,
+    pub organization_id: OrganizationId,
+    pub stripe_subscription_id: String,
+    pub stripe_price_id: String,
+    pub plan: Plan,
+    pub status: SubscriptionStatus,
+    pub current_period_start: DateTime<Utc>,
+    pub current_period_end: DateTime<Utc>,
+    pub cancel_at_period_end: bool,
+    pub canceled_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Parameters for creating an organization
+#[derive(Clone, Debug)]
+pub struct CreateOrganizationParams {
+    pub name: String,
+    pub slug: String,
+    pub owner_user_id: UserId,
+    pub plan: Plan,
+}
+
+/// Parameters for creating an organization invite
+#[derive(Clone, Debug)]
+pub struct CreateOrganizationInviteParams {
+    pub organization_id: OrganizationId,
+    pub email: String,
+    pub role: OrganizationRole,
+    pub token_hash: String,
+    pub invited_by: UserId,
+    pub expires_at: DateTime<Utc>,
 }
 
 /// User record
@@ -1034,6 +1262,141 @@ pub trait Store: Send + Sync {
         environment_id: &EnvironmentId,
         group_id: &GroupId,
     ) -> Result<(), StoreError>;
+
+    // ────────────────────────────────────── Organizations ────────────────────────────────────────
+
+    /// Create a new organization (returns generated ID).
+    async fn create_organization(
+        &self,
+        params: &CreateOrganizationParams,
+    ) -> Result<OrganizationId, StoreError>;
+
+    /// Get organization by ID.
+    async fn get_organization(&self, org_id: &OrganizationId) -> Result<Organization, StoreError>;
+
+    /// Get organization by slug.
+    async fn get_organization_by_slug(&self, slug: &str) -> Result<Organization, StoreError>;
+
+    /// List all organizations a user is a member of.
+    async fn list_user_organizations(
+        &self,
+        user_id: &UserId,
+    ) -> Result<Vec<Organization>, StoreError>;
+
+    /// Update organization details.
+    async fn update_organization(
+        &self,
+        org_id: &OrganizationId,
+        name: Option<String>,
+        slug: Option<String>,
+    ) -> Result<(), StoreError>;
+
+    /// Update organization's Stripe customer ID.
+    async fn set_organization_stripe_customer(
+        &self,
+        org_id: &OrganizationId,
+        stripe_customer_id: &str,
+    ) -> Result<(), StoreError>;
+
+    /// Update organization's plan and seat limit.
+    async fn set_organization_plan(
+        &self,
+        org_id: &OrganizationId,
+        plan: Plan,
+        seat_limit: i32,
+    ) -> Result<(), StoreError>;
+
+    /// Delete an organization (cascades to members, invites, settings).
+    async fn delete_organization(&self, org_id: &OrganizationId) -> Result<(), StoreError>;
+
+    // ────────────────────────────────────── Organization Members ────────────────────────────────────────
+
+    /// Add a user to an organization with a role.
+    async fn add_organization_member(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+        role: OrganizationRole,
+        invited_by: Option<UserId>,
+    ) -> Result<(), StoreError>;
+
+    /// Get a user's membership in an organization.
+    async fn get_organization_member(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+    ) -> Result<OrganizationMember, StoreError>;
+
+    /// List all members of an organization.
+    async fn list_organization_members(
+        &self,
+        org_id: &OrganizationId,
+    ) -> Result<Vec<OrganizationMember>, StoreError>;
+
+    /// Update a member's role in an organization.
+    async fn update_organization_member_role(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+        role: OrganizationRole,
+    ) -> Result<(), StoreError>;
+
+    /// Remove a user from an organization.
+    async fn remove_organization_member(
+        &self,
+        org_id: &OrganizationId,
+        user_id: &UserId,
+    ) -> Result<(), StoreError>;
+
+    /// Count members in an organization.
+    async fn count_organization_members(&self, org_id: &OrganizationId) -> Result<i32, StoreError>;
+
+    // ────────────────────────────────────── Organization Invites ────────────────────────────────────────
+
+    /// Create an organization invite.
+    async fn create_organization_invite(
+        &self,
+        params: &CreateOrganizationInviteParams,
+    ) -> Result<OrganizationInvite, StoreError>;
+
+    /// Get an organization invite by ID.
+    async fn get_organization_invite(
+        &self,
+        invite_id: &OrganizationInviteId,
+    ) -> Result<OrganizationInvite, StoreError>;
+
+    /// Get an organization invite by token hash.
+    async fn get_organization_invite_by_token(
+        &self,
+        token_hash: &str,
+    ) -> Result<OrganizationInvite, StoreError>;
+
+    /// List pending invites for an organization.
+    async fn list_organization_invites(
+        &self,
+        org_id: &OrganizationId,
+    ) -> Result<Vec<OrganizationInvite>, StoreError>;
+
+    /// Delete an organization invite (revoke or after consumption).
+    async fn delete_organization_invite(
+        &self,
+        invite_id: &OrganizationInviteId,
+    ) -> Result<(), StoreError>;
+
+    // ────────────────────────────────────── Workspace-Organization Link ────────────────────────────────────────
+
+    /// Link a workspace to an organization.
+    async fn set_workspace_organization(
+        &self,
+        workspace_id: &WorkspaceId,
+        org_id: Option<OrganizationId>,
+    ) -> Result<(), StoreError>;
+
+    /// List workspaces belonging to an organization.
+    async fn list_organization_workspaces(
+        &self,
+        org_id: &OrganizationId,
+    ) -> Result<Vec<Workspace>, StoreError>;
 }
 
 #[cfg(test)]
@@ -1772,6 +2135,171 @@ mod tests {
             _group_id: &GroupId,
         ) -> Result<(), StoreError> {
             Ok(())
+        }
+
+        // Organization methods
+        async fn create_organization(
+            &self,
+            params: &CreateOrganizationParams,
+        ) -> Result<OrganizationId, StoreError> {
+            let _ = params;
+            Ok(OrganizationId(Uuid::new_v4()))
+        }
+
+        async fn get_organization(
+            &self,
+            _org_id: &OrganizationId,
+        ) -> Result<Organization, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn get_organization_by_slug(&self, _slug: &str) -> Result<Organization, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_user_organizations(
+            &self,
+            _user_id: &UserId,
+        ) -> Result<Vec<Organization>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn update_organization(
+            &self,
+            _org_id: &OrganizationId,
+            _name: Option<String>,
+            _slug: Option<String>,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_organization_stripe_customer(
+            &self,
+            _org_id: &OrganizationId,
+            _stripe_customer_id: &str,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_organization_plan(
+            &self,
+            _org_id: &OrganizationId,
+            _plan: Plan,
+            _seat_limit: i32,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn delete_organization(&self, _org_id: &OrganizationId) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn add_organization_member(
+            &self,
+            _org_id: &OrganizationId,
+            _user_id: &UserId,
+            _role: OrganizationRole,
+            _invited_by: Option<UserId>,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn get_organization_member(
+            &self,
+            _org_id: &OrganizationId,
+            _user_id: &UserId,
+        ) -> Result<OrganizationMember, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_organization_members(
+            &self,
+            _org_id: &OrganizationId,
+        ) -> Result<Vec<OrganizationMember>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn update_organization_member_role(
+            &self,
+            _org_id: &OrganizationId,
+            _user_id: &UserId,
+            _role: OrganizationRole,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn remove_organization_member(
+            &self,
+            _org_id: &OrganizationId,
+            _user_id: &UserId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn count_organization_members(
+            &self,
+            _org_id: &OrganizationId,
+        ) -> Result<i32, StoreError> {
+            Ok(0)
+        }
+
+        async fn create_organization_invite(
+            &self,
+            params: &CreateOrganizationInviteParams,
+        ) -> Result<OrganizationInvite, StoreError> {
+            Ok(OrganizationInvite {
+                id: OrganizationInviteId(Uuid::new_v4()),
+                organization_id: params.organization_id.clone(),
+                email: params.email.clone(),
+                role: params.role,
+                token_hash: params.token_hash.clone(),
+                invited_by: params.invited_by.clone(),
+                expires_at: params.expires_at,
+                created_at: Utc::now(),
+            })
+        }
+
+        async fn get_organization_invite(
+            &self,
+            _invite_id: &OrganizationInviteId,
+        ) -> Result<OrganizationInvite, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn get_organization_invite_by_token(
+            &self,
+            _token_hash: &str,
+        ) -> Result<OrganizationInvite, StoreError> {
+            Err(StoreError::NotFound)
+        }
+
+        async fn list_organization_invites(
+            &self,
+            _org_id: &OrganizationId,
+        ) -> Result<Vec<OrganizationInvite>, StoreError> {
+            Ok(vec![])
+        }
+
+        async fn delete_organization_invite(
+            &self,
+            _invite_id: &OrganizationInviteId,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn set_workspace_organization(
+            &self,
+            _workspace_id: &WorkspaceId,
+            _org_id: Option<OrganizationId>,
+        ) -> Result<(), StoreError> {
+            Ok(())
+        }
+
+        async fn list_organization_workspaces(
+            &self,
+            _org_id: &OrganizationId,
+        ) -> Result<Vec<Workspace>, StoreError> {
+            Ok(vec![])
         }
     }
 
