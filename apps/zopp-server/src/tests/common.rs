@@ -198,6 +198,7 @@ pub async fn create_test_environment(
 }
 
 /// Test helper: Create a group in a workspace
+#[allow(dead_code)]
 pub async fn create_test_group(
     server: &ZoppServer,
     workspace_id: &WorkspaceId,
@@ -256,6 +257,7 @@ pub async fn add_user_to_workspace(
 }
 
 /// Test helper: Create a service principal (no associated user)
+#[allow(dead_code)]
 pub async fn create_service_principal(
     server: &ZoppServer,
     name: &str,
