@@ -128,6 +128,7 @@ pub fn InvitesPage() -> impl IntoView {
                                     </code>
                                     <button
                                         class="p-2 rounded-sm border border-terminal-border hover:bg-vault-200 transition-colors"
+                                        aria-label="Copy to clipboard"
                                         on:click=copy_to_clipboard
                                     >
                                         <Show

@@ -131,7 +131,7 @@ pub fn PermissionsPage() -> impl IntoView {
                 </Show>
 
                 // Tabs
-                <div class="tabs flex gap-1 p-1 rounded-lg bg-vault-inset">
+                <div class="tabs flex gap-1 p-1 rounded-lg bg-vault-inset" data-testid="tabs">
                     <button
                         class=move || if active_tab.get() == "permissions" {
                             "px-4 py-2 text-sm font-medium rounded-md bg-vault-100 text-cipher-text transition-colors"
