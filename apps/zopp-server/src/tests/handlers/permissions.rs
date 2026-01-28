@@ -37,8 +37,7 @@ async fn handler_permission_denied_no_access() {
     assert!(result.is_err());
     let status = result.unwrap_err();
     assert!(
-        status.code() == tonic::Code::NotFound
-            || status.code() == tonic::Code::PermissionDenied
+        status.code() == tonic::Code::NotFound || status.code() == tonic::Code::PermissionDenied
     );
 }
 
