@@ -37,32 +37,4 @@ async fn handler_list_audit_logs() {
     let _ = response.entries;
 }
 
-#[tokio::test]
-async fn handler_count_audit_logs() {
-    let server = create_test_server().await;
-    let (user_id, principal_id, signing_key) =
-        create_test_user(&server, "test@example.com", "laptop").await;
-
-    let _ws_id = create_test_workspace(&server, &user_id, "ws").await;
-
-    let request = create_signed_request(
-        &principal_id,
-        &signing_key,
-        "/zopp.ZoppService/CountAuditLogs",
-        zopp_proto::CountAuditLogsRequest {
-            workspace_name: "ws".to_string(),
-            principal_id: None,
-            user_id: None,
-            project_name: None,
-            environment_name: None,
-            action: None,
-            result: None,
-            from_timestamp: None,
-            to_timestamp: None,
-        },
-    );
-
-    let response = server.count_audit_logs(request).await.unwrap().into_inner();
-    // Response received successfully
-    let _ = response.count;
-}
+// Note: CountAuditLogs RPC was removed - use ListAuditLogs response.total_count instead

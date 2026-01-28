@@ -271,7 +271,7 @@ pub fn SettingsPage() -> impl IntoView {
                                                         }
                                                     }
                                                 >
-                                                    <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-muted text-amber">"Current"</span>
+                                                    <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-muted text-amber" data-testid="current-badge">"Current"</span>
                                                 </Show>
                                             </div>
                                         }

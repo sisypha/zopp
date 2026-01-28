@@ -24,6 +24,7 @@ pub fn Modal(
                 >
                     <div
                         class=format!("modal-box relative w-full rounded-lg bg-vault-100 border border-terminal-border p-6 {}", max_w)
+                        data-testid="modal-content"
                         on:click=move |e| e.stop_propagation()
                     >
                         {children.with_value(|c| c())}

@@ -110,7 +110,7 @@ pub fn EnvironmentsPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <nav class="breadcrumbs flex items-center gap-2 text-sm">
+                <nav class="breadcrumbs flex items-center gap-2 text-sm" data-testid="breadcrumb">
                     <a href=move || format!("/workspaces/{}", workspace()) class="text-cipher-secondary hover:text-cipher-text transition-colors">{workspace}</a>
                     <span class="text-cipher-muted">"/"</span>
                     <span class="text-cipher-text">{project}</span>
@@ -198,7 +198,7 @@ pub fn EnvironmentsPage() -> impl IntoView {
                 // Create Environment Modal
                 <Show when=move || show_create_modal.get()>
                     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" on:click=move |_| set_show_create_modal.set(false)>
-                        <div class="relative w-full max-w-md rounded-lg bg-vault-100 border border-terminal-border p-6" on:click=|ev| ev.stop_propagation()>
+                        <div class="relative w-full max-w-md rounded-lg bg-vault-100 border border-terminal-border p-6" data-testid="modal-content" on:click=|ev| ev.stop_propagation()>
                             <h3 class="text-lg font-semibold text-cipher-text mb-4">"Create Environment"</h3>
                             <form on:submit=on_create>
                                 <div class="mb-6">
