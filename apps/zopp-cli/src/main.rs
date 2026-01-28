@@ -1,4 +1,5 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::{generate, Shell};
 
 mod cli;
 mod commands;
@@ -11,7 +12,7 @@ mod passphrase;
 use cli::{
     AuditCommand, Cli, Command, DiffCommand, EnvironmentCommand, GroupCommand, InviteCommand,
     OrganizationCommand, PermissionCommand, PrincipalCommand, ProjectCommand, SecretCommand,
-    SyncCommand, WorkspaceCommand,
+    ShellType, SyncCommand, WorkspaceCommand,
 };
 use commands::*;
 use config::{resolve_context, resolve_workspace, resolve_workspace_project};
@@ -1116,6 +1117,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &command,
             )
             .await?;
+        }
+        Command::Completions { shell } => {
+            let shell = match shell {
+                ShellType::Bash => Shell::Bash,
+                ShellType::Zsh => Shell::Zsh,
+                ShellType::Fish => Shell::Fish,
+                ShellType::PowerShell => Shell::PowerShell,
+                ShellType::Elvish => Shell::Elvish,
+            };
+            let mut cmd = Cli::command();
+            generate(shell, &mut cmd, "zopp", &mut std::io::stdout());
         }
     }
 
