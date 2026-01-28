@@ -3,11 +3,11 @@
 - **Status:** Draft
 - **Author:** Claude (Analysis)
 - **Created:** 2025-01-28
-- **Target:** Reduce 106 methods to <50 methods
+- **Target:** Reduce 106 methods to 60 methods
 
 ## Summary
 
-The zopp gRPC API has grown to 106 methods, with significant bloat from permission-related endpoints. This RFC proposes consolidating the API by introducing generic permission methods with resource/actor type parameters, reducing the method count by approximately 55%.
+The zopp gRPC API has grown to 106 methods, with significant bloat from permission-related endpoints. This RFC proposes consolidating the API by introducing generic permission methods with resource/actor type parameters, reducing the method count by approximately 43%.
 
 ## Current State: 106 Methods
 
