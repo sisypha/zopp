@@ -202,7 +202,7 @@ pub fn ProjectsPage() -> impl IntoView {
                 // Create Project Modal
                 <Show when=move || show_create_modal.get()>
                     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" on:click=move |_| set_show_create_modal.set(false)>
-                        <div class="relative w-full max-w-md rounded-lg bg-vault-100 border border-terminal-border p-6" on:click=move |ev| ev.stop_propagation()>
+                        <div class="relative w-full max-w-md rounded-lg bg-vault-100 border border-terminal-border p-6" data-testid="modal-content" on:click=move |ev| ev.stop_propagation()>
                             <h3 class="text-lg font-semibold text-cipher-text mb-4">"Create Project"</h3>
                             <form on:submit=on_create>
                                 <div class="mb-6">
