@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -115,6 +115,27 @@ pub enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        shell: ShellType,
+    },
+}
+
+/// Supported shells for completion generation
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum ShellType {
+    /// Bash shell
+    Bash,
+    /// Zsh shell
+    Zsh,
+    /// Fish shell
+    Fish,
+    /// PowerShell
+    #[value(name = "powershell")]
+    PowerShell,
+    /// Elvish shell
+    Elvish,
 }
 
 #[derive(Subcommand)]
