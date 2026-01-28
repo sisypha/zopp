@@ -4,7 +4,7 @@
 
 use super::super::common::*;
 use zopp_proto::zopp_service_server::ZoppService;
-use zopp_storage::{Store, *};
+use zopp_storage::{Role, Store};
 
 #[tokio::test]
 async fn handler_group_create_and_list() {
@@ -52,16 +52,8 @@ async fn handler_group_add_member() {
 
     let ws_id = create_test_workspace(&server, &user_id, "ws").await;
 
-    // Create a group
-    let _group_id = server
-        .store
-        .create_group(&CreateGroupParams {
-            workspace_id: ws_id.clone(),
-            name: "team".to_string(),
-            description: None,
-        })
-        .await
-        .unwrap();
+    // Create a group using test helper
+    let _group_id = create_test_group(&server, &ws_id, "team").await;
 
     // Create another user to add
     let (member_user_id, _, _) = create_test_user(&server, "member@example.com", "member").await;
