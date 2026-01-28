@@ -9,16 +9,18 @@
 //! - projects: create, list, get, delete
 //! - environments: create, list, get, delete
 //! - secrets: upsert, get, list, delete, watch
-//! - permissions: principal permissions at workspace/project/environment levels
+//! - generic_permissions: NEW unified permission API (4 methods replacing 36)
+//! - permissions: principal permissions at workspace/project/environment levels (DEPRECATED)
 //! - groups: group CRUD + membership
-//! - group_permissions: group permissions at all levels
-//! - user_permissions: user permissions at all levels
+//! - group_permissions: group permissions at all levels (DEPRECATED)
+//! - user_permissions: user permissions at all levels (DEPRECATED)
 //! - audit: audit log queries
 
 pub mod audit;
 pub mod auth;
 pub mod billing;
 pub mod environments;
+pub mod generic_permissions;
 pub mod group_permissions;
 pub mod groups;
 pub mod invites;
@@ -306,7 +308,37 @@ impl ZoppService for ZoppServer {
         secrets::watch_secrets(self, request).await
     }
 
-    // ───────────────────────────────────── Principal Permissions ─────────────────────────────────────
+    // ───────────────────────────────────── Generic Permissions (NEW API) ─────────────────────────────────────
+
+    async fn set_permission(
+        &self,
+        request: Request<SetPermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        generic_permissions::set_permission(self, request).await
+    }
+
+    async fn get_permission(
+        &self,
+        request: Request<GetPermissionRequest>,
+    ) -> Result<Response<PermissionResponse>, Status> {
+        generic_permissions::get_permission(self, request).await
+    }
+
+    async fn list_permissions(
+        &self,
+        request: Request<ListPermissionsRequest>,
+    ) -> Result<Response<PermissionListResponse>, Status> {
+        generic_permissions::list_permissions(self, request).await
+    }
+
+    async fn remove_permission(
+        &self,
+        request: Request<RemovePermissionRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        generic_permissions::remove_permission(self, request).await
+    }
+
+    // ───────────────────────────────────── Principal Permissions (DEPRECATED) ─────────────────────────────────────
 
     async fn set_workspace_permission(
         &self,
@@ -645,12 +677,7 @@ impl ZoppService for ZoppServer {
         audit::get_audit_log(self, request).await
     }
 
-    async fn count_audit_logs(
-        &self,
-        request: Request<CountAuditLogsRequest>,
-    ) -> Result<Response<CountAuditLogsResponse>, Status> {
-        audit::count_audit_logs(self, request).await
-    }
+    // CountAuditLogs removed - use ListAuditLogs response.total_count instead
 
     // ───────────────────────────────────── Organizations ─────────────────────────────────────
 
@@ -691,6 +718,14 @@ impl ZoppService for ZoppServer {
 
     // ───────────────────────────────────── Organization Members ─────────────────────────────────────
 
+    async fn upsert_organization_member(
+        &self,
+        request: Request<UpsertOrganizationMemberRequest>,
+    ) -> Result<Response<OrganizationMember>, Status> {
+        organizations::upsert_organization_member(self, request).await
+    }
+
+    // DEPRECATED: Use UpsertOrganizationMember instead
     async fn add_organization_member(
         &self,
         request: Request<AddOrganizationMemberRequest>,

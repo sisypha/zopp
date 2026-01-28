@@ -1,12 +1,10 @@
-//! Audit log handlers: list, get, count
+//! Audit log handlers: list, get
+//! Note: CountAuditLogs was removed - use ListAuditLogs with limit=0 to get total_count
 
 use chrono::DateTime;
 use tonic::{Request, Response, Status};
 use zopp_audit::{AuditLog, AuditLogFilter, AuditLogId};
-use zopp_proto::{
-    AuditLogEntry, AuditLogList, CountAuditLogsRequest, CountAuditLogsResponse, GetAuditLogRequest,
-    ListAuditLogsRequest,
-};
+use zopp_proto::{AuditLogEntry, AuditLogList, GetAuditLogRequest, ListAuditLogsRequest};
 use zopp_storage::{PrincipalId, Role, Store, UserId};
 
 use crate::server::{extract_signature, ZoppServer};
@@ -248,106 +246,4 @@ pub async fn get_audit_log(
     }))
 }
 
-pub async fn count_audit_logs(
-    server: &ZoppServer,
-    request: Request<CountAuditLogsRequest>,
-) -> Result<Response<CountAuditLogsResponse>, Status> {
-    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
-    let req_for_verify = request.get_ref().clone();
-    let principal = server
-        .verify_signature_and_get_principal(
-            &principal_id,
-            timestamp,
-            &signature,
-            "/zopp.ZoppService/CountAuditLogs",
-            &req_for_verify,
-            &request_hash,
-        )
-        .await?;
-
-    let req = request.into_inner();
-
-    // Look up workspace by name
-    let workspace = if let Some(user_id) = &principal.user_id {
-        server
-            .store
-            .get_workspace_by_name(user_id, &req.workspace_name)
-            .await
-            .map_err(|e| match e {
-                zopp_storage::StoreError::NotFound => {
-                    Status::not_found("Workspace not found or access denied")
-                }
-                _ => Status::internal(format!("Failed to get workspace: {}", e)),
-            })?
-    } else {
-        server
-            .store
-            .get_workspace_by_name_for_principal(&principal_id, &req.workspace_name)
-            .await
-            .map_err(|e| match e {
-                zopp_storage::StoreError::NotFound => {
-                    Status::not_found("Workspace not found or access denied")
-                }
-                _ => Status::internal(format!("Failed to get workspace: {}", e)),
-            })?
-    };
-
-    // Check permission - only Admin can view audit logs
-    server
-        .check_permission_workspace_only(&principal_id, &workspace.id, Role::Admin)
-        .await?;
-
-    // Build filter
-    let mut filter = AuditLogFilter::new().workspace_id(workspace.id);
-
-    if let Some(pid) = req.principal_id {
-        let pid = uuid::Uuid::parse_str(&pid)
-            .map(PrincipalId)
-            .map_err(|_| Status::invalid_argument("Invalid principal_id format"))?;
-        filter = filter.principal_id(pid);
-    }
-
-    if let Some(uid) = req.user_id {
-        let uid = uuid::Uuid::parse_str(&uid)
-            .map(UserId)
-            .map_err(|_| Status::invalid_argument("Invalid user_id format"))?;
-        filter = filter.user_id(uid);
-    }
-
-    if let Some(action) = req.action {
-        let action: zopp_audit::AuditAction = action
-            .parse()
-            .map_err(|_| Status::invalid_argument("Invalid action"))?;
-        filter = filter.action(action);
-    }
-
-    if let Some(result) = req.result {
-        let result: zopp_audit::AuditResult = result
-            .parse()
-            .map_err(|_| Status::invalid_argument("Invalid result"))?;
-        filter = filter.result(result);
-    }
-
-    if let Some(from) = req.from_timestamp {
-        let from = DateTime::parse_from_rfc3339(&from)
-            .map_err(|_| Status::invalid_argument("Invalid from_timestamp format"))?
-            .with_timezone(&chrono::Utc);
-        filter = filter.from(from);
-    }
-
-    if let Some(to) = req.to_timestamp {
-        let to = DateTime::parse_from_rfc3339(&to)
-            .map_err(|_| Status::invalid_argument("Invalid to_timestamp format"))?
-            .with_timezone(&chrono::Utc);
-        filter = filter.to(to);
-    }
-
-    // Count audit logs
-    let count = server
-        .store
-        .count(filter)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to count audit logs: {}", e)))?;
-
-    Ok(Response::new(CountAuditLogsResponse { count }))
-}
+// CountAuditLogs was removed - use ListAuditLogs with limit=0 to get total_count
