@@ -509,6 +509,10 @@ async fn shutdown_signal(readiness_tx: Option<tokio::sync::watch::Sender<bool>>)
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install the ring crypto provider for rustls (required for TLS)
+    // This must be called before any TLS operations
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let cli = Cli::parse();
 
     match cli.command {
