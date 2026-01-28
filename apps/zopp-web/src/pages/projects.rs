@@ -97,7 +97,7 @@ pub fn ProjectsPage() -> impl IntoView {
         <Layout>
             <div class="space-y-6">
                 // Breadcrumb
-                <nav class="breadcrumbs flex items-center gap-2 text-sm">
+                <nav class="breadcrumbs flex items-center gap-2 text-sm" data-testid="breadcrumb">
                     <span class="text-cipher-text">{workspace}</span>
                 </nav>
 
