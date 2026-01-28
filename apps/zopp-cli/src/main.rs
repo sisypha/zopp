@@ -18,6 +18,10 @@ use config::{resolve_context, resolve_workspace, resolve_workspace_project};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install the ring crypto provider for rustls (required by kube client)
+    // This must be called before any TLS operations
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let cli = Cli::parse();
 
     match cli.command {

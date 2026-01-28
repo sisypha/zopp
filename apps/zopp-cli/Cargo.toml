@@ -41,6 +41,7 @@ url = { workspace = true }
 rpassword = { workspace = true }
 argon2 = { workspace = true }
 zeroize = { workspace = true }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { workspace = true, features = ["apple-native"] }

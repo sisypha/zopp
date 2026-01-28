@@ -146,6 +146,10 @@ async fn shutdown_signal() {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use axum::{routing::get, Router};
 
+    // Install the ring crypto provider for rustls (required by kube client)
+    // This must be called before any TLS operations
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();
