@@ -122,7 +122,8 @@ pub async fn cmd_audit_count(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut client, principal, secrets) = setup_client(server, tls_ca_cert).await?;
 
-    let mut request = tonic::Request::new(zopp_proto::CountAuditLogsRequest {
+    // Use ListAuditLogs with limit=0 to get total_count (CountAuditLogs was removed)
+    let mut request = tonic::Request::new(zopp_proto::ListAuditLogsRequest {
         workspace_name: workspace_name.to_string(),
         principal_id: None,
         user_id: None,
@@ -132,17 +133,19 @@ pub async fn cmd_audit_count(
         result: result.map(|s| s.to_string()),
         from_timestamp: None,
         to_timestamp: None,
+        limit: Some(0), // Just get the count, not the entries
+        offset: None,
     });
     add_auth_metadata(
         &mut request,
         &principal,
         &secrets,
-        "/zopp.ZoppService/CountAuditLogs",
+        "/zopp.ZoppService/ListAuditLogs",
     )?;
 
-    let response = client.count_audit_logs(request).await?.into_inner();
+    let response = client.list_audit_logs(request).await?.into_inner();
 
-    println!("Total audit log entries: {}", response.count);
+    println!("Total audit log entries: {}", response.total_count);
 
     Ok(())
 }

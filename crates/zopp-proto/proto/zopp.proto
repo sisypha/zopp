@@ -57,21 +57,32 @@ service ZoppService {
   // Watch (streaming)
   rpc WatchSecrets(WatchSecretsRequest) returns (stream WatchSecretsResponse);
 
-  // RBAC Permissions
-  rpc SetWorkspacePermission(SetWorkspacePermissionRequest) returns (Empty);
-  rpc GetWorkspacePermission(GetWorkspacePermissionRequest) returns (PermissionResponse);
-  rpc ListWorkspacePermissions(ListWorkspacePermissionsRequest) returns (PermissionList);
-  rpc RemoveWorkspacePermission(RemoveWorkspacePermissionRequest) returns (Empty);
+  // ============================================================================
+  // Generic Permissions API (NEW - replaces 36 specific permission methods)
+  // ============================================================================
+  rpc SetPermission(SetPermissionRequest) returns (Empty);
+  rpc GetPermission(GetPermissionRequest) returns (PermissionResponse);
+  rpc ListPermissions(ListPermissionsRequest) returns (PermissionListResponse);
+  rpc RemovePermission(RemovePermissionRequest) returns (Empty);
 
-  rpc SetProjectPermission(SetProjectPermissionRequest) returns (Empty);
-  rpc GetProjectPermission(GetProjectPermissionRequest) returns (PermissionResponse);
-  rpc ListProjectPermissions(ListProjectPermissionsRequest) returns (PermissionList);
-  rpc RemoveProjectPermission(RemoveProjectPermissionRequest) returns (Empty);
+  // ============================================================================
+  // DEPRECATED: Principal Permissions (use generic SetPermission/GetPermission/etc)
+  // These methods will be removed in v1.0
+  // ============================================================================
+  rpc SetWorkspacePermission(SetWorkspacePermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetWorkspacePermission(GetWorkspacePermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListWorkspacePermissions(ListWorkspacePermissionsRequest) returns (PermissionList); // Deprecated: use ListPermissions
+  rpc RemoveWorkspacePermission(RemoveWorkspacePermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
-  rpc SetEnvironmentPermission(SetEnvironmentPermissionRequest) returns (Empty);
-  rpc GetEnvironmentPermission(GetEnvironmentPermissionRequest) returns (PermissionResponse);
-  rpc ListEnvironmentPermissions(ListEnvironmentPermissionsRequest) returns (PermissionList);
-  rpc RemoveEnvironmentPermission(RemoveEnvironmentPermissionRequest) returns (Empty);
+  rpc SetProjectPermission(SetProjectPermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetProjectPermission(GetProjectPermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListProjectPermissions(ListProjectPermissionsRequest) returns (PermissionList); // Deprecated: use ListPermissions
+  rpc RemoveProjectPermission(RemoveProjectPermissionRequest) returns (Empty); // Deprecated: use RemovePermission
+
+  rpc SetEnvironmentPermission(SetEnvironmentPermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetEnvironmentPermission(GetEnvironmentPermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListEnvironmentPermissions(ListEnvironmentPermissionsRequest) returns (PermissionList); // Deprecated: use ListPermissions
+  rpc RemoveEnvironmentPermission(RemoveEnvironmentPermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
   // Groups
   rpc CreateGroup(CreateGroupRequest) returns (Group);
@@ -86,37 +97,43 @@ service ZoppService {
   rpc ListGroupMembers(ListGroupMembersRequest) returns (GroupMemberList);
   rpc ListUserGroups(ListUserGroupsRequest) returns (GroupList);
 
-  // Group Permissions
-  rpc SetGroupWorkspacePermission(SetGroupWorkspacePermissionRequest) returns (Empty);
-  rpc GetGroupWorkspacePermission(GetGroupWorkspacePermissionRequest) returns (PermissionResponse);
-  rpc ListGroupWorkspacePermissions(ListGroupWorkspacePermissionsRequest) returns (GroupPermissionList);
-  rpc RemoveGroupWorkspacePermission(RemoveGroupWorkspacePermissionRequest) returns (Empty);
+  // ============================================================================
+  // DEPRECATED: Group Permissions (use generic SetPermission/GetPermission/etc)
+  // These methods will be removed in v1.0
+  // ============================================================================
+  rpc SetGroupWorkspacePermission(SetGroupWorkspacePermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetGroupWorkspacePermission(GetGroupWorkspacePermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListGroupWorkspacePermissions(ListGroupWorkspacePermissionsRequest) returns (GroupPermissionList); // Deprecated: use ListPermissions
+  rpc RemoveGroupWorkspacePermission(RemoveGroupWorkspacePermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
-  rpc SetGroupProjectPermission(SetGroupProjectPermissionRequest) returns (Empty);
-  rpc GetGroupProjectPermission(GetGroupProjectPermissionRequest) returns (PermissionResponse);
-  rpc ListGroupProjectPermissions(ListGroupProjectPermissionsRequest) returns (GroupPermissionList);
-  rpc RemoveGroupProjectPermission(RemoveGroupProjectPermissionRequest) returns (Empty);
+  rpc SetGroupProjectPermission(SetGroupProjectPermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetGroupProjectPermission(GetGroupProjectPermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListGroupProjectPermissions(ListGroupProjectPermissionsRequest) returns (GroupPermissionList); // Deprecated: use ListPermissions
+  rpc RemoveGroupProjectPermission(RemoveGroupProjectPermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
-  rpc SetGroupEnvironmentPermission(SetGroupEnvironmentPermissionRequest) returns (Empty);
-  rpc GetGroupEnvironmentPermission(GetGroupEnvironmentPermissionRequest) returns (PermissionResponse);
-  rpc ListGroupEnvironmentPermissions(ListGroupEnvironmentPermissionsRequest) returns (GroupPermissionList);
-  rpc RemoveGroupEnvironmentPermission(RemoveGroupEnvironmentPermissionRequest) returns (Empty);
+  rpc SetGroupEnvironmentPermission(SetGroupEnvironmentPermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetGroupEnvironmentPermission(GetGroupEnvironmentPermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListGroupEnvironmentPermissions(ListGroupEnvironmentPermissionsRequest) returns (GroupPermissionList); // Deprecated: use ListPermissions
+  rpc RemoveGroupEnvironmentPermission(RemoveGroupEnvironmentPermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
-  // User Permissions (direct user access, not via groups)
-  rpc SetUserWorkspacePermission(SetUserWorkspacePermissionRequest) returns (Empty);
-  rpc GetUserWorkspacePermission(GetUserWorkspacePermissionRequest) returns (PermissionResponse);
-  rpc ListUserWorkspacePermissions(ListUserWorkspacePermissionsRequest) returns (UserPermissionList);
-  rpc RemoveUserWorkspacePermission(RemoveUserWorkspacePermissionRequest) returns (Empty);
+  // ============================================================================
+  // DEPRECATED: User Permissions (use generic SetPermission/GetPermission/etc)
+  // These methods will be removed in v1.0
+  // ============================================================================
+  rpc SetUserWorkspacePermission(SetUserWorkspacePermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetUserWorkspacePermission(GetUserWorkspacePermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListUserWorkspacePermissions(ListUserWorkspacePermissionsRequest) returns (UserPermissionList); // Deprecated: use ListPermissions
+  rpc RemoveUserWorkspacePermission(RemoveUserWorkspacePermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
-  rpc SetUserProjectPermission(SetUserProjectPermissionRequest) returns (Empty);
-  rpc GetUserProjectPermission(GetUserProjectPermissionRequest) returns (PermissionResponse);
-  rpc ListUserProjectPermissions(ListUserProjectPermissionsRequest) returns (UserPermissionList);
-  rpc RemoveUserProjectPermission(RemoveUserProjectPermissionRequest) returns (Empty);
+  rpc SetUserProjectPermission(SetUserProjectPermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetUserProjectPermission(GetUserProjectPermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListUserProjectPermissions(ListUserProjectPermissionsRequest) returns (UserPermissionList); // Deprecated: use ListPermissions
+  rpc RemoveUserProjectPermission(RemoveUserProjectPermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
-  rpc SetUserEnvironmentPermission(SetUserEnvironmentPermissionRequest) returns (Empty);
-  rpc GetUserEnvironmentPermission(GetUserEnvironmentPermissionRequest) returns (PermissionResponse);
-  rpc ListUserEnvironmentPermissions(ListUserEnvironmentPermissionsRequest) returns (UserPermissionList);
-  rpc RemoveUserEnvironmentPermission(RemoveUserEnvironmentPermissionRequest) returns (Empty);
+  rpc SetUserEnvironmentPermission(SetUserEnvironmentPermissionRequest) returns (Empty); // Deprecated: use SetPermission
+  rpc GetUserEnvironmentPermission(GetUserEnvironmentPermissionRequest) returns (PermissionResponse); // Deprecated: use GetPermission
+  rpc ListUserEnvironmentPermissions(ListUserEnvironmentPermissionsRequest) returns (UserPermissionList); // Deprecated: use ListPermissions
+  rpc RemoveUserEnvironmentPermission(RemoveUserEnvironmentPermissionRequest) returns (Empty); // Deprecated: use RemovePermission
 
   // Effective permissions (aggregated view)
   rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (EffectivePermissionsResponse);
@@ -124,7 +141,7 @@ service ZoppService {
   // Audit logs
   rpc ListAuditLogs(ListAuditLogsRequest) returns (AuditLogList);
   rpc GetAuditLog(GetAuditLogRequest) returns (AuditLogEntry);
-  rpc CountAuditLogs(CountAuditLogsRequest) returns (CountAuditLogsResponse);
+  // CountAuditLogs removed - use ListAuditLogs response.total_count instead
 
   // Organizations (SaaS cloud feature)
   rpc CreateOrganization(CreateOrganizationRequest) returns (Organization);
@@ -134,11 +151,13 @@ service ZoppService {
   rpc DeleteOrganization(DeleteOrganizationRequest) returns (Empty);
 
   // Organization members
-  rpc AddOrganizationMember(AddOrganizationMemberRequest) returns (Empty);
+  rpc UpsertOrganizationMember(UpsertOrganizationMemberRequest) returns (OrganizationMember);
   rpc GetOrganizationMember(GetOrganizationMemberRequest) returns (OrganizationMember);
   rpc ListOrganizationMembers(ListOrganizationMembersRequest) returns (OrganizationMemberList);
-  rpc UpdateOrganizationMemberRole(UpdateOrganizationMemberRoleRequest) returns (Empty);
   rpc RemoveOrganizationMember(RemoveOrganizationMemberRequest) returns (Empty);
+  // DEPRECATED: Use UpsertOrganizationMember instead (will be removed in v1.0)
+  rpc AddOrganizationMember(AddOrganizationMemberRequest) returns (Empty); // Deprecated: use UpsertOrganizationMember
+  rpc UpdateOrganizationMemberRole(UpdateOrganizationMemberRoleRequest) returns (Empty); // Deprecated: use UpsertOrganizationMember
 
   // Organization invites
   rpc CreateOrganizationInvite(CreateOrganizationInviteRequest) returns (OrganizationInvite);
@@ -553,6 +572,81 @@ enum Role {
   ADMIN = 1;
   WRITE = 2;
   READ = 3;
+}
+
+// ============================================================================
+// Generic Permissions API types
+// ============================================================================
+
+// ResourceType identifies what kind of resource we're setting permissions on
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_WORKSPACE = 1;
+  RESOURCE_PROJECT = 2;
+  RESOURCE_ENVIRONMENT = 3;
+}
+
+// ActorType identifies what kind of actor is being granted permission
+enum ActorType {
+  ACTOR_TYPE_UNSPECIFIED = 0;
+  ACTOR_PRINCIPAL = 1;  // Service principals (direct principal permissions)
+  ACTOR_GROUP = 2;      // Group-based permissions
+  ACTOR_USER = 3;       // Direct user permissions (by email)
+}
+
+// ResourceRef identifies a specific resource
+message ResourceRef {
+  ResourceType type = 1;
+  string workspace_name = 2;              // Always required
+  optional string project_name = 3;       // Required for PROJECT and ENVIRONMENT
+  optional string environment_name = 4;   // Required for ENVIRONMENT
+}
+
+// ActorRef identifies who is being granted permission
+message ActorRef {
+  ActorType type = 1;
+  oneof actor {
+    string principal_id = 2;  // For ACTOR_PRINCIPAL
+    string group_name = 3;    // For ACTOR_GROUP
+    string user_email = 4;    // For ACTOR_USER
+  }
+}
+
+// SetPermissionRequest - generic permission setter
+message SetPermissionRequest {
+  ResourceRef resource = 1;
+  ActorRef actor = 2;
+  Role role = 3;
+}
+
+// GetPermissionRequest - generic permission getter
+message GetPermissionRequest {
+  ResourceRef resource = 1;
+  ActorRef actor = 2;
+}
+
+// ListPermissionsRequest - list permissions on a resource
+message ListPermissionsRequest {
+  ResourceRef resource = 1;
+  optional ActorType actor_type_filter = 2;  // Filter by actor type (optional)
+}
+
+// RemovePermissionRequest - generic permission remover
+message RemovePermissionRequest {
+  ResourceRef resource = 1;
+  ActorRef actor = 2;
+}
+
+// PermissionEntry - a single permission in a list
+message PermissionEntry {
+  ActorRef actor = 1;
+  Role role = 2;
+  string actor_display_name = 3;  // Human-readable name (principal name, group name, or email)
+}
+
+// PermissionListResponse - response from ListPermissions
+message PermissionListResponse {
+  repeated PermissionEntry permissions = 1;
 }
 
 message SetWorkspacePermissionRequest {
@@ -1037,6 +1131,13 @@ message OrganizationMemberList {
 }
 
 message AddOrganizationMemberRequest {
+  string organization_id = 1;
+  string user_id = 2;
+  OrganizationRole role = 3;
+}
+
+// UpsertOrganizationMemberRequest - add or update a member in one call
+message UpsertOrganizationMemberRequest {
   string organization_id = 1;
   string user_id = 2;
   OrganizationRole role = 3;

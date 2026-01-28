@@ -412,6 +412,132 @@ pub async fn add_organization_member(
     Ok(Response::new(Empty {}))
 }
 
+/// UpsertOrganizationMember: Add a new member or update an existing member's role in one call.
+/// This replaces the separate AddOrganizationMember and UpdateOrganizationMemberRole calls.
+pub async fn upsert_organization_member(
+    server: &ZoppServer,
+    request: Request<UpsertOrganizationMemberRequest>,
+) -> Result<Response<OrganizationMember>, Status> {
+    let (principal_id, timestamp, signature, request_hash) = extract_signature(&request)?;
+    let req_for_verify = request.get_ref().clone();
+    let principal = server
+        .verify_signature_and_get_principal(
+            &principal_id,
+            timestamp,
+            &signature,
+            "/zopp.ZoppService/UpsertOrganizationMember",
+            &req_for_verify,
+            &request_hash,
+        )
+        .await?;
+    let req = request.into_inner();
+
+    let caller_user_id = principal
+        .user_id
+        .ok_or_else(|| Status::unauthenticated("Service accounts cannot manage members"))?;
+
+    let org_id = parse_organization_id(&req.organization_id)?;
+    let user_id = parse_user_id(&req.user_id)?;
+    let role = proto_role_to_storage(req.role())?;
+
+    // Check if requester is admin or owner
+    let caller_membership = server
+        .store
+        .get_organization_member(&org_id, &caller_user_id)
+        .await
+        .map_err(|e| match e {
+            zopp_storage::StoreError::NotFound => {
+                Status::permission_denied("Not a member of this organization")
+            }
+            e => Status::internal(format!("Failed to check membership: {}", e)),
+        })?;
+
+    // Can't upsert with owner role (must be set via owner transfer)
+    if role == zopp_storage::OrganizationRole::Owner {
+        return Err(Status::invalid_argument(
+            "Cannot set member role to owner directly",
+        ));
+    }
+
+    // Check if the target user is already a member
+    let existing_member = server
+        .store
+        .get_organization_member(&org_id, &user_id)
+        .await;
+
+    match existing_member {
+        Ok(member) => {
+            // User is already a member - this is an update operation
+            // Only owner can change roles
+            if caller_membership.role != zopp_storage::OrganizationRole::Owner {
+                return Err(Status::permission_denied(
+                    "Only organization owner can change member roles",
+                ));
+            }
+
+            // Can't change own role
+            if user_id == caller_user_id {
+                return Err(Status::invalid_argument("Cannot change your own role"));
+            }
+
+            // Can't change owner's role
+            if member.role == zopp_storage::OrganizationRole::Owner {
+                return Err(Status::permission_denied("Cannot change owner's role"));
+            }
+
+            server
+                .store
+                .update_organization_member_role(&org_id, &user_id, role)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to update member role: {}", e)))?;
+        }
+        Err(zopp_storage::StoreError::NotFound) => {
+            // User is not a member - this is an add operation
+            // Admin or owner can add members
+            if caller_membership.role != zopp_storage::OrganizationRole::Owner
+                && caller_membership.role != zopp_storage::OrganizationRole::Admin
+            {
+                return Err(Status::permission_denied(
+                    "Only organization owners and admins can add members",
+                ));
+            }
+
+            server
+                .store
+                .add_organization_member(&org_id, &user_id, role, Some(caller_user_id))
+                .await
+                .map_err(|e| Status::internal(format!("Failed to add member: {}", e)))?;
+        }
+        Err(e) => {
+            return Err(Status::internal(format!(
+                "Failed to check existing membership: {}",
+                e
+            )));
+        }
+    }
+
+    // Fetch and return the updated/created member
+    let member = server
+        .store
+        .get_organization_member(&org_id, &user_id)
+        .await
+        .map_err(|e| Status::internal(format!("Failed to get member: {}", e)))?;
+
+    let user = server
+        .store
+        .get_user_by_id(&member.user_id)
+        .await
+        .map_err(|e| Status::internal(format!("Failed to get user: {}", e)))?;
+
+    Ok(Response::new(OrganizationMember {
+        user_id: member.user_id.0.to_string(),
+        email: user.email,
+        role: storage_role_to_proto(member.role) as i32,
+        invited_by: member.invited_by.map(|id| id.0.to_string()),
+        joined_at: member.joined_at.to_rfc3339(),
+    }))
+}
+
 pub async fn get_organization_member(
     server: &ZoppServer,
     request: Request<GetOrganizationMemberRequest>,
