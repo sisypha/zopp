@@ -35,8 +35,7 @@ async fn handler_list_workspace_service_principals_returns_service_principals() 
     add_principal_to_workspace(&server, &ws_id, &principal_id).await;
 
     // Create a service principal using helper
-    let (svc_principal_id, _svc_signing_key) =
-        create_service_principal(&server, "ci-bot").await;
+    let (svc_principal_id, _svc_signing_key) = create_service_principal(&server, "ci-bot").await;
     // Add service principal to workspace
     add_principal_to_workspace(&server, &ws_id, &svc_principal_id).await;
 
