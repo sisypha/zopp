@@ -1423,6 +1423,10 @@ fn generate_self_signed_certs(
 // ═══════════════════════════════════════════════════════════════════════════
 
 fn main() {
+    // Install the ring crypto provider for rustls (required by kube client)
+    // This must be called before any TLS operations
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // Check if K8s tests should be skipped
     if should_skip_k8s_tests() {
         println!("Skipping K8s tests (SKIP_K8S_TESTS=1)");

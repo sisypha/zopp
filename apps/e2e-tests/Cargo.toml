@@ -24,6 +24,9 @@ paste = "1.0"
 # For email parsing in tests
 regex = "1"
 
+# For rustls crypto provider initialization
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
 [[test]]
 name = "demo"
 path = "tests/demo.rs"

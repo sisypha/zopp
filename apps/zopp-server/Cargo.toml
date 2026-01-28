@@ -49,6 +49,9 @@ metrics-exporter-prometheus = { workspace = true }
 resend-rs = { workspace = true, optional = true }
 lettre = { workspace = true, optional = true }
 
+# For rustls crypto provider initialization (required for TLS)
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
 [features]
 default = ["email-smtp"]
 email-resend = ["resend-rs"]
